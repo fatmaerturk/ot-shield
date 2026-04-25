@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Device frame -->
+  <rect x="106" y="106" width="300" height="300" rx="10" fill="#2b2d42" stroke="#2b2d42" stroke-width="8"/>
+  
+  <!-- Screen -->
+  <rect x="126" y="126" width="260" height="200" rx="5" fill="#8d99ae" stroke="#2b2d42" stroke-width="3"/>
+  
+  <!-- Button panel -->
+  <rect x="126" y="336" width="260" height="50" rx="5" fill="#edf2f4" stroke="#2b2d42" stroke-width="3"/>
+  
+  <!-- Control buttons -->
+  <circle cx="156" cy="361" r="15" fill="#ef233c" stroke="#2b2d42" stroke-width="2"/>
+  <circle cx="206" cy="361" r="15" fill="#ffb703" stroke="#2b2d42" stroke-width="2"/>
+  <circle cx="256" cy="361" r="15" fill="#2a9d8f" stroke="#2b2d42" stroke-width="2"/>
+  <rect x="290" y="346" x2="370" y2="376" rx="5" fill="#8d99ae" stroke="#2b2d42" stroke-width="2"/>
+  
+  <!-- Screen content -->
+  <rect x="146" y="146" width="220" height="160" rx="3" fill="#edf2f4" stroke="#2b2d42" stroke-width="2"/>
+  
+  <!-- UI elements -->
+  <rect x="166" y="166" width="80" height="20" rx="3" fill="#8d99ae" stroke="none"/>
+  <rect x="166" y="196" width="180" height="2" rx="1" fill="#8d99ae" stroke="none"/>
+  <rect x="166" y="206" width="180" height="2" rx="1" fill="#8d99ae" stroke="none"/>
+  <rect x="166" y="216" width="180" height="2" rx="1" fill="#8d99ae" stroke="none"/>
+  
+  <!-- Gauges -->
+  <circle cx="226" cy="256" r="30" fill="none" stroke="#ef233c" stroke-width="6"/>
+  <line x1="226" y1="256" x2="246" y2="236" stroke="#2b2d42" stroke-width="2"/>
+  
+  <circle cx="316" cy="256" r="30" fill="none" stroke="#4ea8de" stroke-width="6"/>
+  <line x1="316" y1="256" x2="296" y2="246" stroke="#2b2d42" stroke-width="2"/>
+</svg> 

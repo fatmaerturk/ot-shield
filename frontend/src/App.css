@@ -1,0 +1,481 @@
+.App {
+  text-align: center;
+}
+
+.App-logo {
+  height: 40vmin;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .App-logo {
+    animation: App-logo-spin infinite 20s linear;
+  }
+}
+
+.App-header {
+  background-color: #282c34;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+}
+
+.App-link {
+  color: #61dafb;
+}
+
+@keyframes App-logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Attack Simulation Map Styles */
+.custom-pulse-icon {
+  background: transparent;
+  border: none;
+}
+
+.pulsing-dot {
+  width: 12px;
+  height: 12px;
+  background: #ff4444;
+  border-radius: 50%;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  animation: pulse 2s infinite;
+  box-shadow: 0 0 0 0 rgba(255, 68, 68, 1);
+}
+
+.pulsing-ring {
+  width: 24px;
+  height: 24px;
+  border: 3px solid #ff4444;
+  border-radius: 50%;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  animation: ring-pulse 2s infinite;
+  opacity: 0.7;
+}
+
+@keyframes pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 68, 68, 0.7);
+  }
+  70% {
+    transform: translate(-50%, -50%) scale(1.1);
+    box-shadow: 0 0 0 10px rgba(255, 68, 68, 0);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 68, 68, 0);
+  }
+}
+
+@keyframes ring-pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.5);
+    opacity: 0.3;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2);
+    opacity: 0;
+  }
+}
+
+/* Russian attack markers - Red */
+.pulsing-dot[data-country="Russia"] {
+  background: #ff0000;
+  box-shadow: 0 0 0 0 rgba(255, 0, 0, 1);
+}
+
+.pulsing-ring[data-country="Russia"] {
+  border-color: #ff0000;
+}
+
+/* Chinese attack markers - Orange */
+.pulsing-dot[data-country="China"] {
+  background: #ff6600;
+  box-shadow: 0 0 0 0 rgba(255, 102, 0, 1);
+}
+
+.pulsing-ring[data-country="China"] {
+  border-color: #ff6600;
+}
+
+/* =====================================================
+   Severity-based pulsing attacker markers
+   (used by Attack Intelligence map)
+   ===================================================== */
+.attacker-pulse-wrap,
+.decoy-pulse-wrap {
+  background: transparent;
+  border: none;
+  pointer-events: auto;
+}
+.attacker-pulse,
+.decoy-pulse {
+  display: block;
+}
+.attacker-pulse .pulse-dot {
+  display: block;
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  animation: attackerPulse 2s infinite;
+}
+.attacker-pulse .pulse-ring {
+  display: block;
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 2px solid;
+  transform: translate(-50%, -50%);
+  animation: attackerRing 2s infinite;
+  opacity: 0.7;
+}
+.attacker-pulse[data-sev="HIGH"] .pulse-dot,
+.attacker-pulse[data-sev="CRITICAL"] .pulse-dot { background: #f43f5e; box-shadow: 0 0 0 0 rgba(244,63,94,0.9); }
+.attacker-pulse[data-sev="HIGH"] .pulse-ring,
+.attacker-pulse[data-sev="CRITICAL"] .pulse-ring { border-color: #f43f5e; }
+.attacker-pulse[data-sev="MEDIUM"] .pulse-dot { background: #f97316; box-shadow: 0 0 0 0 rgba(249,115,22,0.9); }
+.attacker-pulse[data-sev="MEDIUM"] .pulse-ring { border-color: #f97316; }
+.attacker-pulse[data-sev="LOW"] .pulse-dot,
+.attacker-pulse:not([data-sev]) .pulse-dot { background: #a855f7; box-shadow: 0 0 0 0 rgba(168,85,247,0.9); }
+.attacker-pulse[data-sev="LOW"] .pulse-ring,
+.attacker-pulse:not([data-sev]) .pulse-ring { border-color: #a855f7; }
+
+@keyframes attackerPulse {
+  0%   { transform: translate(-50%, -50%) scale(0.9); filter: brightness(1); }
+  70%  { transform: translate(-50%, -50%) scale(1.2); filter: brightness(1.3); }
+  100% { transform: translate(-50%, -50%) scale(0.9); filter: brightness(1); }
+}
+@keyframes attackerRing {
+  0%   { transform: translate(-50%, -50%) scale(0.7); opacity: 0.9; }
+  80%  { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+}
+
+/* Decoy (target) marker — bigger, brighter, layered pulse in brand colours */
+.decoy-pulse .decoy-core {
+  display: block;
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 22px; height: 22px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, #fbcfe8 0%, #ec4899 40%, #8b5cf6 100%);
+  box-shadow: 0 0 20px rgba(236, 72, 153, 0.95), 0 0 36px rgba(139, 92, 246, 0.6);
+  z-index: 2;
+  animation: decoyCorePulse 1.6s ease-in-out infinite;
+}
+.decoy-pulse .decoy-ring-outer,
+.decoy-pulse .decoy-ring-inner {
+  display: block;
+  position: absolute;
+  top: 50%; left: 50%;
+  border-radius: 50%;
+  border: 2px solid #ec4899;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+}
+.decoy-pulse .decoy-ring-outer {
+  width: 60px; height: 60px;
+  animation: decoyRing 2.4s infinite;
+}
+.decoy-pulse .decoy-ring-inner {
+  width: 38px; height: 38px;
+  border-color: #8b5cf6;
+  animation: decoyRing 2.4s 0.7s infinite;
+}
+@keyframes decoyRing {
+  0%   { transform: translate(-50%, -50%) scale(0.5); opacity: 0.9; }
+  80%  { transform: translate(-50%, -50%) scale(2.2); opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(2.2); opacity: 0; }
+}
+@keyframes decoyCorePulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); filter: brightness(1); }
+  50%      { transform: translate(-50%, -50%) scale(1.15); filter: brightness(1.2); }
+}
+
+/* Attack arc — dashed animated line */
+.attack-line {
+  stroke-dasharray: 4 10;
+  stroke-linecap: round;
+  animation: dash 1s linear infinite;
+  filter: drop-shadow(0 0 4px currentColor);
+}
+@keyframes dash {
+  to { stroke-dashoffset: -28; }
+}
+/* Moving projectile (glowing dot travelling along the arc) */
+.attack-projectile {
+  filter: drop-shadow(0 0 6px currentColor) drop-shadow(0 0 14px currentColor) drop-shadow(0 0 22px currentColor);
+}
+.attack-projectile-trail {
+  opacity: 0.7;
+  filter: drop-shadow(0 0 4px currentColor) blur(0.5px);
+}
+
+/* Impact flash — brief radial burst when projectile reaches decoy */
+.impact-flash {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 80px; height: 80px;
+  margin: -40px 0 0 -40px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(244,63,94,0.85) 0%, rgba(249,115,22,0.4) 40%, transparent 70%);
+  animation: impactBurst 600ms ease-out forwards;
+}
+@keyframes impactBurst {
+  0%   { transform: scale(0.2); opacity: 1; }
+  60%  { transform: scale(1.5); opacity: 0.6; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+/* Severity-based attacker pulse size — HIGH is bigger and hotter */
+.attacker-pulse[data-sev="HIGH"] .pulse-dot,
+.attacker-pulse[data-sev="CRITICAL"] .pulse-dot { width: 14px; height: 14px; }
+.attacker-pulse[data-sev="HIGH"] .pulse-ring,
+.attacker-pulse[data-sev="CRITICAL"] .pulse-ring { width: 30px; height: 30px; border-width: 2.5px; }
+
+/* Make pulse dots have a subtle glow even when not expanding */
+.attacker-pulse .pulse-dot {
+  filter: drop-shadow(0 0 6px currentColor);
+}
+.attacker-pulse[data-sev="HIGH"] .pulse-dot,
+.attacker-pulse[data-sev="CRITICAL"] .pulse-dot { color: #f43f5e; }
+.attacker-pulse[data-sev="MEDIUM"] .pulse-dot { color: #f97316; }
+.attacker-pulse[data-sev="LOW"] .pulse-dot,
+.attacker-pulse:not([data-sev]) .pulse-dot { color: #a855f7; }
+
+/* Destination marker styles */
+.destination-marker {
+  filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.8));
+}
+
+/* Map container enhancements */
+.attack-simulation-map {
+  border: 2px solid #374151;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  z-index: 0 !important; /* Even lower z-index */
+  position: relative;
+}
+
+/* Comprehensive Leaflet z-index controls */
+.leaflet-container {
+  z-index: 0 !important; /* Base map container - very low */
+}
+
+.leaflet-pane {
+  z-index: 0 !important; /* All panes - very low */
+}
+
+.leaflet-tile-pane {
+  z-index: 0 !important; /* Tile layer - very low */
+}
+
+.leaflet-overlay-pane {
+  z-index: 1 !important; /* Polylines and overlays - very low */
+}
+
+.leaflet-marker-pane {
+  z-index: 2 !important; /* Markers - very low */
+}
+
+.leaflet-tooltip-pane {
+  z-index: 3 !important; /* Tooltips - very low */
+}
+
+.leaflet-popup-pane {
+  z-index: 4 !important; /* Popups - very low */
+}
+
+.leaflet-control-pane {
+  z-index: 5 !important; /* Controls - very low */
+}
+
+.leaflet-shadow-pane {
+  z-index: 0 !important; /* Shadows - very low */
+}
+
+/* Threat level indicators */
+.threat-level-high {
+  background: linear-gradient(45deg, #ff0000, #ff4444);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: bold;
+  font-size: 0.75rem;
+}
+
+.threat-level-medium {
+  background: linear-gradient(45deg, #ff6600, #ff8800);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: bold;
+  font-size: 0.75rem;
+}
+
+/* Attack marker styles */
+.attack-marker {
+  animation: attack-pulse 1.5s ease-in-out infinite;
+  z-index: 2 !important; /* Match marker pane - very low */
+}
+
+/* Specific styling for attack markers to ensure visibility */
+.leaflet-marker-icon.attack-marker {
+  z-index: 2 !important; /* Match marker pane - very low */
+  position: relative;
+}
+
+/* Override any Leaflet default z-index */
+.leaflet-marker-icon {
+  z-index: 2 !important; /* Match marker pane - very low */
+}
+
+/* Ensure polylines stay behind */
+.leaflet-overlay-pane svg {
+  z-index: 1 !important; /* Match overlay pane - very low */
+}
+
+/* Force marker containers to be on top but below navigation */
+.leaflet-marker-pane > div {
+  z-index: 2 !important; /* Match marker pane - very low */
+}
+
+/* Additional Leaflet container controls */
+.leaflet-control-container {
+  z-index: 5 !important; /* Controls - very low */
+}
+
+/* Ensure all Leaflet elements are below navigation */
+.leaflet * {
+  z-index: inherit !important;
+}
+
+/* Force entire honeypot page content below navigation */
+.space-y-6 {
+  z-index: 0 !important;
+  position: relative;
+}
+
+/* Ensure main content area is below navigation */
+main {
+  z-index: 0 !important;
+  position: relative;
+}
+
+@keyframes attack-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Russian attack marker specific animation */
+.attack-marker[data-country="Russia"] {
+  animation: russian-attack-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes russian-attack-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+    box-shadow: 0 0 15px #ff0000, 0 0 30px #ff0000;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.9;
+    box-shadow: 0 0 30px #ff0000, 0 0 60px #ff0000;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+    box-shadow: 0 0 15px #ff0000, 0 0 30px #ff0000;
+  }
+}
+
+/* Chinese attack marker specific animation */
+.attack-marker[data-country="China"] {
+  animation: chinese-attack-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes chinese-attack-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+    box-shadow: 0 0 15px #ff6600, 0 0 30px #ff6600;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.9;
+    box-shadow: 0 0 25px #ff6600, 0 0 50px #ff6600;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+    box-shadow: 0 0 15px #ff6600, 0 0 30px #ff6600;
+  }
+}
+
+/* Custom Scrollbar Styles for Threat Intelligence Enrichment */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+  border: 1px solid #e2e8f0;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.custom-scrollbar::-webkit-scrollbar-corner {
+  background: #f1f5f9;
+}
+
+

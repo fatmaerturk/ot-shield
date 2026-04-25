@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Device body -->
+  <rect x="156" y="156" width="200" height="200" rx="20" fill="#3a86ff" stroke="#1d3557" stroke-width="8"/>
+  
+  <!-- Screen -->
+  <rect x="180" y="186" width="152" height="100" rx="10" fill="#f1faee" stroke="#1d3557" stroke-width="3"/>
+  
+  <!-- Sensors -->
+  <circle cx="196" cy="316" r="12" fill="#f1faee" stroke="#1d3557" stroke-width="2"/>
+  <circle cx="236" cy="316" r="12" fill="#f1faee" stroke="#1d3557" stroke-width="2"/>
+  <circle cx="276" cy="316" r="12" fill="#f1faee" stroke="#1d3557" stroke-width="2"/>
+  <circle cx="316" cy="316" r="12" fill="#f1faee" stroke="#1d3557" stroke-width="2"/>
+  
+  <!-- Antenna -->
+  <line x1="220" y1="156" x2="200" y2="116" stroke="#1d3557" stroke-width="4"/>
+  <line x1="290" y1="156" x2="310" y2="116" stroke="#1d3557" stroke-width="4"/>
+  <circle cx="200" cy="110" r="6" fill="#f94144" stroke="#1d3557" stroke-width="2"/>
+  <circle cx="310" cy="110" r="6" fill="#f94144" stroke="#1d3557" stroke-width="2"/>
+  
+  <!-- Display elements -->
+  <line x1="200" y1="216" x2="312" y2="216" stroke="#3a86ff" stroke-width="3"/>
+  <line x1="200" y1="246" x2="260" y2="246" stroke="#3a86ff" stroke-width="3"/>
+  <circle cx="290" cy="246" r="10" fill="#f94144" stroke="#1d3557" stroke-width="1"/>
+</svg> 

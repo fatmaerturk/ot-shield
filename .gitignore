@@ -1,0 +1,15 @@
+/backend/target
+/backend/uploads
+
+# MaxMind GeoLite2 database (license forbids committing)
+/backend/geoip/*.mmdb
+/backend/geoip/*.tar.gz
+/backend/geoip/*.zip
+/backend/target
+/backend/target
+/backend/target
+/backend/target
+/backend/target/generated-sources
+/honeypot/target
+/honeypot/target
+/backend/target

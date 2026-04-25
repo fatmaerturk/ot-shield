@@ -1,0 +1,163 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import './styles/modern-overrides.css';
+
+* {
+  @apply transition-colors duration-200;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: linear-gradient(to bottom right, #f9fafb, #f3f4f6, #eff2f5);
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Button hover effects */
+button {
+  @apply outline-none;
+}
+
+input, textarea, select {
+  @apply outline-none;
+}
+
+/* Card hover effects */
+.card-hover {
+  @apply transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5;
+}
+
+/* Gradient text */
+.gradient-text {
+  @apply bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent;
+}
+
+/* Modern Button Utilities */
+.btn {
+  @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 inline-flex items-center gap-2;
+}
+
+.btn-primary {
+  @apply bg-blue-500 text-white hover:bg-blue-600 shadow-sm hover:shadow-md;
+}
+
+.btn-secondary {
+  @apply bg-gray-200 text-gray-900 hover:bg-gray-300 shadow-sm hover:shadow-md;
+}
+
+.btn-danger {
+  @apply bg-red-500 text-white hover:bg-red-600 shadow-sm hover:shadow-md;
+}
+
+.btn-success {
+  @apply bg-green-500 text-white hover:bg-green-600 shadow-sm hover:shadow-md;
+}
+
+.btn-warning {
+  @apply bg-yellow-500 text-white hover:bg-yellow-600 shadow-sm hover:shadow-md;
+}
+
+.btn-outline {
+  @apply border-2 border-gray-300 text-gray-700 hover:bg-gray-50;
+}
+
+.btn-sm {
+  @apply px-3 py-1 text-sm;
+}
+
+.btn-lg {
+  @apply px-6 py-3 text-lg;
+}
+
+/* Modern Table Utilities */
+.table-modern {
+  @apply w-full;
+}
+
+.table-modern th {
+  @apply bg-gray-50 text-gray-900 font-semibold text-sm border-b-2 border-gray-200 px-4 py-3 text-left;
+}
+
+.table-modern td {
+  @apply border-b border-gray-200 px-4 py-3;
+}
+
+.table-modern tbody tr {
+  @apply hover:bg-blue-50 transition-colors;
+}
+
+/* Modern Card Utilities */
+.card-modern {
+  @apply bg-white rounded-lg shadow-sm hover:shadow-md transition-all duration-200 p-6 border-l-4 border-l-blue-500;
+}
+
+.card-modern.primary {
+  @apply border-l-blue-500;
+}
+
+.card-modern.success {
+  @apply border-l-green-500;
+}
+
+.card-modern.warning {
+  @apply border-l-yellow-500;
+}
+
+.card-modern.danger {
+  @apply border-l-red-500;
+}
+
+.card-modern.purple {
+  @apply border-l-purple-500;
+}
+
+/* Loading State */
+.loading {
+  @apply opacity-50 pointer-events-none;
+}
+
+/* Empty State */
+.empty-state {
+  @apply text-center py-12 text-gray-500;
+}
+
+.empty-state-icon {
+  @apply text-6xl mb-4;
+}
+
+.empty-state-title {
+  @apply text-xl font-semibold text-gray-900 mb-2;
+}
+
+.empty-state-description {
+  @apply text-gray-600;
+}

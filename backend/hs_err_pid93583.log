@@ -1,0 +1,224 @@
+#
+# A fatal error has been detected by the Java Runtime Environment:
+#
+#  SIGSEGV (0xb) at pc=0x000000010b6b0634, pid=93583, tid=16647
+#
+# JRE version: Java(TM) SE Runtime Environment (20.0.1+9) (build 20.0.1+9-29)
+# Java VM: Java HotSpot(TM) 64-Bit Server VM (20.0.1+9-29, mixed mode, sharing, tiered, compressed oops, compressed class ptrs, g1 gc, bsd-amd64)
+# Problematic frame:
+# V  [libjvm.dylib+0x42f634]  Dictionary::get_entry(Thread*, Symbol*)+0xb4
+#
+# No core dump will be written. Core dumps have been disabled. To enable core dumping, try "ulimit -c unlimited" before starting Java again
+#
+# If you would like to submit a bug report, please visit:
+#   https://bugreport.java.com/bugreport/crash.jsp
+#
+
+---------------  S U M M A R Y ------------
+
+Command Line: -javaagent:/Applications/IntelliJ IDEA CE.app/Contents/lib/idea_rt.jar=51065:/Applications/IntelliJ IDEA CE.app/Contents/bin -Dfile.encoding=UTF-8 -Dsun.stdout.encoding=UTF-8 -Dsun.stderr.encoding=UTF-8 com.example.loginapp.LoginApplication
+
+Host: "MacBookPro16,1" x86_64 2600 MHz, 12 cores, 16G, Darwin 20.6.0, macOS 11.7.4 (20G1120)
+Time: Tue Apr 22 03:01:27 2025 +03 elapsed time: 9.903186 seconds (0d 0h 0m 9s)
+
+---------------  T H R E A D  ---------------
+
+Current thread (0x00007fc9201a1800):  JavaThread "pool-2-thread-1" [_thread_in_vm, id=16647, stack(0x0000700006a9f000,0x0000700006b9f000)]
+
+Stack: [0x0000700006a9f000,0x0000700006b9f000],  sp=0x0000700006b9d700,  free space=1017k
+Native frames: (J=compiled Java code, j=interpreted, Vv=VM code, C=native code)
+V  [libjvm.dylib+0x42f634]  Dictionary::get_entry(Thread*, Symbol*)+0xb4
+V  [libjvm.dylib+0x42f673]  Dictionary::find(Thread*, Symbol*, Handle)+0x13
+V  [libjvm.dylib+0xa7d7d0]  SystemDictionary::resolve_instance_class_or_null(Symbol*, Handle, Handle, JavaThread*)+0x150
+V  [libjvm.dylib+0xa7d19c]  SystemDictionary::resolve_or_fail(Symbol*, Handle, Handle, bool, JavaThread*)+0x1c
+V  [libjvm.dylib+0x63ae2d]  JVM_FindClassFromCaller+0x22d
+C  [libjava.dylib+0x2576]  Java_java_lang_Class_forName0+0x136
+J 1009  java.lang.Class.forName0(Ljava/lang/String;ZLjava/lang/ClassLoader;Ljava/lang/Class;)Ljava/lang/Class; java.base@20.0.1 (0 bytes) @ 0x0000000124aabe2d [0x0000000124aabd20+0x000000000000010d]
+J 1011 c1 java.lang.Class.forName(Ljava/lang/String;ZLjava/lang/ClassLoader;Ljava/lang/Class;)Ljava/lang/Class; java.base@20.0.1 (41 bytes) @ 0x000000011d1403c4 [0x000000011d1402c0+0x0000000000000104]
+J 1010 c1 java.lang.Class.forName(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class; java.base@20.0.1 (24 bytes) @ 0x000000011d13fed4 [0x000000011d13fdc0+0x0000000000000114]
+j  org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader.loadFromParent(Ljava/lang/String;)Ljava/lang/Class;+15
+j  org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader.doLoadClass(Ljava/lang/String;)Ljava/lang/Class;+18
+j  org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader.loadClass(Ljava/lang/String;Z)Ljava/lang/Class;+37
+j  org.apache.catalina.loader.WebappClassLoaderBase.loadClass(Ljava/lang/String;)Ljava/lang/Class;+3
+j  ch.qos.logback.classic.spi.PackagingDataCalculator.loadClass(Ljava/lang/ClassLoader;Ljava/lang/String;)Ljava/lang/Class;+8
+j  ch.qos.logback.classic.spi.PackagingDataCalculator.bestEffortLoadClass(Ljava/lang/ClassLoader;Ljava/lang/String;)Ljava/lang/Class;+31
+j  ch.qos.logback.classic.spi.PackagingDataCalculator.computeBySTEP(Lch/qos/logback/classic/spi/StackTraceElementProxy;Ljava/lang/ClassLoader;)Lch/qos/logback/classic/spi/ClassPackagingData;+32
+j  ch.qos.logback.classic.spi.PackagingDataCalculator.populateFrames([Lch/qos/logback/classic/spi/StackTraceElementProxy;)V+143
+j  ch.qos.logback.classic.spi.PackagingDataCalculator.calculate(Lch/qos/logback/classic/spi/IThrowableProxy;)V+11
+j  ch.qos.logback.classic.spi.ThrowableProxy.calculatePackagingData()V+24
+j  ch.qos.logback.classic.spi.LoggingEvent.<init>(Ljava/lang/String;Lch/qos/logback/classic/Logger;Lch/qos/logback/classic/Level;Ljava/lang/String;Ljava/lang/Throwable;[Ljava/lang/Object;)V+151
+j  ch.qos.logback.classic.Logger.buildLoggingEventAndAppend(Ljava/lang/String;Lorg/slf4j/Marker;Lch/qos/logback/classic/Level;Ljava/lang/String;[Ljava/lang/Object;Ljava/lang/Throwable;)V+13
+j  ch.qos.logback.classic.Logger.filterAndLog_0_Or3Plus(Ljava/lang/String;Lorg/slf4j/Marker;Lch/qos/logback/classic/Level;Ljava/lang/String;[Ljava/lang/Object;Ljava/lang/Throwable;)V+57
+j  ch.qos.logback.classic.Logger.error(Ljava/lang/String;Ljava/lang/Throwable;)V+11
+j  com.example.loginapp.websocket.LivePacketHandler.broadcastPacketData(Ljava/lang/Object;)V+24
+j  java.lang.invoke.DirectMethodHandle$Holder.invokeVirtual(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)V+11 java.base@20.0.1
+j  java.lang.invoke.LambdaForm$MH+0x0000000801914000.invoke(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;+34 java.base@20.0.1
+J 4418 c1 java.lang.reflect.Method.invoke(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object; java.base@20.0.1 (108 bytes) @ 0x000000011d04be2c [0x000000011d049460+0x00000000000029cc]
+j  org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(Ljava/lang/Object;Ljava/lang/reflect/Method;[Ljava/lang/Object;)Ljava/lang/Object;+23
+j  org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(Ljava/lang/Object;Ljava/lang/reflect/Method;[Ljava/lang/Object;Lorg/springframework/cglib/proxy/MethodProxy;)Ljava/lang/Object;+96
+j  com.example.loginapp.websocket.LivePacketHandler$$SpringCGLIB$$0.broadcastPacketData(Ljava/lang/Object;)V+36
+j  com.example.loginapp.service.PcapAnalysisService.lambda$startLiveCapture$0(Ljava/lang/String;)V+73
+j  com.example.loginapp.service.PcapAnalysisService$$Lambda$1588+0x000000080196f250.run()V+8
+j  java.util.concurrent.Executors$RunnableAdapter.call()Ljava/lang/Object;+4 java.base@20.0.1
+j  java.util.concurrent.FutureTask.run()V+39 java.base@20.0.1
+j  java.util.concurrent.ThreadPoolExecutor.runWorker(Ljava/util/concurrent/ThreadPoolExecutor$Worker;)V+92 java.base@20.0.1
+j  java.util.concurrent.ThreadPoolExecutor$Worker.run()V+5 java.base@20.0.1
+j  java.lang.Thread.runWith(Ljava/lang/Object;Ljava/lang/Runnable;)V+5 java.base@20.0.1
+j  java.lang.Thread.run()V+19 java.base@20.0.1
+v  ~StubRoutines::call_stub 0x00000001244c4cc6
+V  [libjvm.dylib+0x593191]  JavaCalls::call_helper(JavaValue*, methodHandle const&, JavaCallArguments*, JavaThread*)+0x2a1
+V  [libjvm.dylib+0x5921d8]  JavaCalls::call_virtual(JavaValue*, Klass*, Symbol*, Symbol*, JavaCallArguments*, JavaThread*)+0x178
+V  [libjvm.dylib+0x592293]  JavaCalls::call_virtual(JavaValue*, Handle, Klass*, Symbol*, Symbol*, JavaThread*)+0x63
+V  [libjvm.dylib+0x64afd8]  thread_entry(JavaThread*, JavaThread*)+0x98
+V  [libjvm.dylib+0x5a5584]  JavaThread::thread_main_inner()+0x94
+V  [libjvm.dylib+0xabdf15]  Thread::call_run()+0xa5
+V  [libjvm.dylib+0x908657]  thread_native_entry(Thread*)+0x147
+C  [libsystem_pthread.dylib+0x68fc]  _pthread_start+0xe0
+C  [libsystem_pthread.dylib+0x2443]  thread_start+0xf
+Java frames: (J=compiled Java code, j=interpreted, Vv=VM code)
+J 1009  java.lang.Class.forName0(Ljava/lang/String;ZLjava/lang/ClassLoader;Ljava/lang/Class;)Ljava/lang/Class; java.base@20.0.1 (0 bytes) @ 0x0000000124aabdb2 [0x0000000124aabd20+0x0000000000000092]
+J 1011 c1 java.lang.Class.forName(Ljava/lang/String;ZLjava/lang/ClassLoader;Ljava/lang/Class;)Ljava/lang/Class; java.base@20.0.1 (41 bytes) @ 0x000000011d1403c4 [0x000000011d1402c0+0x0000000000000104]
+J 1010 c1 java.lang.Class.forName(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class; java.base@20.0.1 (24 bytes) @ 0x000000011d13fed4 [0x000000011d13fdc0+0x0000000000000114]
+j  org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader.loadFromParent(Ljava/lang/String;)Ljava/lang/Class;+15
+j  org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader.doLoadClass(Ljava/lang/String;)Ljava/lang/Class;+18
+j  org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader.loadClass(Ljava/lang/String;Z)Ljava/lang/Class;+37
+j  org.apache.catalina.loader.WebappClassLoaderBase.loadClass(Ljava/lang/String;)Ljava/lang/Class;+3
+j  ch.qos.logback.classic.spi.PackagingDataCalculator.loadClass(Ljava/lang/ClassLoader;Ljava/lang/String;)Ljava/lang/Class;+8
+j  ch.qos.logback.classic.spi.PackagingDataCalculator.bestEffortLoadClass(Ljava/lang/ClassLoader;Ljava/lang/String;)Ljava/lang/Class;+31
+j  ch.qos.logback.classic.spi.PackagingDataCalculator.computeBySTEP(Lch/qos/logback/classic/spi/StackTraceElementProxy;Ljava/lang/ClassLoader;)Lch/qos/logback/classic/spi/ClassPackagingData;+32
+j  ch.qos.logback.classic.spi.PackagingDataCalculator.populateFrames([Lch/qos/logback/classic/spi/StackTraceElementProxy;)V+143
+j  ch.qos.logback.classic.spi.PackagingDataCalculator.calculate(Lch/qos/logback/classic/spi/IThrowableProxy;)V+11
+j  ch.qos.logback.classic.spi.ThrowableProxy.calculatePackagingData()V+24
+j  ch.qos.logback.classic.spi.LoggingEvent.<init>(Ljava/lang/String;Lch/qos/logback/classic/Logger;Lch/qos/logback/classic/Level;Ljava/lang/String;Ljava/lang/Throwable;[Ljava/lang/Object;)V+151
+j  ch.qos.logback.classic.Logger.buildLoggingEventAndAppend(Ljava/lang/String;Lorg/slf4j/Marker;Lch/qos/logback/classic/Level;Ljava/lang/String;[Ljava/lang/Object;Ljava/lang/Throwable;)V+13
+j  ch.qos.logback.classic.Logger.filterAndLog_0_Or3Plus(Ljava/lang/String;Lorg/slf4j/Marker;Lch/qos/logback/classic/Level;Ljava/lang/String;[Ljava/lang/Object;Ljava/lang/Throwable;)V+57
+j  ch.qos.logback.classic.Logger.error(Ljava/lang/String;Ljava/lang/Throwable;)V+11
+j  com.example.loginapp.websocket.LivePacketHandler.broadcastPacketData(Ljava/lang/Object;)V+24
+j  java.lang.invoke.DirectMethodHandle$Holder.invokeVirtual(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)V+11 java.base@20.0.1
+j  java.lang.invoke.LambdaForm$MH+0x0000000801914000.invoke(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;+34 java.base@20.0.1
+J 4418 c1 java.lang.reflect.Method.invoke(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object; java.base@20.0.1 (108 bytes) @ 0x000000011d04be2c [0x000000011d049460+0x00000000000029cc]
+j  org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(Ljava/lang/Object;Ljava/lang/reflect/Method;[Ljava/lang/Object;)Ljava/lang/Object;+23
+j  org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(Ljava/lang/Object;Ljava/lang/reflect/Method;[Ljava/lang/Object;Lorg/springframework/cglib/proxy/MethodProxy;)Ljava/lang/Object;+96
+j  com.example.loginapp.websocket.LivePacketHandler$$SpringCGLIB$$0.broadcastPacketData(Ljava/lang/Object;)V+36
+j  com.example.loginapp.service.PcapAnalysisService.lambda$startLiveCapture$0(Ljava/lang/String;)V+73
+j  com.example.loginapp.service.PcapAnalysisService$$Lambda$1588+0x000000080196f250.run()V+8
+j  java.util.concurrent.Executors$RunnableAdapter.call()Ljava/lang/Object;+4 java.base@20.0.1
+j  java.util.concurrent.FutureTask.run()V+39 java.base@20.0.1
+j  java.util.concurrent.ThreadPoolExecutor.runWorker(Ljava/util/concurrent/ThreadPoolExecutor$Worker;)V+92 java.base@20.0.1
+j  java.util.concurrent.ThreadPoolExecutor$Worker.run()V+5 java.base@20.0.1
+j  java.lang.Thread.runWith(Ljava/lang/Object;Ljava/lang/Runnable;)V+5 java.base@20.0.1
+j  java.lang.Thread.run()V+19 java.base@20.0.1
+v  ~StubRoutines::call_stub 0x00000001244c4cc6
+
+siginfo: si_signo: 11 (SIGSEGV), si_code: 1 (SEGV_MAPERR), si_addr: 0x000000000000001c
+
+Registers:
+RAX=0x0000000000000000, RBX=0x0000000000000000, RCX=0x000000000000001c, RDX=0x00007fc91b43a958
+RSP=0x0000700006b9d700, RBP=0x0000700006b9d700, RSI=0x00007fc9201a18e8, RDI=0x00007fc91e716410
+R8 =0x0000000000000000, R9 =0x00007fc9199079b0, R10=0x00007fc91e716410, R11=0x0000000000000000
+R12=0x00007fc91ee3d130, R13=0x00007fc91b43a958, R14=0x00007fc919907330, R15=0x00007fc9201a1800
+RIP=0x000000010b6b0634, EFLAGS=0x0000000000010246, ERR=0x0000000000000004
+  TRAPNO=0x000000000000000e
+
+
+Register to memory mapping:
+
+RAX=0x0 is NULL
+RBX=0x0 is NULL
+RCX=0x000000000000001c is an unknown value
+RDX=0x00007fc91b43a958 points into unknown readable memory: 0x616a002e3875ffff | ff ff 75 38 2e 00 6a 61
+RSP=0x0000700006b9d700 is pointing into the stack for thread: 0x00007fc9201a1800
+RBP=0x0000700006b9d700 is pointing into the stack for thread: 0x00007fc9201a1800
+RSI=0x00007fc9201a18e8 points into unknown readable memory: 0x0000000000001ba3 | a3 1b 00 00 00 00 00 00
+RDI=0x00007fc91e716410 points into unknown readable memory: 0x000000010000010e | 0e 01 00 00 01 00 00 00
+R8 =0x0 is NULL
+R9 =0x00007fc9199079b0 points into unknown readable memory: 0x0000000000000000 | 00 00 00 00 00 00 00 00
+R10=0x00007fc91e716410 points into unknown readable memory: 0x000000010000010e | 0e 01 00 00 01 00 00 00
+R11=0x0 is NULL
+R12=0x00007fc91ee3d130 points into unknown readable memory: 0x000000070033b6e0 | e0 b6 33 00 07 00 00 00
+R13=0x00007fc91b43a958 points into unknown readable memory: 0x616a002e3875ffff | ff ff 75 38 2e 00 6a 61
+R14=0x00007fc919907330 points into unknown readable memory: 0x00007fc91602c2d8 | d8 c2 02 16 c9 7f 00 00
+R15=0x00007fc9201a1800 is a thread
+
+
+Top of Stack: (sp=0x0000700006b9d700)
+0x0000700006b9d700:   0000700006b9d730 000000010b6b0673
+0x0000700006b9d710:   00007fc919907990 00007fc91ee3d130
+0x0000700006b9d720:   00007fc919907330 00007fc9201a1800
+0x0000700006b9d730:   0000700006b9d840 000000010bcfe7d0
+0x0000700006b9d740:   0000000000000012 00007fc9201a1800
+0x0000700006b9d750:   00007fc91ee3d0d0 00007fc91ee3d110
+0x0000700006b9d760:   00007fc91ee3d130 00007fc91ee3d1f8
+0x0000700006b9d770:   00000000000000d8 0000700006b9ec00
+0x0000700006b9d780:   00007fc9201a1800 00007fc9201a1800
+0x0000700006b9d790:   0000000000000000 00010000ffffffff
+0x0000700006b9d7a0:   0000000000000000 00007fc91dde52c0
+0x0000700006b9d7b0:   0000000000000000 0000000000000000
+0x0000700006b9d7c0:   00007fc91e000000 000000070d187790
+0x0000700006b9d7d0:   000000070d1877c0 000000070d187810
+0x0000700006b9d7e0:   0000700006b9d840 000000010bcf55a6
+0x0000700006b9d7f0:   0000700006b9d840 0000700006b9d8e0
+0x0000700006b9d800:   00007fc9201a18e8 0000000000000000
+0x0000700006b9d810:   00007fc900000000 00007fc9201a1800
+0x0000700006b9d820:   00007fc91b43a958 0000000000000000
+0x0000700006b9d830:   00007fc91b43a958 0000000000000000
+0x0000700006b9d840:   0000700006b9d870 000000010bcfe19c
+0x0000700006b9d850:   0000000000000000 00007fc9201a1800
+0x0000700006b9d860:   00007fc91b43a958 00007fc91ee3d128
+0x0000700006b9d870:   0000700006b9d8b0 000000010b8bbe2d
+0x0000700006b9d880:   0000000000000001 000000000000002e
+0x0000700006b9d890:   000000000000002e 00007fc9201a1ae0
+0x0000700006b9d8a0:   0000700006b9d8e0 0000700006b9d9a0
+0x0000700006b9d8b0:   0000700006b9d990 000000010c451576
+0x0000700006b9d8c0:   0000700006b9d910 0000000000000000
+0x0000700006b9d8d0:   0000700006b9d9b0 0000000000000000
+0x0000700006b9d8e0:   6974752f6176616a 7275636e6f632f6c
+0x0000700006b9d8f0:   6578452f746e6572 522473726f747563 
+
+Instructions: (pc=0x000000010b6b0634)
+0x000000010b6b0534:   83 3f 00 74 13 4c 89 f7 4c 89 e6 e8 2c 24 d5 ff
+0x000000010b6b0544:   4c 89 ff e8 e4 22 d5 ff 66 0f 6f 85 10 ff ff ff
+0x000000010b6b0554:   66 48 0f 7e c0 49 39 46 18 0f 84 39 fe ff ff 4d
+0x000000010b6b0564:   89 7e 10 f3 41 0f 7f 46 18 e9 2a fe ff ff e8 69
+0x000000010b6b0574:   cc 78 00 66 0f 1f 84 00 00 00 00 00 55 48 89 e5
+0x000000010b6b0584:   4c 8b 4f 08 4c 8b 86 e8 00 00 00 48 81 c6 e8 00
+0x000000010b6b0594:   00 00 4c 89 c7 41 f6 c0 01 75 12 48 8d 05 62 84
+0x000000010b6b05a4:   95 00 48 8b b8 80 00 00 00 48 83 cf 01 48 87 3e
+0x000000010b6b05b4:   49 8b 41 50 48 85 c0 74 09 49 8d 41 50 31 c9 48
+0x000000010b6b05c4:   87 08 89 d0 c1 e8 03 44 8b 12 8b 4a 04 49 c1 ea
+0x000000010b6b05d4:   10 c1 e1 08 31 c1 0f b6 42 06 c1 e0 08 0f b6 7a
+0x000000010b6b05e4:   07 09 c7 31 cf c1 e7 10 4c 09 d7 49 8b 41 10 8b
+0x000000010b6b05f4:   48 18 21 f9 48 8b 00 4c 8b 14 c8 49 f7 c2 02 00
+0x000000010b6b0604:   00 00 75 0f 48 8d 3c c8 48 8b 3f 48 83 e7 fc 75
+0x000000010b6b0614:   19 eb 33 49 8b 41 18 23 78 18 48 c1 e7 03 48 03
+0x000000010b6b0624:   38 48 8b 3f 48 83 e7 fc 74 1c 31 c0 48 8b 4f 08
+0x000000010b6b0634:   48 8b 09 48 39 51 18 74 0d 48 8b 3f 48 85 ff 75
+0x000000010b6b0644:   eb 4c 89 06 5d c3 31 c0 48 85 ff 74 f4 48 83 c7
+0x000000010b6b0654:   08 74 ee 48 8b 07 4c 89 06 5d c3 90 55 48 89 e5
+0x000000010b6b0664:   41 57 41 56 41 54 53 48 89 cb e8 0d ff ff ff 48
+0x000000010b6b0674:   85 c0 74 55 49 89 c6 48 85 db 74 48 48 83 3b 00
+0x000000010b6b0684:   74 42 e8 95 09 17 00 84 c0 74 39 4c 8b 23 49 8b
+0x000000010b6b0694:   3e 48 8b 07 ff 90 e8 00 00 00 4c 39 e0 74 25 49
+0x000000010b6b06a4:   8b 5e 08 45 31 ff 48 85 db 74 21 90 48 89 df e8
+0x000000010b6b06b4:   08 0f 52 00 4c 39 e0 74 0b 48 8b 5b 08 48 85 db
+0x000000010b6b06c4:   75 ea eb 08 4d 8b 3e eb 03 45 31 ff 4c 89 f8 5b
+0x000000010b6b06d4:   41 5c 41 5e 41 5f 5d c3 0f 1f 40 00 55 48 89 e5
+0x000000010b6b06e4:   e8 97 fe ff ff 48 85 c0 74 05 48 8b 00 5d c3 31
+0x000000010b6b06f4:   c0 5d c3 66 0f 1f 84 00 00 00 00 00 55 48 89 e5
+0x000000010b6b0704:   41 56 53 49 89 ce 48 89 fb 48 8b 52 18 e8 6a fe
+0x000000010b6b0714:   ff ff 48 8b 73 10 48 89 c7 4c 89 f2 5b 41 5e 5d
+0x000000010b6b0724:   e9 47 f3 ff ff 0f 1f 80 00 00 00 00 55 48 89 e5 
+
+
+Stack slot to memory mapping:
+stack at sp + 0 slots: 0x0000700006b9d730 is pointing into the stack for thread: 0x00007fc9201a1800
+stack at sp + 1 slots: 0x000000010b6b0673: _ZN10Dictionary4findEP6ThreadP6Symbol6Handle+0x13 in /Library/Java/JavaVirtualMachines/jdk-20.jdk/Contents/Home/lib/server/libjvm.dylib at 0x000000010b281000
+stack at sp + 2 slots: 0x00007fc919907990 points into unknown readable memory: 0x0000000000002aed | ed 2a 00 00 00 00 00 00
+stack at sp + 3 slots: 0x00007fc91ee3d130 points into unknown readable memory: 0x000000070033b6e0 | e0 b6 33 00 07 00 00 00
+stack at sp + 4 slots: 0x00007fc919907330 points into unknown readable memory: 0x00007fc91602c2d8 | d8 c2 02 16 c9 7f 00 00
+stack at sp + 5 slots: 0x00007fc9201a1800 is a thread
+stack at sp + 6 slots: 0x0000700006b9d840 is pointing into the stack for thread: 0x00007fc9201a1800
+stack at sp + 7 slots: 0x000000010bcfe7d0: _ZN16SystemDictionary30resolve_instance_class_or_nullEP6Symbol6HandleS2_P10JavaThread+0x150 in /Library/Java/JavaVirtualMachines/jdk-20.jdk/Contents/Home/lib/server/libjvm.dylib at 0x000000010b281000
+
+
+Compiled method (n/a)    9919 1009     n 0       java.lang.Class::

@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OTShield | Threat Detection Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f0e2e 0%, #1a1846 100%);
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid rgba(168, 85, 247, 0.2);
+        }
+
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .logo {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 24px;
+            color: white;
+        }
+
+        .logo::before {
+            content: "👁️";
+        }
+
+        .header-text h1 {
+            font-size: 28px;
+            color: white;
+            margin-bottom: 5px;
+        }
+
+        .header-text p {
+            color: #a855f7;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .header-right {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .status-badge {
+            background: rgba(34, 197, 94, 0.15);
+            border: 1px solid #22c55e;
+            color: #4ade80;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-badge::before {
+            content: "●";
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Main Grid */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        /* Threat Activity Section (Left) */
+        .threat-panel {
+            grid-column: 1;
+            grid-row: 1 / 3;
+        }
+
+        .threat-card {
+            background: rgba(15, 14, 46, 0.8);
+            border: 1px solid rgba(168, 85, 247, 0.2);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .threat-card:hover {
+            border-color: rgba(168, 85, 247, 0.5);
+            box-shadow: 0 8px 32px rgba(168, 85, 247, 0.1);
+        }
+
+        .card-title {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #a855f7;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .threat-level {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .threat-metric {
+            background: rgba(168, 85, 247, 0.05);
+            border: 1px solid rgba(168, 85, 247, 0.2);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .threat-metric-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #ec4899;
+            margin-bottom: 4px;
+        }
+
+        .threat-metric-label {
+            font-size: 11px;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Critical Alerts */
+        .alerts-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .alert-item {
+            background: rgba(236, 72, 153, 0.08);
+            border-left: 3px solid #ec4899;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            font-size: 12px;
+        }
+
+        .alert-content {
+            flex: 1;
+        }
+
+        .alert-title {
+            font-weight: 600;
+            color: #ec4899;
+            margin-bottom: 4px;
+        }
+
+        .alert-detail {
+            color: #999;
+            font-size: 11px;
+        }
+
+        .alert-time {
+            color: #666;
+            font-size: 10px;
+            white-space: nowrap;
+            margin-left: 10px;
+        }
+
+        /* System Health (Right Top) */
+        .system-health {
+            grid-column: 2;
+            grid-row: 1;
+        }
+
+        .health-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .health-card {
+            background: rgba(15, 14, 46, 0.8);
+            border: 1px solid rgba(168, 85, 247, 0.2);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .health-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #a855f7, #ec4899);
+        }
+
+        .health-value {
+            font-size: 32px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #a855f7, #ec4899);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 4px;
+        }
+
+        .health-label {
+            font-size: 11px;
+            color: #999;
+            text-transform: uppercase;
+        }
+
+        /* Metrics Row */
+        .metrics-row {
+            grid-column: 2;
+            grid-row: 2;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .metric-card {
+            background: rgba(15, 14, 46, 0.8);
+            border: 1px solid rgba(168, 85, 247, 0.2);
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        .metric-card .card-title {
+            margin-bottom: 12px;
+        }
+
+        .metric-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #4ade80;
+            margin-bottom: 4px;
+        }
+
+        .metric-subtext {
+            font-size: 11px;
+            color: #666;
+        }
+
+        /* Bottom Charts Row */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .chart-container {
+            background: rgba(15, 14, 46, 0.8);
+            border: 1px solid rgba(168, 85, 247, 0.2);
+            border-radius: 16px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        .chart-container .card-title {
+            margin-bottom: 16px;
+        }
+
+        /* Heatmap */
+        .heatmap {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 4px;
+            margin-top: 12px;
+        }
+
+        .heatmap-cell {
+            aspect-ratio: 1;
+            border-radius: 4px;
+            background: rgba(168, 85, 247, 0.1);
+            border: 1px solid rgba(168, 85, 247, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: #999;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .heatmap-cell:hover {
+            transform: scale(1.1);
+            border-color: #a855f7;
+        }
+
+        .heatmap-cell.hot {
+            background: rgba(236, 72, 153, 0.6);
+            color: #fff;
+            border-color: #ec4899;
+        }
+
+        /* Compliance */
+        .compliance-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .compliance-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: rgba(168, 85, 247, 0.05);
+            border-radius: 8px;
+            font-size: 12px;
+        }
+
+        .compliance-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .compliance-status {
+            font-weight: 600;
+            color: #4ade80;
+        }
+
+        .compliance-status.partial {
+            color: #f59e0b;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding-top: 20px;
+            border-top: 1px solid rgba(168, 85, 247, 0.2);
+            color: #666;
+            font-size: 12px;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(168, 85, 247, 0.05);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(168, 85, 247, 0.3);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(168, 85, 247, 0.5);
+        }
+
+        /* Responsive */
+        @media (max-width: 1400px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .threat-panel {
+                grid-column: 1;
+                grid-row: auto;
+            }
+
+            .system-health {
+                grid-column: 1;
+            }
+
+            .metrics-row {
+                grid-column: 1;
+            }
+
+            .charts-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .health-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .threat-level {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="logo-section">
+                <div class="logo"></div>
+                <div class="header-text">
+                    <h1>OTShield</h1>
+                    <p>Deception-Driven OT Security</p>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="status-badge">System Operational</div>
+            </div>
+        </div>
+
+        <!-- Main Dashboard Grid -->
+        <div class="dashboard-grid">
+            <!-- Left: Threat Activity -->
+            <div class="threat-panel">
+                <div class="threat-card">
+                    <div class="card-title">⚡ Active Threat Status</div>
+                    <div class="threat-level">
+                        <div class="threat-metric">
+                            <div class="threat-metric-value">12</div>
+                            <div class="threat-metric-label">Active Threats</div>
+                        </div>
+                        <div class="threat-metric">
+                            <div class="threat-metric-value" style="color: #4ade80;">3</div>
+                            <div class="threat-metric-label">Critical Alerts</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="threat-card">
+                    <div class="card-title">🚨 Critical Alerts</div>
+                    <div class="alerts-list">
+                        <div class="alert-item">
+                            <div class="alert-content">
+                                <div class="alert-title">Unauthorized Decoy Access</div>
+                                <div class="alert-detail">PLC_RTU_03 | Credential scanning detected</div>
+                            </div>
+                            <div class="alert-time">2m ago</div>
+                        </div>
+                        <div class="alert-item">
+                            <div class="alert-content">
+                                <div class="alert-title">Protocol DPI Anomaly</div>
+                                <div class="alert-detail">HMI_Interface_01 | Modbus protocol deviation</div>
+                            </div>
+                            <div class="alert-time">8m ago</div>
+                        </div>
+                        <div class="alert-item">
+                            <div class="alert-content">
+                                <div class="alert-title">Behavioral Pattern Match</div>
+                                <div class="alert-detail">Network segment 192.168.10.0/24 | APT correlation</div>
+                            </div>
+                            <div class="alert-time">15m ago</div>
+                        </div>
+                        <div class="alert-item">
+                            <div class="alert-content">
+                                <div class="alert-title">Decoy Interaction Spike</div>
+                                <div class="alert-detail">All decoys | 850% increase in interactions</div>
+                            </div>
+                            <div class="alert-time">1h ago</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: System Health -->
+            <div class="system-health">
+                <div class="threat-card">
+                    <div class="card-title">🏥 System Health & Deployment</div>
+                    <div class="health-grid">
+                        <div class="health-card">
+                            <div class="health-value">487</div>
+                            <div class="health-label">Total Assets</div>
+                        </div>
+                        <div class="health-card">
+                            <div class="health-value">98.7%</div>
+                            <div class="health-label">Uptime</div>
+                        </div>
+                        <div class="health-card">
+                            <div class="health-value">156</div>
+                            <div class="health-label">Active Decoys</div>
+                        </div>
+                        <div class="health-card">
+                            <div class="health-value">48ms</div>
+                            <div class="health-label">Avg Response</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Metrics Row -->
+            <div class="metrics-row">
+                <div class="threat-card metric-card">
+                    <div class="card-title">📊 Detection Confidence</div>
+                    <div class="metric-value">94.2%</div>
+                    <div class="metric-subtext">Real threats vs false positives ratio</div>
+                </div>
+                <div class="threat-card metric-card">
+                    <div class="card-title">⏱️ MTTR Reduction</div>
+                    <div class="metric-value">73%</div>
+                    <div class="metric-subtext">vs traditional SIEM alerts</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts & Analytics Row -->
+        <div class="charts-grid">
+            <!-- Detection Timeline -->
+            <div class="chart-container">
+                <div class="card-title">📈 Detection Timeline (24h)</div>
+                <canvas id="detectionChart"></canvas>
+            </div>
+
+            <!-- Protocol Analysis -->
+            <div class="chart-container">
+                <div class="card-title">🔍 Attack Vector Distribution</div>
+                <canvas id="vectorChart"></canvas>
+            </div>
+
+            <!-- Decoy Interaction Heatmap -->
+            <div class="chart-container">
+                <div class="card-title">🎯 Decoy Interaction Heatmap</div>
+                <div class="heatmap">
+                    <div class="heatmap-cell hot">M</div>
+                    <div class="heatmap-cell hot">T</div>
+                    <div class="heatmap-cell">W</div>
+                    <div class="heatmap-cell hot">T</div>
+                    <div class="heatmap-cell hot">F</div>
+                    <div class="heatmap-cell">S</div>
+                    <div class="heatmap-cell">S</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Compliance Row -->
+        <div class="charts-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+            <div class="chart-container">
+                <div class="card-title">✅ Compliance Status</div>
+                <div class="compliance-list">
+                    <div class="compliance-item">
+                        <div class="compliance-label">
+                            <span>NIS2 Directive</span>
+                        </div>
+                        <div class="compliance-status">Compliant</div>
+                    </div>
+                    <div class="compliance-item">
+                        <div class="compliance-label">
+                            <span>IEC 62443</span>
+                        </div>
+                        <div class="compliance-status">Compliant</div>
+                    </div>
+                    <div class="compliance-item">
+                        <div class="compliance-label">
+                            <span>CAF Controls</span>
+                        </div>
+                        <div class="compliance-status partial">Partial</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <div class="card-title">🧠 AI Detection Engine</div>
+                <canvas id="aiChart"></canvas>
+            </div>
+
+            <div class="chart-container">
+                <div class="card-title">📡 Network Deployment</div>
+                <canvas id="networkChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>OTShield Management Platform | Last updated: 2 minutes ago | www.otshield.io</p>
+        </div>
+    </div>
+
+    <script>
+        // Detection Timeline Chart
+        const detectionCtx = document.getElementById('detectionChart').getContext('2d');
+        new Chart(detectionCtx, {
+            type: 'line',
+            data: {
+                labels: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '23:59'],
+                datasets: [{
+                    label: 'Detections',
+                    data: [2, 5, 8, 14, 11, 7, 3],
+                    borderColor: '#ec4899',
+                    backgroundColor: 'rgba(236, 72, 153, 0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointBackgroundColor: '#ec4899',
+                    pointBorderColor: '#a855f7',
+                    pointRadius: 5
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 20,
+                        grid: { color: 'rgba(168, 85, 247, 0.1)' },
+                        ticks: { color: '#999' }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#999' }
+                    }
+                }
+            }
+        });
+
+        // Attack Vector Distribution
+        const vectorCtx = document.getElementById('vectorChart').getContext('2d');
+        new Chart(vectorCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Credential Scanning', 'Protocol Probing', 'Reconnaissance', 'Malware Delivery'],
+                datasets: [{
+                    data: [35, 28, 22, 15],
+                    backgroundColor: [
+                        '#ec4899',
+                        '#a855f7',
+                        '#06b6d4',
+                        '#f59e0b'
+                    ],
+                    borderColor: 'rgba(15, 14, 46, 0.8)',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { color: '#999', font: { size: 11 } }
+                    }
+                }
+            }
+        });
+
+        // AI Detection Engine Performance
+        const aiCtx = document.getElementById('aiChart').getContext('2d');
+        new Chart(aiCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Accuracy', 'Precision', 'Recall', 'F1-Score'],
+                datasets: [{
+                    label: 'Performance Metrics',
+                    data: [94.2, 91.5, 88.3, 89.8],
+                    backgroundColor: ['#ec4899', '#a855f7', '#06b6d4', '#4ade80'],
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        max: 100,
+                        grid: { color: 'rgba(168, 85, 247, 0.1)' },
+                        ticks: { color: '#999' }
+                    },
+                    y: {
+                        grid: { display: false },
+                        ticks: { color: '#999' }
+                    }
+                }
+            }
+        });
+
+        // Network Deployment Distribution
+        const networkCtx = document.getElementById('networkChart').getContext('2d');
+        new Chart(networkCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Level 0', 'Level 1', 'Level 2', 'Level 3'],
+                datasets: [{
+                    label: 'Deployed Assets',
+                    data: [156, 145, 98, 88],
+                    backgroundColor: 'rgba(168, 85, 247, 0.6)',
+                    borderColor: '#a855f7',
+                    borderWidth: 1,
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                indexAxis: 'y',
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(168, 85, 247, 0.1)' },
+                        ticks: { color: '#999' }
+                    },
+                    y: {
+                        grid: { display: false },
+                        ticks: { color: '#999' }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

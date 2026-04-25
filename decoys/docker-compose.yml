@@ -1,0 +1,146 @@
+# OTShield internal-decoy fleet
+# ─────────────────────────────
+# Spins up a synthetic OT/SCADA subnet with four tripwire HMIs masquerading
+# as different industrial sites, plus an attacker sandbox so you can prove
+# the alarm pipeline end-to-end without leaving your laptop.
+#
+#   172.30.50.10  decoy-substation       (Modbus 502)
+#   172.30.50.11  decoy-water-treatment  (Modbus 502)
+#   172.30.50.12  decoy-refinery         (IEC104 2404)
+#   172.30.50.13  decoy-manufacturing    (S7Comm 102)
+#   172.30.50.250 attacker-sandbox       (alpine + nmap + ncat — for testing)
+#
+# Each HMI POSTs every inbound TCP connection to the OTShield backend on
+# the host machine via host.docker.internal:8080.  Treat each event as a
+# CRITICAL incident: nothing legitimate has any reason to talk to a
+# tripwire HMI.
+
+name: otshield-internal-decoys
+
+x-tripwire-base: &tripwire-base
+  build: .
+  image: otshield/tripwire-hmi:latest
+  restart: unless-stopped
+  environment:
+    INGEST_URL:   ${INGEST_URL:?Set INGEST_URL in .env (host backend or tunnel)}
+    INGEST_TOKEN: ${INGEST_TOKEN:?Set INGEST_TOKEN in .env}
+    LOG_LEVEL:    INFO
+  # When the host backend lives on the dev machine (Spring Boot on :8080)
+  # this lets the containers reach it via host.docker.internal.
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+
+networks:
+  ot-subnet:
+    name: otshield-ot-subnet
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.50.0/24
+          gateway: 172.30.50.1
+
+services:
+  # ──────────────────────────────────────────────────────────────────────────
+  # SUBSTATION — 33 kV electrical substation HMI (Siemens-style)
+  # ──────────────────────────────────────────────────────────────────────────
+  decoy-substation:
+    <<: *tripwire-base
+    container_name: decoy-substation
+    hostname: hmi-substation
+    networks:
+      ot-subnet:
+        ipv4_address: 172.30.50.10
+    # Host-side port maps so Windows / WSL can reach the tripwires directly
+    # (in addition to the in-network 172.30.50.0/24 IP). All four sites are
+    # mapped to distinct host ports to avoid clashing with each other.
+    ports:
+      - "15021:502"  # host:15021 -> substation Modbus
+    environment:
+      HMI_TYPE:     SUBSTATION
+      HMI_PROTOCOL: MODBUS
+      HMI_PORT:     "502"
+      HMI_VENDOR:   SIEMENS
+      HMI_SITE_TAG: SUBSTATION-NORTH-33KV
+      INGEST_URL:   ${INGEST_URL}
+      INGEST_TOKEN: ${INGEST_TOKEN}
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # WATER TREATMENT — drinking-water plant HMI (Schneider-style)
+  # ──────────────────────────────────────────────────────────────────────────
+  decoy-water-treatment:
+    <<: *tripwire-base
+    container_name: decoy-water-treatment
+    hostname: hmi-water
+    networks:
+      ot-subnet:
+        ipv4_address: 172.30.50.11
+    ports:
+      - "15022:502"  # host:15022 -> water treatment Modbus
+    environment:
+      HMI_TYPE:     WATER_TREATMENT
+      HMI_PROTOCOL: MODBUS
+      HMI_PORT:     "502"
+      HMI_VENDOR:   SCHNEIDER
+      HMI_SITE_TAG: WATER-PLANT-A
+      INGEST_URL:   ${INGEST_URL}
+      INGEST_TOKEN: ${INGEST_TOKEN}
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # REFINERY — oil & gas pipeline HMI (ABB-style, IEC 60870-5-104)
+  # ──────────────────────────────────────────────────────────────────────────
+  decoy-refinery:
+    <<: *tripwire-base
+    container_name: decoy-refinery
+    hostname: hmi-refinery
+    networks:
+      ot-subnet:
+        ipv4_address: 172.30.50.12
+    ports:
+      - "12404:2404"  # host:12404 -> refinery IEC104
+    environment:
+      HMI_TYPE:     REFINERY
+      HMI_PROTOCOL: IEC104
+      HMI_PORT:     "2404"
+      HMI_VENDOR:   ABB
+      HMI_SITE_TAG: REFINERY-PIPELINE-PROFILE
+      INGEST_URL:   ${INGEST_URL}
+      INGEST_TOKEN: ${INGEST_TOKEN}
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # MANUFACTURING — assembly line OEE HMI (Rockwell-style, S7Comm)
+  # ──────────────────────────────────────────────────────────────────────────
+  decoy-manufacturing:
+    <<: *tripwire-base
+    container_name: decoy-manufacturing
+    hostname: hmi-mfg
+    networks:
+      ot-subnet:
+        ipv4_address: 172.30.50.13
+    ports:
+      - "10102:102"  # host:10102 -> manufacturing S7Comm
+    environment:
+      HMI_TYPE:     MANUFACTURING
+      HMI_PROTOCOL: S7COMM
+      HMI_PORT:     "102"
+      HMI_VENDOR:   ROCKWELL
+      HMI_SITE_TAG: ASSEMBLY-LINE-1
+      INGEST_URL:   ${INGEST_URL}
+      INGEST_TOKEN: ${INGEST_TOKEN}
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # ATTACKER SANDBOX — alpine with nmap & ncat for end-to-end testing
+  # ──────────────────────────────────────────────────────────────────────────
+  attacker-sandbox:
+    image: alpine:3.20
+    container_name: attacker-sandbox
+    hostname: attacker
+    restart: "no"
+    networks:
+      ot-subnet:
+        ipv4_address: 172.30.50.250
+    command: >
+      sh -c "apk add --no-cache nmap ncat curl > /dev/null 2>&1 &&
+             echo '✅ attacker-sandbox ready. Try:' &&
+             echo '   docker exec -it attacker-sandbox nmap -p 102,502,2404 172.30.50.10-13' &&
+             echo '   docker exec -it attacker-sandbox sh' &&
+             tail -f /dev/null"

@@ -1,0 +1,7 @@
+{
+  "00:1A:2B": { "vendor": "Cisco Systems",       "model": "Catalyst Switch" },
+  "00:1B:63": { "vendor": "Apple, Inc.",           "model": "MacBook Pro" },
+  "00:03:93": { "vendor": "Dell Inc.",             "model": "PowerEdge Server" },
+  "00:0C:29": { "vendor": "VMware, Inc.",         "model": "Virtual NIC" },
+  "AC:DE:48": { "vendor": "Xiaomi Communications Co Ltd", "model": "Mi Router" }
+} 
