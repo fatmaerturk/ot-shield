@@ -382,9 +382,12 @@ public class TTPAnalysisService {
         Map<String, long[]> byCountry = new LinkedHashMap<>(); // [events, uniqueIps]
         Map<String, Set<String>> ipsByCountry = new HashMap<>();
 
+        // Skip rows without a resolved country so the count here matches the
+        // "Countries" KPI on the Overview tab (which counts only country-tagged
+        // attackers, not "Unknown" buckets).
         for (HoneypotLog l : logs) {
             String c = l.getCountry();
-            if (c == null || c.isBlank()) c = "Unknown";
+            if (c == null || c.isBlank()) continue;
             byCountry.computeIfAbsent(c, k -> new long[]{0})[0]++;
             if (l.getSourceIp() != null) {
                 ipsByCountry.computeIfAbsent(c, k -> new HashSet<>()).add(l.getSourceIp());

@@ -127,6 +127,57 @@ const EMPTY_REPORT: TTPReport = {
   },
 };
 
+const COUNTRY_ISO: Record<string, string> = {
+  'Türkiye': 'TR', 'Turkey': 'TR',
+  'United States': 'US', 'United States of America': 'US', 'USA': 'US',
+  'United Kingdom': 'GB', 'UK': 'GB', 'Great Britain': 'GB',
+  'China': 'CN', 'Russia': 'RU', 'Russian Federation': 'RU',
+  'Germany': 'DE', 'France': 'FR', 'Netherlands': 'NL', 'Spain': 'ES',
+  'Italy': 'IT', 'Switzerland': 'CH', 'Sweden': 'SE', 'Norway': 'NO',
+  'Denmark': 'DK', 'Finland': 'FI', 'Poland': 'PL', 'Romania': 'RO',
+  'Ukraine': 'UA', 'Belarus': 'BY', 'Bulgaria': 'BG',
+  'Brazil': 'BR', 'Argentina': 'AR', 'Mexico': 'MX', 'Canada': 'CA',
+  'India': 'IN', 'Pakistan': 'PK',
+  'Japan': 'JP', 'South Korea': 'KR', 'Korea, Republic of': 'KR',
+  'Taiwan': 'TW', 'Hong Kong': 'HK', 'Vietnam': 'VN', 'Thailand': 'TH',
+  'Singapore': 'SG', 'Indonesia': 'ID', 'Malaysia': 'MY',
+  'Philippines': 'PH', 'Australia': 'AU', 'New Zealand': 'NZ',
+  'Iran': 'IR', 'Israel': 'IL', 'Saudi Arabia': 'SA',
+  'United Arab Emirates': 'AE', 'Egypt': 'EG', 'South Africa': 'ZA',
+  'Kazakhstan': 'KZ', 'Azerbaijan': 'AZ', 'Georgia': 'GE',
+  'Seychelles': 'SC', 'Cyprus': 'CY',
+};
+
+function isoFor(country: string | null | undefined): string | null {
+  if (!country) return null;
+  return COUNTRY_ISO[country.trim()] ?? null;
+}
+
+/** Render a country flag image from flagcdn (works on Windows too). */
+const Flag: React.FC<{ country: string | null | undefined; size?: number; className?: string }> = ({
+  country,
+  size = 14,
+  className = '',
+}) => {
+  const iso = isoFor(country);
+  if (!iso) {
+    return <span aria-hidden="true" className={className} style={{ fontSize: size }}>🌐</span>;
+  }
+  const w = Math.round(size * 1.4);
+  return (
+    <img
+      src={`https://flagcdn.com/w40/${iso.toLowerCase()}.png`}
+      srcSet={`https://flagcdn.com/w80/${iso.toLowerCase()}.png 2x`}
+      width={w}
+      height={size}
+      alt={country ?? ''}
+      loading="lazy"
+      className={`inline-block rounded-sm shadow-sm align-middle ${className}`}
+      style={{ width: w, height: size, objectFit: 'cover' }}
+    />
+  );
+};
+
 const tierStyle = (tier: string) => {
   switch (tier) {
     case 'ADVANCED':
@@ -598,7 +649,14 @@ const TTPIntelTab: React.FC = () => {
                       <td className="px-4 py-2 font-mono text-xs text-slate-900">
                         {p.sourceIp}
                       </td>
-                      <td className="px-4 py-2 text-slate-700">{p.country ?? '—'}</td>
+                      <td className="px-4 py-2 text-slate-700">
+                        {p.country ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            <Flag country={p.country} size={14} />
+                            {p.country}
+                          </span>
+                        ) : '—'}
+                      </td>
                       <td className="px-4 py-2">
                         <motion.span
                           whileHover={{ scale: 1.08 }}
@@ -747,7 +805,7 @@ const TTPIntelTab: React.FC = () => {
             animate="visible"
             className="grid grid-cols-1 md:grid-cols-2 gap-4"
           >
-            {report.geoDistribution.slice(0, 12).map((g, idx) => {
+            {report.geoDistribution.map((g, idx) => {
               const total = report.geoDistribution.reduce(
                 (s, x) => s + (x.eventCount as number),
                 0,
@@ -761,7 +819,10 @@ const TTPIntelTab: React.FC = () => {
                   className="flex items-center gap-3 p-3 rounded-lg ring-1 ring-slate-200/60 hover:ring-emerald-300 hover:shadow-sm transition-all"
                 >
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-slate-900">{g.country}</p>
+                    <p className="text-sm font-semibold text-slate-900 inline-flex items-center gap-2">
+                      <Flag country={g.country} size={16} />
+                      {g.country}
+                    </p>
                     <p className="text-[11px] text-slate-500">
                       {g.uniqueAttackers} unique IP{g.uniqueAttackers === 1 ? '' : 's'}
                     </p>

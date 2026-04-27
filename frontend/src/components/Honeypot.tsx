@@ -19,6 +19,7 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import TTPIntelTab from './TTPIntelTab';
+import AttackerWatchlist from './AttackerWatchlist';
 
 ChartJS.register(
   CategoryScale,
@@ -281,6 +282,88 @@ const COUNTRY_COORDS: Record<string, L.LatLngTuple> = {
   'Japan': [35.6762, 139.6503],
 };
 
+// Country name -> ISO 3166-1 alpha-2 code mapping. Used to render emoji
+// flags next to country names. Covers the most common attacker origins
+// observed in honeypot traffic plus a wide international fallback list.
+const COUNTRY_ISO: Record<string, string> = {
+  'Türkiye': 'TR', 'Turkey': 'TR',
+  'United States': 'US', 'United States of America': 'US', 'USA': 'US',
+  'United Kingdom': 'GB', 'UK': 'GB', 'Great Britain': 'GB',
+  'China': 'CN', "China, People's Republic of": 'CN',
+  'Russia': 'RU', 'Russian Federation': 'RU',
+  'Germany': 'DE', 'France': 'FR', 'Spain': 'ES', 'Italy': 'IT',
+  'Netherlands': 'NL', 'Belgium': 'BE', 'Switzerland': 'CH', 'Austria': 'AT',
+  'Sweden': 'SE', 'Norway': 'NO', 'Denmark': 'DK', 'Finland': 'FI',
+  'Poland': 'PL', 'Czechia': 'CZ', 'Czech Republic': 'CZ',
+  'Romania': 'RO', 'Bulgaria': 'BG', 'Hungary': 'HU', 'Greece': 'GR',
+  'Portugal': 'PT', 'Ireland': 'IE', 'Iceland': 'IS', 'Ukraine': 'UA',
+  'Belarus': 'BY', 'Lithuania': 'LT', 'Latvia': 'LV', 'Estonia': 'EE',
+  'Croatia': 'HR', 'Slovenia': 'SI', 'Slovakia': 'SK', 'Serbia': 'RS',
+  'Moldova': 'MD', 'Albania': 'AL',
+  'Brazil': 'BR', 'Argentina': 'AR', 'Chile': 'CL', 'Colombia': 'CO',
+  'Mexico': 'MX', 'Peru': 'PE', 'Venezuela': 'VE', 'Uruguay': 'UY',
+  'Canada': 'CA',
+  'India': 'IN', 'Pakistan': 'PK', 'Bangladesh': 'BD', 'Sri Lanka': 'LK',
+  'Nepal': 'NP', 'Afghanistan': 'AF',
+  'Japan': 'JP', 'South Korea': 'KR', 'Korea, Republic of': 'KR',
+  'North Korea': 'KP', "Korea, Democratic People's Republic of": 'KP',
+  'Taiwan': 'TW', 'Hong Kong': 'HK', 'Macao': 'MO', 'Mongolia': 'MN',
+  'Vietnam': 'VN', 'Viet Nam': 'VN', 'Thailand': 'TH',
+  'Philippines': 'PH', 'Indonesia': 'ID', 'Malaysia': 'MY',
+  'Singapore': 'SG', 'Cambodia': 'KH', 'Laos': 'LA',
+  'Australia': 'AU', 'New Zealand': 'NZ',
+  'Iran': 'IR', 'Iran, Islamic Republic of': 'IR',
+  'Iraq': 'IQ', 'Israel': 'IL', 'Saudi Arabia': 'SA',
+  'United Arab Emirates': 'AE', 'UAE': 'AE',
+  'Qatar': 'QA', 'Kuwait': 'KW', 'Bahrain': 'BH', 'Oman': 'OM',
+  'Jordan': 'JO', 'Lebanon': 'LB', 'Syria': 'SY', 'Yemen': 'YE',
+  'Egypt': 'EG', 'Libya': 'LY', 'Tunisia': 'TN', 'Algeria': 'DZ', 'Morocco': 'MA',
+  'Sudan': 'SD', 'Ethiopia': 'ET', 'Kenya': 'KE', 'Uganda': 'UG',
+  'Tanzania': 'TZ', 'Nigeria': 'NG', 'Ghana': 'GH', 'South Africa': 'ZA',
+  'Cameroon': 'CM', 'Senegal': 'SN', 'Angola': 'AO',
+  'Kazakhstan': 'KZ', 'Uzbekistan': 'UZ', 'Turkmenistan': 'TM',
+  'Kyrgyzstan': 'KG', 'Tajikistan': 'TJ', 'Azerbaijan': 'AZ',
+  'Armenia': 'AM', 'Georgia': 'GE',
+  'Cyprus': 'CY', 'Malta': 'MT', 'Luxembourg': 'LU',
+  'Seychelles': 'SC', 'Mauritius': 'MU', 'Madagascar': 'MG',
+  'Cuba': 'CU', 'Dominican Republic': 'DO', 'Panama': 'PA',
+  'Costa Rica': 'CR', 'Guatemala': 'GT', 'Honduras': 'HN',
+};
+
+/** Get ISO 3166-1 alpha-2 code for a country name (or null if unknown). */
+function isoFor(country: string | null | undefined): string | null {
+  if (!country) return null;
+  return COUNTRY_ISO[country.trim()] ?? null;
+}
+
+/** Render a country flag as an SVG image (works on every OS, including
+ *  Windows where emoji flags don't render natively). Uses flagcdn.com
+ *  free CDN — small (≈1kb each, served as PNG/SVG with caching).
+ *  Falls back to a globe glyph when the country is not in the mapping. */
+const Flag: React.FC<{ country: string | null | undefined; size?: number; className?: string }> = ({
+  country,
+  size = 16,
+  className = '',
+}) => {
+  const iso = isoFor(country);
+  if (!iso) {
+    return <span aria-hidden="true" className={className} style={{ fontSize: size }}>🌐</span>;
+  }
+  const w = Math.round(size * 1.4);
+  return (
+    <img
+      src={`https://flagcdn.com/w40/${iso.toLowerCase()}.png`}
+      srcSet={`https://flagcdn.com/w80/${iso.toLowerCase()}.png 2x`}
+      width={w}
+      height={size}
+      alt={country ?? ''}
+      loading="lazy"
+      className={`inline-block rounded-sm shadow-sm align-middle ${className}`}
+      style={{ width: w, height: size, objectFit: 'cover' }}
+    />
+  );
+};
+
 // =====================================================================
 
 const Honeypot: React.FC = () => {
@@ -291,7 +374,7 @@ const Honeypot: React.FC = () => {
   const [logSize] = useState(20);
   const [logFilter, setLogFilter] = useState('');
   const [logProtocol, setLogProtocol] = useState('');
-  const [reportTab, setReportTab] = useState<'threat-intel' | 'geographic' | 'time-analytics' | 'owasp' | 'event-distribution'>('threat-intel');
+  const [reportTab, setReportTab] = useState<'threat-intel' | 'geographic' | 'time-analytics' | 'owasp' | 'event-distribution' | 'watchlist'>('threat-intel');
   const [mainTab, setMainTab] = useState<'overview' | 'ttp'>('overview');
   const [selectedAttacker, setSelectedAttacker] = useState<TopAttacker | null>(null);
   // Impact flash state — increments on each projectile hit so we can rotate keys
@@ -741,7 +824,15 @@ const Honeypot: React.FC = () => {
                       <tr key={a.ip} className="hover:bg-violet-50/40 transition cursor-pointer" onClick={() => setSelectedAttacker(a)}>
                         <td className="px-4 py-2.5 text-sm font-semibold text-slate-500">#{i + 1}</td>
                         <td className="px-4 py-2.5 text-sm font-mono font-medium text-slate-900">{a.ip}</td>
-                        <td className="px-4 py-2.5 text-sm text-slate-600">{a.country || '-'}{a.city ? <span className="text-slate-400"> · {a.city}</span> : ''}</td>
+                        <td className="px-4 py-2.5 text-sm text-slate-600">
+                          {a.country ? (
+                            <span className="inline-flex items-center gap-1.5">
+                              <Flag country={a.country} size={14} />
+                              <span>{a.country}</span>
+                            </span>
+                          ) : '-'}
+                          {a.city ? <span className="text-slate-400"> · {a.city}</span> : ''}
+                        </td>
                         <td className="px-4 py-2.5 text-sm">{a.topProtocol ? <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 ring-1 ring-slate-200">{a.topProtocol}</span> : '-'}</td>
                         <td className="px-4 py-2.5 text-sm">{a.highestSeverity ? (
                           <span className={`inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ring-1 ${SEVERITY_PILL[a.highestSeverity] || SEVERITY_PILL.LOW}`}>
@@ -810,6 +901,7 @@ const Honeypot: React.FC = () => {
             <div className="flex border-b border-slate-200/70 overflow-x-auto">
               {([
                 { id: 'threat-intel', label: 'Threat Intel', icon: <Icon.Shield className="w-4 h-4" /> },
+                { id: 'watchlist', label: 'Attacker Watchlist', icon: <Icon.Users className="w-4 h-4" /> },
                 { id: 'geographic', label: 'Geographic', icon: <Icon.Globe className="w-4 h-4" /> },
                 { id: 'time-analytics', label: 'Time Analytics', icon: <Icon.Clock className="w-4 h-4" /> },
                 { id: 'owasp', label: 'OWASP Top 10', icon: <Icon.Lock className="w-4 h-4" /> },
@@ -825,6 +917,8 @@ const Honeypot: React.FC = () => {
               ))}
             </div>
             <div className="p-6">
+              {reportTab === 'watchlist' && <AttackerWatchlist />}
+
               {reportTab === 'threat-intel' && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <PanelCard title="Attack Types" subtitle="Frequency of observed attack categories" badge="Types" badgeTone="violet">
@@ -862,6 +956,7 @@ const Honeypot: React.FC = () => {
                           return (
                             <div key={c} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-slate-50 ring-1 ring-slate-200/50">
                               <span className="text-xs font-semibold text-slate-500 w-5">#{i + 1}</span>
+                              <Flag country={c} size={18} />
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between mb-1">
                                   <span className="text-sm font-medium text-slate-900 truncate">{c}</span>
