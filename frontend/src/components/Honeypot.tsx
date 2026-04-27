@@ -18,6 +18,7 @@ import {
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import TTPIntelTab from './TTPIntelTab';
 
 ChartJS.register(
   CategoryScale,
@@ -291,6 +292,7 @@ const Honeypot: React.FC = () => {
   const [logFilter, setLogFilter] = useState('');
   const [logProtocol, setLogProtocol] = useState('');
   const [reportTab, setReportTab] = useState<'threat-intel' | 'geographic' | 'time-analytics' | 'owasp' | 'event-distribution'>('threat-intel');
+  const [mainTab, setMainTab] = useState<'overview' | 'ttp'>('overview');
   const [selectedAttacker, setSelectedAttacker] = useState<TopAttacker | null>(null);
   // Impact flash state — increments on each projectile hit so we can rotate keys
   const [impactFlash, setImpactFlash] = useState<{ id: number; color: string } | null>(null);
@@ -552,6 +554,27 @@ const Honeypot: React.FC = () => {
         ))}
       </div>
 
+      {/* Main tab switcher: Overview vs Attacker TTPs */}
+      <div className="bg-white rounded-2xl ring-1 ring-slate-200/70 shadow-sm p-1 inline-flex gap-1">
+        {[
+          { key: 'overview', label: 'Overview', hint: 'Geo, time, OWASP, event distribution' },
+          { key: 'ttp', label: 'Attacker TTPs & Behavioral Intel', hint: 'MITRE ATT&CK, profiles, kill chains' },
+        ].map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setMainTab(t.key as 'overview' | 'ttp')}
+            title={t.hint}
+            className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
+              mainTab === t.key
+                ? 'bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-md shadow-violet-500/30'
+                : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       {!hasData && backendReachable && (
         <div className="bg-white rounded-2xl ring-1 ring-slate-200/70 shadow-sm p-10 text-center">
           <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white flex items-center justify-center shadow-lg shadow-violet-500/30">
@@ -569,7 +592,9 @@ const Honeypot: React.FC = () => {
         </div>
       )}
 
-      {hasData && (
+      {hasData && mainTab === 'ttp' && <TTPIntelTab />}
+
+      {hasData && mainTab === 'overview' && (
         <>
           {/* Attack map */}
           <div className="bg-white rounded-2xl ring-1 ring-slate-200/70 shadow-sm overflow-hidden">

@@ -932,8 +932,15 @@ public class ConpotService {
      */
     public Map<String, Object> getStatistics() {
         Map<String, Object> stats = new HashMap<>();
+        // Apply the same internal-noise filter used by /api/honeypot/stats
+        // and /api/honeypot/ttp-analysis so all three endpoints agree on
+        // totals. Without this, RFC1918 / Docker bridge / loopback / null-IP
+        // rows inflate the ICS Decoy Telemetry counters relative to the
+        // Attack Intelligence and TTP Intel views.
         java.util.List<com.safetech.otshield.model.HoneypotLog> all =
-            honeypotLogRepository.findAllByOrderByTimestampDesc();
+            honeypotLogRepository.findAllByOrderByTimestampDesc().stream()
+                .filter(l -> !HoneypotLogService.isInternalNoise(l))
+                .collect(java.util.stream.Collectors.toList());
 
         int totalConnections = all.size();
         int resetCount = 0;

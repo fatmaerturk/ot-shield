@@ -29,6 +29,9 @@ public class HoneypotController {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.safetech.otshield.service.ConpotService conpotService;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.safetech.otshield.service.TTPAnalysisService ttpAnalysisService;
+
     /** Optional — used to mirror real Docker tripwire hits onto the matching
      *  fake HMI card (ALARM + INTERACTION) so the deception UI shows live
      *  attacker activity alongside the simulated process drift. */
@@ -75,6 +78,35 @@ public class HoneypotController {
     public ResponseEntity<List<Map<String, Object>>> getAttackAttempts() {
         List<Map<String, Object>> attacks = honeypotLogService.getAttackAttempts();
         return ResponseEntity.ok(attacks);
+    }
+
+    /**
+     * Attacker TTPs &amp; Behavioral Intelligence — derived analytics over the
+     * honeypot_logs table. Returns a single payload that drives the
+     * "Attacker TTPs &amp; Behavioral Intel" tab on the Attack Intelligence page:
+     *  - per-IP attacker profiles + sophistication scoring
+     *  - MITRE ATT&amp;CK ICS tactic heatmap
+     *  - tool / wordlist fingerprints
+     *  - per-attacker kill-chain timelines
+     *  - geographic distribution
+     *  - credential intelligence (Mirai / ICS default detection)
+     *  - behavioral anomalies (burst, slow-low, multi-protocol pivot)
+     */
+    @GetMapping("/ttp-analysis")
+    public ResponseEntity<Map<String, Object>> getTTPAnalysis() {
+        if (ttpAnalysisService == null) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(Map.of("error", "TTPAnalysisService not available"));
+        }
+        try {
+            Map<String, Object> report = ttpAnalysisService.buildTTPReport();
+            return ResponseEntity.ok(report);
+        } catch (Exception e) {
+            log.error("Failed to build TTP analysis report", e);
+            Map<String, Object> err = new HashMap<>();
+            err.put("error", "TTP analysis failed: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(err);
+        }
     }
 
     @PostMapping("/logs/clear")
