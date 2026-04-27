@@ -559,7 +559,7 @@ const Honeypot: React.FC = () => {
           </div>
           <h3 className="text-lg font-semibold text-slate-900">Waiting for attack telemetry</h3>
           <p className="mt-1 text-sm text-slate-500 max-w-md mx-auto">
-            All metrics populate from live honeypot data. Start Conpot (or any honeypot that writes to <code>/api/honeypot/logs</code>) and attacker probes will appear here automatically.
+            All metrics populate from live honeypot data. Start the honeypot agent (or any honeypot that writes to <code>/api/honeypot/logs</code>) and attacker probes will appear here automatically.
           </p>
           <div className="mt-4">
             <Link to="/integrations/ics-decoy" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white font-semibold text-sm hover:shadow-lg hover:shadow-violet-500/30 transition">
@@ -772,7 +772,7 @@ const Honeypot: React.FC = () => {
 
           {/* Credentials */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <CredCard title="Top Usernames" subtitle="Credentials attackers tried" tone="violet" icon={<Icon.User className="w-5 h-5" />} data={stats.topUsernames} badge="Usernames" emptyHint="Conpot's HTTP template logs Basic-auth attempts. Once any attacker tries a username, it'll show here." />
+            <CredCard title="Top Usernames" subtitle="Credentials attackers tried" tone="violet" icon={<Icon.User className="w-5 h-5" />} data={stats.topUsernames} badge="Usernames" emptyHint="The HTTP decoy logs Basic-auth attempts. Once any attacker tries a username, it'll show here." />
             <CredCard title="Top Passwords" subtitle="Credentials attackers tried" tone="fuchsia" icon={<Icon.Lock className="w-5 h-5" />} data={stats.topPasswords} badge="Passwords" emptyHint="Same source as usernames. Decoded from Basic-auth or extracted from form-encoded POSTs." />
           </div>
 

@@ -273,6 +273,33 @@ public class ConpotLogIntegrationService {
             return;
         }
 
+        // FTP — Conpot's FTP module emits lines like:
+        //   "New ftp session from 1.2.3.4 (uuid)"
+        //   "FTP traffic to ('1.2.3.4', 12345): {'request': b'USER admin\n'}"
+        //   "FTP traffic to ('1.2.3.4', 12345): {'response': b'331 Now specify the Password.\r\n'}"
+        //   "Received command USER : USER admin"
+        //   "Received command PASS : PASS secret"
+        //   "FTP connection timeout, remote: ('1.2.3.4', 12345). Disconnecting client"
+        //   "New FTP connection from 1.2.3.4:12345. (uuid)"
+        if (line.contains("FTP") || line.contains("ftp session") || line.contains("ftp connection")
+            || (line.contains("Received command") && (line.contains("USER ") || line.contains("PASS ")))) {
+            String sourceIp = extractIpFromLine(line);
+            if (sourceIp != null) {
+                String type = "FTP Request";
+                String sev = "LOW";
+                if (username != null || password != null) {
+                    type = "FTP Login Attempt";
+                    sev = "MEDIUM";
+                }
+                if (line.toLowerCase().contains("brute") || line.toLowerCase().contains("dictionary")) {
+                    type = "FTP Brute Force";
+                    sev = "HIGH";
+                }
+                createHoneypotLog("FTP", sourceIp, "21", type, sev, null, username, password, userAgent);
+            }
+            return;
+        }
+
         // Fallback — if we still captured credentials but no protocol keyword matched
         if (username != null || password != null) {
             String sourceIp = extractIpFromLine(line);

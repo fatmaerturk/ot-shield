@@ -2231,7 +2231,7 @@ const Assets: React.FC = () => {
                 honeypotActive ? 'reporting' : 'no data'
               )}
               {sourceChip(
-                'Conpot ICS sim',
+                'ICS decoy',
                 conpotRunning,
                 conpotRunning
                   ? conpotSimulated
@@ -2246,11 +2246,11 @@ const Assets: React.FC = () => {
               )}
             </div>
 
-            {/* Conpot detail row */}
+            {/* Decoy detail row */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
               <div className="p-3 bg-gray-50 rounded border border-gray-200">
                 <div className="text-xs text-gray-500 uppercase tracking-wide">
-                  Conpot logs collected
+                  Decoy logs collected
                 </div>
                 <div className="text-lg font-semibold text-gray-900 mt-0.5">
                   {dataSources.conpotLogCount.toLocaleString()}
