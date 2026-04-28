@@ -7,7 +7,6 @@ import Assets from './components/Assets';
 import PrivateRoute from './components/PrivateRoute';
 import Anomalies from './components/Anomalies';
 import Honeypot from './components/Honeypot';
-import Hazop from './components/Hazop';
 import MitreMatrix from './components/MitreMatrix';
 import UserManagement from './components/UserManagement';
 import ThreatIntelligence from './components/ThreatIntelligence';
@@ -55,7 +54,6 @@ const App: React.FC = () => {
           <Route path="/attack-intelligence" element={<PrivateRoute><Honeypot /></PrivateRoute>} />
           {/* Backwards-compatible redirect: keep old /otpot URLs working */}
           <Route path="/otpot" element={<Navigate to="/attack-intelligence" replace />} />
-          <Route path="/hazop" element={<PrivateRoute><Hazop /></PrivateRoute>} />
           <Route path="/mitre-matrix" element={<PrivateRoute><MitreMatrix /></PrivateRoute>} />
           <Route path="/user-management" element={<PrivateRoute><UserManagement /></PrivateRoute>} />
           <Route path="/threat-intelligence" element={<PrivateRoute><ThreatIntelligence /></PrivateRoute>} />

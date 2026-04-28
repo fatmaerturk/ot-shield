@@ -381,7 +381,7 @@ public class HoneypotLogService {
         a.setType(isInternalDecoy
             ? com.safetech.otshield.model.AlertType.HONEYPOT_EXPLOIT
             : com.safetech.otshield.model.AlertType.HONEYPOT_TRIGGER);
-        a.setSource(isInternalDecoy ? "Tripwire/Decoy" : "Conpot");
+        a.setSource(isInternalDecoy ? "Tripwire/Decoy" : "ICS Decoy");
         a.setSourceIp(hp.getSourceIp());
         a.setSourcePort(hp.getSourcePort());
         a.setDestinationPort(hp.getDestinationPort());

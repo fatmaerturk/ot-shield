@@ -1,849 +1,702 @@
-import React, { useState } from 'react';
-import PDFReportGenerator from './PDFReportGenerator';
-import AdvancedAnalytics from './AdvancedAnalytics';
-import EmailNotifications from './EmailNotifications';
-import MultiLanguageSupport from './MultiLanguageSupport';
+import React, { useEffect, useMemo, useState } from 'react';
+import { motion, AnimatePresence, Variants } from 'framer-motion';
 
-interface NIS2Requirement {
-  id: string;
-  category: string;
-  requirement: string;
-  description: string;
-  status: 'compliant' | 'non-compliant' | 'partially-compliant' | 'not-assessed';
-  evidence?: string;
-  lastAssessed?: string;
-  priority: 'high' | 'medium' | 'low';
-  riskScore?: number;
-  remediationCost?: string;
-  estimatedTime?: string;
+// =====================================================================
+// NIS2 Directive (EU 2022/2555) Compliance Page
+// Real, working compliance posture driven by /api/compliance/nis2/posture.
+// Four tabs:
+//   1. Article 21 Measures — status board for the 10 mandatory measures
+//   2. Incident Reporting — Article 23 24h/72h/1m clock per alert
+//   3. Evidence Library — telemetry artifacts cross-referenced to articles
+//   4. Self-Assessment — interactive questionnaire with gap analysis
+// =====================================================================
+
+interface OrgProfile {
+  name: string; sector: string; entityType: string;
+  country: string; nis2CompliantSince: string;
+}
+interface PostureScore {
+  score: number; trendDelta: number; classification: string;
+}
+interface Kpis {
+  openFindings: number; criticalFindings: number;
+  reportableIncidents: number; reportableOverdue: number;
+  daysToNextSelfAudit: number; evidenceArtifacts: number;
+}
+interface Article21Measure {
+  id: string; title: string; description: string;
+  score: number; status: string; evidenceIds: string[];
+  currentState: string; nextAction: string;
+}
+interface ReportableIncident {
+  alertId: string; title: string; severity: string;
+  sourceIp: string | null; protocol: string | null;
+  detectedAt: string | null;
+  earlyWarningDeadline: string | null; earlyWarningStatus: string;
+  incidentReportDeadline: string | null; incidentReportStatus: string;
+  finalReportDeadline: string | null;
+  status: string; recommendedAction: string;
+}
+interface EvidenceArtifact {
+  id: string; type: string; article: string;
+  description: string; timestamp: string | null;
+}
+interface EvidenceLibrary {
+  byArticle: Record<string, number>;
+  totalArtifacts: number; retentionMonths: number;
+  oldestArtifact: string | null;
+  recentArtifacts: EvidenceArtifact[];
+}
+interface SelfAssessmentSection {
+  id: string; title: string;
+  questions: Array<{ id: string; question: string; weight: number }>;
+}
+interface RetentionPolicy {
+  requiredMonths: number; currentRetention: number; status: string;
+}
+interface PostureResponse {
+  organization: OrgProfile;
+  postureScore: PostureScore;
+  kpis: Kpis;
+  article21Measures: Article21Measure[];
+  reportableIncidents: ReportableIncident[];
+  evidenceLibrary: EvidenceLibrary;
+  selfAssessment: SelfAssessmentSection[];
+  retentionPolicy: RetentionPolicy;
 }
 
-interface ComplianceReport {
-  id: string;
-  title: string;
-  date: string;
-  status: 'draft' | 'final' | 'archived';
-  score: number;
-  findings: number;
-  recommendations: number;
-}
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.06, delayChildren: 0.04 } },
+};
+const cardVariants: Variants = {
+  hidden: { opacity: 0, y: 16 },
+  visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 120, damping: 16 } },
+};
 
-interface AssetCompliance {
-  id: string;
-  name: string;
-  type: string;
-  criticality: 'critical' | 'high' | 'medium' | 'low';
-  complianceScore: number;
-  lastAssessment: string;
-  vulnerabilities: number;
-  recommendations: string[];
-}
+const statusBadge = (status: string) => {
+  switch (status) {
+    case 'COMPLIANT': return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
+    case 'PARTIAL': return 'bg-amber-50 text-amber-700 ring-amber-200';
+    case 'NON_COMPLIANT': return 'bg-rose-50 text-rose-700 ring-rose-200';
+    default: return 'bg-slate-50 text-slate-600 ring-slate-200';
+  }
+};
+
+const scoreColor = (score: number) => {
+  if (score >= 85) return 'from-emerald-500 to-teal-500';
+  if (score >= 70) return 'from-violet-500 to-fuchsia-500';
+  if (score >= 50) return 'from-amber-500 to-orange-500';
+  return 'from-rose-500 to-fuchsia-500';
+};
+
+const formatDateShort = (iso: string | null): string => {
+  if (!iso) return '—';
+  return iso.replace('T', ' ').slice(0, 16);
+};
+
+const formatTimeRemaining = (deadline: string | null): string => {
+  if (!deadline) return '—';
+  const t = new Date(deadline).getTime();
+  const diff = t - Date.now();
+  if (diff < 0) {
+    const h = Math.abs(Math.floor(diff / 3600000));
+    return `${h}h overdue`;
+  }
+  const h = Math.floor(diff / 3600000);
+  if (h < 24) return `${h}h left`;
+  const d = Math.floor(h / 24);
+  return `${d}d left`;
+};
+
+const AnimatedNumber: React.FC<{ value: number; suffix?: string; duration?: number }> = ({
+  value, suffix = '', duration = 900,
+}) => {
+  const [d, setD] = useState(0);
+  useEffect(() => {
+    let raf = 0; let start: number | null = null;
+    const tick = (now: number) => {
+      if (start === null) start = now;
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setD(Math.round(value * eased));
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value, duration]);
+  return <>{d.toLocaleString()}{suffix}</>;
+};
 
 const NIS2Compliance: React.FC = () => {
-  const [requirements, setRequirements] = useState<NIS2Requirement[]>([
-    {
-      id: 'NIS2-001',
-      category: 'Risk Management',
-      requirement: 'Risk Assessment',
-      description: 'Conduct regular risk assessments of network and information systems',
-      status: 'not-assessed',
-      priority: 'high'
-    },
-    {
-      id: 'NIS2-002',
-      category: 'Risk Management',
-      requirement: 'Security Policies',
-      description: 'Implement security policies and procedures',
-      status: 'not-assessed',
-      priority: 'high'
-    },
-    {
-      id: 'NIS2-003',
-      category: 'Incident Handling',
-      requirement: 'Incident Response',
-      description: 'Establish incident response capabilities',
-      status: 'not-assessed',
-      priority: 'high'
-    },
-    {
-      id: 'NIS2-004',
-      category: 'Incident Handling',
-      requirement: 'Incident Reporting',
-      description: 'Report significant incidents to competent authorities',
-      status: 'not-assessed',
-      priority: 'high'
-    },
-    {
-      id: 'NIS2-005',
-      category: 'Business Continuity',
-      requirement: 'Business Continuity',
-      description: 'Ensure business continuity and disaster recovery',
-      status: 'not-assessed',
-      priority: 'medium'
-    },
-    {
-      id: 'NIS2-006',
-      category: 'Supply Chain Security',
-      requirement: 'Supply Chain Security',
-      description: 'Manage security risks in the supply chain',
-      status: 'not-assessed',
-      priority: 'medium'
-    },
-    {
-      id: 'NIS2-007',
-      category: 'Access Control',
-      requirement: 'Access Control',
-      description: 'Implement appropriate access controls',
-      status: 'not-assessed',
-      priority: 'high'
-    },
-    {
-      id: 'NIS2-008',
-      category: 'Asset Management',
-      requirement: 'Asset Inventory',
-      description: 'Maintain inventory of critical assets',
-      status: 'not-assessed',
-      priority: 'medium'
-    },
-    {
-      id: 'NIS2-009',
-      category: 'Monitoring',
-      requirement: 'Security Monitoring',
-      description: 'Implement continuous security monitoring',
-      status: 'not-assessed',
-      priority: 'high'
-    },
-    {
-      id: 'NIS2-010',
-      category: 'Training',
-      requirement: 'Security Awareness',
-      description: 'Provide security awareness training',
-      status: 'not-assessed',
-      priority: 'medium'
-    }
-  ]);
+  const [data, setData] = useState<PostureResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<'measures' | 'incidents' | 'evidence' | 'assessment'>('measures');
+  const [expandedMeasure, setExpandedMeasure] = useState<string | null>(null);
+  const [earlyWarning, setEarlyWarning] = useState<any>(null);
+  const [answers, setAnswers] = useState<Record<string, 'YES' | 'NO' | 'PARTIAL' | null>>({});
 
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [selectedStatus, setSelectedStatus] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState<'overview' | 'requirements' | 'assets' | 'reports' | 'remediation' | 'analytics' | 'notifications' | 'language'>('overview');
+  useEffect(() => {
+    let cancel = false;
+    const load = async () => {
+      try {
+        const r = await fetch('http://localhost:8080/api/compliance/nis2/posture');
+        if (!r.ok) {
+          if (!cancel) { setError(`Backend HTTP ${r.status}`); setLoading(false); }
+          return;
+        }
+        const d = (await r.json()) as PostureResponse;
+        if (!cancel) { setData(d); setLoading(false); }
+      } catch (e: any) {
+        if (!cancel) { setError(e?.message ?? 'Network error'); setLoading(false); }
+      }
+    };
+    load();
+    const t = window.setInterval(load, 60000);
+    return () => { cancel = true; window.clearInterval(t); };
+  }, []);
 
-  const categories = ['all', ...Array.from(new Set(requirements.map(r => r.category)))];
-  const statuses = ['all', 'compliant', 'non-compliant', 'partially-compliant', 'not-assessed'];
+  const assessmentScore = useMemo(() => {
+    if (!data) return { answered: 0, total: 0, score: 0 };
+    let total = 0, yes = 0, partial = 0, answered = 0;
+    data.selfAssessment.forEach((s) => s.questions.forEach((q) => {
+      total++;
+      const a = answers[q.id];
+      if (a) answered++;
+      if (a === 'YES') yes++;
+      else if (a === 'PARTIAL') partial++;
+    }));
+    const score = total > 0 ? Math.round(((yes + partial * 0.5) / total) * 100) : 0;
+    return { answered, total, score };
+  }, [data, answers]);
 
-  // Sample data for new features
-  const [complianceReports] = useState<ComplianceReport[]>([
-    {
-      id: '1',
-      title: 'Q4 2024 NIS2 Assessment',
-      date: '2024-12-15',
-      status: 'final',
-      score: 78,
-      findings: 12,
-      recommendations: 8
-    },
-    {
-      id: '2',
-      title: 'Q3 2024 NIS2 Assessment',
-      date: '2024-09-30',
-      status: 'archived',
-      score: 65,
-      findings: 18,
-      recommendations: 15
-    }
-  ]);
-
-  const [assetCompliance] = useState<AssetCompliance[]>([
-    {
-      id: '1',
-      name: 'SCADA System - Production Line 1',
-      type: 'SCADA',
-      criticality: 'critical',
-      complianceScore: 85,
-      lastAssessment: '2024-12-10',
-      vulnerabilities: 3,
-      recommendations: ['Implement network segmentation', 'Update access controls', 'Enable audit logging']
-    },
-    {
-      id: '2',
-      name: 'PLC - Boiler Control System',
-      type: 'PLC',
-      criticality: 'high',
-      complianceScore: 72,
-      lastAssessment: '2024-12-08',
-      vulnerabilities: 5,
-      recommendations: ['Patch firmware', 'Implement change management', 'Add monitoring']
-    },
-    {
-      id: '3',
-      name: 'HMI - Operator Station 1',
-      type: 'HMI',
-      criticality: 'medium',
-      complianceScore: 90,
-      lastAssessment: '2024-12-12',
-      vulnerabilities: 1,
-      recommendations: ['Regular security updates']
-    }
-  ]);
-
-  const filteredRequirements = requirements.filter(req => {
-    const categoryMatch = selectedCategory === 'all' || req.category === selectedCategory;
-    const statusMatch = selectedStatus === 'all' || req.status === selectedStatus;
-    return categoryMatch && statusMatch;
-  });
-
-  const updateRequirement = (id: string, updates: Partial<NIS2Requirement>) => {
-    setRequirements(prev => prev.map(req => 
-      req.id === id ? { ...req, ...updates } : req
-    ));
+  const generateEarlyWarning = async (alertId: string) => {
+    try {
+      const r = await fetch(`http://localhost:8080/api/compliance/nis2/early-warning/${alertId}`);
+      if (r.ok) setEarlyWarning(await r.json());
+    } catch { /* noop */ }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'compliant': return 'bg-green-100 text-green-800';
-      case 'non-compliant': return 'bg-red-100 text-red-800';
-      case 'partially-compliant': return 'bg-yellow-100 text-yellow-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
+  if (loading) {
+    return (
+      <div className="bg-white rounded-2xl ring-1 ring-slate-200/70 shadow-sm p-10 text-center">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
+          className="w-12 h-12 mx-auto mb-3 rounded-full border-4 border-violet-200 border-t-violet-600"
+        />
+        <p className="text-sm text-slate-500">Loading NIS2 compliance posture…</p>
+      </div>
+    );
+  }
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'bg-red-100 text-red-800';
-      case 'medium': return 'bg-yellow-100 text-yellow-800';
-      case 'low': return 'bg-green-100 text-green-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const complianceScore = () => {
-    const total = requirements.length;
-    const compliant = requirements.filter(r => r.status === 'compliant').length;
-    const partiallyCompliant = requirements.filter(r => r.status === 'partially-compliant').length;
-    return Math.round(((compliant + (partiallyCompliant * 0.5)) / total) * 100);
-  };
-
-  const getCriticalityColor = (criticality: string) => {
-    switch (criticality) {
-      case 'critical': return 'bg-red-100 text-red-800';
-      case 'high': return 'bg-orange-100 text-orange-800';
-      case 'medium': return 'bg-yellow-100 text-yellow-800';
-      case 'low': return 'bg-green-100 text-green-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getStatusBadgeColor = (status: string) => {
-    switch (status) {
-      case 'final': return 'bg-green-100 text-green-800';
-      case 'draft': return 'bg-blue-100 text-blue-800';
-      case 'archived': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
+  if (error || !data) {
+    return (
+      <div className="bg-rose-50 rounded-2xl ring-1 ring-rose-200 p-6">
+        <p className="text-sm text-rose-800 font-semibold">Failed to load compliance data</p>
+        <p className="text-xs text-rose-700 mt-1">{error}</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
+    <motion.div className="space-y-6" variants={containerVariants} initial="hidden" animate="visible">
       {/* Hero */}
-      <div
+      <motion.div
+        variants={cardVariants}
         className="relative overflow-hidden rounded-2xl p-8 md:p-10 text-white"
         style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #4c1d95 45%, #7c3aed 100%)' }}
       >
         <div className="absolute -top-20 -right-20 w-72 h-72 rounded-full bg-fuchsia-500/20 blur-3xl" />
         <div className="absolute -bottom-10 -left-10 w-60 h-60 rounded-full bg-violet-400/10 blur-3xl" />
-        <div className="relative flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+        <div className="relative flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 ring-1 ring-white/20 text-xs font-semibold tracking-wider backdrop-blur-sm mb-4">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
-              NIS2 DIRECTIVE
+              EU 2022/2555 · NIS2 DIRECTIVE
             </div>
             <h1 className="text-3xl md:text-4xl font-bold leading-tight">
-              NIS2 Compliance Dashboard
+              NIS2 Compliance Posture
               <span className="block text-violet-100/90 font-medium text-lg md:text-xl mt-2">
-                Network and Information Security Directive 2 posture, evidence and remediation.
+                {data.organization.name} · {data.organization.sector} · {data.organization.country}
+              </span>
+              <span className="block mt-3 text-sm text-violet-100/70">
+                Live posture computed from honeypot telemetry, alerts, and incident timelines.
+                NIS2 deadline: <strong>October 17, 2024</strong> (in force).
               </span>
             </h1>
           </div>
-          <div className="text-right">
-            <div className="text-5xl font-extrabold text-white drop-shadow-sm">
-              {complianceScore()}%
-            </div>
-            <div className="text-sm font-semibold text-violet-100/80 uppercase tracking-wider">
-              Overall Compliance
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Compliance Overview Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="relative overflow-hidden bg-white rounded-2xl p-5 ring-1 ring-slate-200/70 shadow-sm">
-          <div className="absolute top-0 right-0 w-20 h-20 rounded-full bg-emerald-500/10 blur-2xl" />
-          <div className="relative">
-            <div className="text-3xl font-bold text-emerald-600">
-              {requirements.filter(r => r.status === 'compliant').length}
-            </div>
-            <div className="text-xs font-semibold text-emerald-700 uppercase tracking-wider mt-1">Compliant</div>
-          </div>
-        </div>
-        <div className="relative overflow-hidden bg-white rounded-2xl p-5 ring-1 ring-slate-200/70 shadow-sm">
-          <div className="absolute top-0 right-0 w-20 h-20 rounded-full bg-amber-500/10 blur-2xl" />
-          <div className="relative">
-            <div className="text-3xl font-bold text-amber-600">
-              {requirements.filter(r => r.status === 'partially-compliant').length}
-            </div>
-            <div className="text-xs font-semibold text-amber-700 uppercase tracking-wider mt-1">Partial</div>
-          </div>
-        </div>
-        <div className="relative overflow-hidden bg-white rounded-2xl p-5 ring-1 ring-slate-200/70 shadow-sm">
-          <div className="absolute top-0 right-0 w-20 h-20 rounded-full bg-rose-500/10 blur-2xl" />
-          <div className="relative">
-            <div className="text-3xl font-bold text-rose-600">
-              {requirements.filter(r => r.status === 'non-compliant').length}
-            </div>
-            <div className="text-xs font-semibold text-rose-700 uppercase tracking-wider mt-1">Non-Compliant</div>
-          </div>
-        </div>
-        <div className="relative overflow-hidden bg-white rounded-2xl p-5 ring-1 ring-slate-200/70 shadow-sm">
-          <div className="absolute top-0 right-0 w-20 h-20 rounded-full bg-slate-500/10 blur-2xl" />
-          <div className="relative">
-            <div className="text-3xl font-bold text-slate-600">
-              {requirements.filter(r => r.status === 'not-assessed').length}
-            </div>
-            <div className="text-xs font-semibold text-slate-700 uppercase tracking-wider mt-1">Not Assessed</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Navigation Tabs */}
-      <div className="bg-white shadow-sm rounded-2xl ring-1 ring-slate-200/70">
-        <div className="border-b border-slate-200/60">
-          <nav className="-mb-px flex flex-wrap gap-2 px-6 py-2">
-            {[
-              { id: 'overview', label: 'Overview' },
-              { id: 'requirements', label: 'Requirements' },
-              { id: 'assets', label: 'Asset Compliance' },
-              { id: 'reports', label: 'Reports' },
-              { id: 'remediation', label: 'Remediation' },
-              { id: 'analytics', label: 'Analytics' },
-              { id: 'notifications', label: 'Notifications' },
-              { id: 'language', label: 'Language' }
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`px-4 py-2 rounded-xl font-semibold text-sm transition ${
-                  activeTab === tab.id
-                    ? 'bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow'
-                    : 'text-slate-600 hover:text-violet-700 hover:bg-violet-50'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
-        </div>
-      </div>
-
-      <div>
-        {/* Legacy inner content remains below */}
-
-        {/* Tab Content */}
-        {activeTab === 'overview' && (
-          <div className="space-y-6">
-            {/* Risk Heat Map */}
-            <div className="bg-white shadow-lg rounded-lg p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Risk Heat Map</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-red-50 p-4 rounded-lg border-l-4 border-red-400">
-                  <h3 className="font-semibold text-red-800">High Risk Areas</h3>
-                  <div className="text-2xl font-bold text-red-600 mt-2">3</div>
-                  <p className="text-sm text-red-700 mt-1">Critical vulnerabilities requiring immediate attention</p>
-                </div>
-                <div className="bg-yellow-50 p-4 rounded-lg border-l-4 border-yellow-400">
-                  <h3 className="font-semibold text-yellow-800">Medium Risk Areas</h3>
-                  <div className="text-2xl font-bold text-yellow-600 mt-2">7</div>
-                  <p className="text-sm text-yellow-700 mt-1">Issues that need attention within 30 days</p>
-                </div>
-                <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-400">
-                  <h3 className="font-semibold text-green-800">Low Risk Areas</h3>
-                  <div className="text-2xl font-bold text-green-600 mt-2">15</div>
-                  <p className="text-sm text-green-700 mt-1">Well-controlled areas with minor improvements needed</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Compliance Timeline */}
-            <div className="bg-white shadow-lg rounded-lg p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Compliance Timeline</h2>
-              <div className="space-y-4">
-                <div className="flex items-center space-x-4">
-                  <div className="w-4 h-4 bg-green-500 rounded-full"></div>
-                  <div className="flex-1">
-                    <p className="font-medium">Q3 2024 Assessment Completed</p>
-                    <p className="text-sm text-gray-600">65% compliance score achieved</p>
-                  </div>
-                  <span className="text-sm text-gray-500">Sep 30, 2024</span>
-                </div>
-                <div className="flex items-center space-x-4">
-                  <div className="w-4 h-4 bg-blue-500 rounded-full"></div>
-                  <div className="flex-1">
-                    <p className="font-medium">Q4 2024 Assessment In Progress</p>
-                    <p className="text-sm text-gray-600">Current score: {complianceScore()}%</p>
-                  </div>
-                  <span className="text-sm text-gray-500">Dec 15, 2024</span>
-                </div>
-                <div className="flex items-center space-x-4">
-                  <div className="w-4 h-4 bg-gray-300 rounded-full"></div>
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-500">Q1 2025 Target</p>
-                    <p className="text-sm text-gray-500">Target: 85% compliance score</p>
-                  </div>
-                  <span className="text-sm text-gray-500">Mar 31, 2025</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Actions */}
-            <div className="bg-white shadow-lg rounded-lg p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <button className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors">
-                  <div className="text-center">
-                    <div className="text-2xl mb-2">📋</div>
-                    <div className="font-medium">New Assessment</div>
-                  </div>
-                </button>
-                <button className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors">
-                  <div className="text-center">
-                    <div className="text-2xl mb-2">📊</div>
-                    <div className="font-medium">Generate Report</div>
-                  </div>
-                </button>
-                <button className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors">
-                  <div className="text-center">
-                    <div className="text-2xl mb-2">🔧</div>
-                    <div className="font-medium">Remediation Plan</div>
-                  </div>
-                </button>
-                <button className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors">
-                  <div className="text-center">
-                    <div className="text-2xl mb-2">📧</div>
-                    <div className="font-medium">Export Data</div>
-                  </div>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'requirements' && (
-          <div className="space-y-6">
-            {/* Filters */}
-            <div className="bg-white shadow-lg rounded-lg p-6">
-              <div className="flex flex-wrap gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
-                  <select
-                    value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    {categories.map(category => (
-                      <option key={category} value={category}>
-                        {category === 'all' ? 'All Categories' : category}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                  <select
-                    value={selectedStatus}
-                    onChange={(e) => setSelectedStatus(e.target.value)}
-                    className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    {statuses.map(status => (
-                      <option key={status} value={status}>
-                        {status === 'all' ? 'All Statuses' : status.replace('-', ' ')}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Requirements List */}
-            <div className="bg-white shadow-lg rounded-lg overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-xl font-semibold text-gray-900">Requirements Assessment</h2>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Requirement
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Category
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Priority
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredRequirements.map((requirement) => (
-                      <tr key={requirement.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4">
-                          <div>
-                            <div className="text-sm font-medium text-gray-900">{requirement.requirement}</div>
-                            <div className="text-sm text-gray-500">{requirement.description}</div>
-                            {requirement.evidence && (
-                              <div className="text-xs text-blue-600 mt-1">
-                                Evidence: {requirement.evidence}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="text-sm text-gray-900">{requirement.category}</span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPriorityColor(requirement.priority)}`}>
-                            {requirement.priority}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <select
-                            value={requirement.status}
-                            onChange={(e) => updateRequirement(requirement.id, { 
-                              status: e.target.value as any,
-                              lastAssessed: new Date().toISOString().split('T')[0]
-                            })}
-                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor(requirement.status)}`}
-                          >
-                            <option value="not-assessed">Not Assessed</option>
-                            <option value="compliant">Compliant</option>
-                            <option value="partially-compliant">Partially Compliant</option>
-                            <option value="non-compliant">Non-Compliant</option>
-                          </select>
-                        </td>
-                        <td className="px-6 py-4">
-                          <button
-                            onClick={() => {
-                              const evidence = prompt('Enter evidence for compliance:');
-                              if (evidence) {
-                                updateRequirement(requirement.id, { evidence });
-                              }
-                            }}
-                            className="text-blue-600 hover:text-blue-900 text-sm font-medium"
-                          >
-                            Add Evidence
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Recommendations */}
-            <div className="bg-white shadow-lg rounded-lg p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Recommendations</h2>
-              <div className="space-y-4">
-                {requirements.filter(r => r.status === 'non-compliant' || r.status === 'partially-compliant').map(req => (
-                  <div key={req.id} className="border-l-4 border-red-400 pl-4">
-                    <h3 className="font-medium text-gray-900">{req.requirement}</h3>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Priority: <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPriorityColor(req.priority)}`}>
-                        {req.priority}
-                      </span>
-                    </p>
-                    <p className="text-sm text-gray-600 mt-1">
-                      {req.status === 'non-compliant' 
-                        ? 'This requirement needs immediate attention to achieve compliance.'
-                        : 'This requirement needs improvement to achieve full compliance.'
-                      }
-                    </p>
-                  </div>
-                ))}
-                {requirements.filter(r => r.status === 'non-compliant' || r.status === 'partially-compliant').length === 0 && (
-                  <p className="text-green-600">All requirements are compliant! Great job!</p>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className="text-xs uppercase tracking-wider text-violet-100/70 font-semibold">Posture</p>
+              <p className="text-5xl font-bold tabular-nums">
+                <AnimatedNumber value={data.postureScore.score} suffix="%" />
+              </p>
+              <p className="text-xs text-violet-100/80 mt-0.5">
+                {data.postureScore.classification}
+                {data.postureScore.trendDelta !== 0 && (
+                  <span className={`ml-2 ${data.postureScore.trendDelta < 0 ? 'text-rose-300' : 'text-emerald-300'}`}>
+                    {data.postureScore.trendDelta > 0 ? '▲' : '▼'} {Math.abs(data.postureScore.trendDelta)}%
+                  </span>
                 )}
-              </div>
+              </p>
             </div>
           </div>
-        )}
+        </div>
+      </motion.div>
 
-        {activeTab === 'assets' && (
-          <div className="space-y-6">
-            {/* Asset Compliance Overview */}
-            <div className="bg-white shadow-lg rounded-lg p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold text-gray-900">Asset Compliance Overview</h2>
-                <button className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">
-                  Add Asset
-                </button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <div className="text-2xl font-bold text-blue-600">{assetCompliance.length}</div>
-                  <div className="text-sm text-blue-700">Total Assets</div>
-                </div>
-                <div className="bg-green-50 p-4 rounded-lg">
-                  <div className="text-2xl font-bold text-green-600">
-                    {assetCompliance.filter(a => a.complianceScore >= 80).length}
-                  </div>
-                  <div className="text-sm text-green-700">Compliant Assets</div>
-                </div>
-                <div className="bg-red-50 p-4 rounded-lg">
-                  <div className="text-2xl font-bold text-red-600">
-                    {assetCompliance.filter(a => a.criticality === 'critical').length}
-                  </div>
-                  <div className="text-sm text-red-700">Critical Assets</div>
-                </div>
-                <div className="bg-yellow-50 p-4 rounded-lg">
-                  <div className="text-2xl font-bold text-yellow-600">
-                    {assetCompliance.reduce((sum, a) => sum + a.vulnerabilities, 0)}
-                  </div>
-                  <div className="text-sm text-yellow-700">Total Vulnerabilities</div>
-                </div>
-              </div>
-            </div>
+      {/* KPI strip */}
+      <motion.div variants={cardVariants} className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {[
+          { label: 'Open findings', value: data.kpis.openFindings, sub: `${data.kpis.criticalFindings} critical`, color: 'from-violet-500 to-fuchsia-500' },
+          { label: 'Reportable incidents', value: data.kpis.reportableIncidents, sub: data.kpis.reportableOverdue > 0 ? `${data.kpis.reportableOverdue} overdue!` : 'on schedule', color: data.kpis.reportableOverdue > 0 ? 'from-rose-500 to-fuchsia-600' : 'from-emerald-500 to-teal-500' },
+          { label: 'Evidence artifacts', value: data.kpis.evidenceArtifacts, sub: `${data.evidenceLibrary.retentionMonths}-month retention`, color: 'from-amber-500 to-orange-500' },
+          { label: 'Days to next audit', value: data.kpis.daysToNextSelfAudit, sub: 'on schedule', color: 'from-emerald-500 to-teal-500' },
+          { label: 'Article 21 measures', value: 10, sub: `${data.article21Measures.filter((m) => m.status === 'COMPLIANT').length} compliant`, color: 'from-violet-500 to-fuchsia-500' },
+          { label: 'Self-assessment', value: assessmentScore.answered, sub: `${assessmentScore.total} total`, color: 'from-fuchsia-500 to-pink-500' },
+        ].map((k, i) => (
+          <motion.div
+            key={i}
+            variants={cardVariants}
+            whileHover={{ y: -2, scale: 1.02 }}
+            className="relative bg-white rounded-xl ring-1 ring-slate-200/70 shadow-sm p-3 overflow-hidden"
+          >
+            <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${k.color}`} />
+            <p className="text-[10px] uppercase tracking-wider font-semibold text-slate-500">{k.label}</p>
+            <p className="mt-0.5 text-2xl font-bold text-slate-900 tabular-nums"><AnimatedNumber value={k.value} /></p>
+            <p className="text-[10px] text-slate-400 mt-0.5">{k.sub}</p>
+          </motion.div>
+        ))}
+      </motion.div>
 
-            {/* Asset List */}
-            <div className="bg-white shadow-lg rounded-lg overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">Asset Compliance Details</h3>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Asset Name
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Type
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Criticality
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Compliance Score
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Vulnerabilities
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {assetCompliance.map((asset) => (
-                      <tr key={asset.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4">
-                          <div>
-                            <div className="text-sm font-medium text-gray-900">{asset.name}</div>
-                            <div className="text-sm text-gray-500">Last assessed: {asset.lastAssessment}</div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="text-sm text-gray-900">{asset.type}</span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getCriticalityColor(asset.criticality)}`}>
-                            {asset.criticality}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center">
-                            <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
-                              <div 
-                                className={`h-2 rounded-full ${
-                                  asset.complianceScore >= 80 ? 'bg-green-500' :
-                                  asset.complianceScore >= 60 ? 'bg-yellow-500' : 'bg-red-500'
-                                }`}
-                                style={{ width: `${asset.complianceScore}%` }}
-                              ></div>
-                            </div>
-                            <span className="text-sm text-gray-900">{asset.complianceScore}%</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            asset.vulnerabilities === 0 ? 'bg-green-100 text-green-800' :
-                            asset.vulnerabilities <= 2 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
-                          }`}>
-                            {asset.vulnerabilities}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <button className="text-blue-600 hover:text-blue-900 text-sm font-medium">
-                            View Details
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
+      {/* Tabs */}
+      <motion.div variants={cardVariants} className="bg-white rounded-2xl ring-1 ring-slate-200/70 shadow-sm overflow-hidden">
+        <div className="flex border-b border-slate-200/70 overflow-x-auto">
+          {([
+            { id: 'measures', label: 'Article 21 Measures', count: data.article21Measures.length },
+            { id: 'incidents', label: 'Incident Reporting', count: data.reportableIncidents.length },
+            { id: 'evidence', label: 'Evidence Library', count: data.evidenceLibrary.totalArtifacts },
+            { id: 'assessment', label: 'Self-Assessment', count: assessmentScore.total },
+          ] as const).map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id as any)}
+              className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold transition whitespace-nowrap border-b-2 ${
+                tab === t.id ? 'border-violet-500 text-violet-700 bg-violet-50/40' : 'border-transparent text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              {t.label}
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${tab === t.id ? 'bg-violet-100 text-violet-700' : 'bg-slate-100 text-slate-600'}`}>
+                {t.count}
+              </span>
+            </button>
+          ))}
+        </div>
 
-        {activeTab === 'reports' && (
-          <div className="space-y-6">
-            {/* Reports Overview */}
-            <div className="bg-white shadow-lg rounded-lg p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold text-gray-900">Compliance Reports</h2>
-                <button className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">
-                  Generate New Report
-                </button>
-              </div>
-            </div>
-
-            {/* Reports List */}
-            <div className="bg-white shadow-lg rounded-lg overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">Available Reports</h3>
-              </div>
-              <div className="divide-y divide-gray-200">
-                {complianceReports.map((report) => (
-                  <div key={report.id} className="p-6 hover:bg-gray-50">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <h4 className="text-lg font-medium text-gray-900">{report.title}</h4>
-                        <p className="text-sm text-gray-600 mt-1">Generated on {report.date}</p>
-                        <div className="flex items-center space-x-4 mt-2">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadgeColor(report.status)}`}>
-                            {report.status}
-                          </span>
-                          <span className="text-sm text-gray-600">{report.findings} findings</span>
-                          <span className="text-sm text-gray-600">{report.recommendations} recommendations</span>
-                        </div>
+        <div className="p-6">
+          {/* TAB 1: Article 21 Measures */}
+          {tab === 'measures' && (
+            <div className="space-y-3">
+              {data.article21Measures.map((m, i) => {
+                const isExpanded = expandedMeasure === m.id;
+                return (
+                  <motion.div
+                    key={m.id}
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.04 }}
+                    layout
+                    className="border border-slate-200 rounded-xl overflow-hidden bg-white"
+                  >
+                    <div
+                      className="flex items-center gap-4 p-4 cursor-pointer hover:bg-slate-50/60"
+                      onClick={() => setExpandedMeasure(isExpanded ? null : m.id)}
+                    >
+                      <div className="flex-shrink-0 w-16 text-center">
+                        <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">{m.id}</p>
                       </div>
-                      <div className="text-right">
-                        <div className="text-2xl font-bold text-blue-600">{report.score}%</div>
-                        <div className="text-sm text-gray-500">Compliance Score</div>
-                        <div className="flex space-x-2 mt-2">
-                          <button className="text-blue-600 hover:text-blue-900 text-sm font-medium">
-                            View
-                          </button>
-                          <button className="text-green-600 hover:text-green-900 text-sm font-medium">
-                            Export
-                          </button>
-                        </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-slate-900">{m.title}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">{m.description}</p>
                       </div>
+                      <div className="flex-shrink-0 w-32">
+                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${m.score}%` }}
+                            transition={{ duration: 0.8, delay: 0.2 + i * 0.04 }}
+                            className={`h-full bg-gradient-to-r ${scoreColor(m.score)} rounded-full`}
+                          />
+                        </div>
+                        <p className="text-xs text-slate-600 mt-1 text-right tabular-nums">{m.score}%</p>
+                      </div>
+                      <div className="flex-shrink-0">
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full ring-1 ${statusBadge(m.status)}`}>
+                          {m.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                      <div className="flex-shrink-0 text-violet-600 text-xs font-semibold">{isExpanded ? '▲' : '▼'}</div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                    <AnimatePresence>
+                      {isExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.25 }}
+                          className="border-t border-slate-200 bg-slate-50/40 overflow-hidden"
+                        >
+                          <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <p className="text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-1">Current state</p>
+                              <p className="text-xs text-slate-700">{m.currentState}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-1">Next action</p>
+                              <p className="text-xs text-slate-700">{m.nextAction}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-1">Linked evidence</p>
+                              <p className="text-xs text-slate-700">{m.evidenceIds.length} artifact{m.evidenceIds.length === 1 ? '' : 's'} attached</p>
+                              <div className="mt-1 space-y-0.5">
+                                {m.evidenceIds.slice(0, 3).map((id) => (
+                                  <code key={id} className="block text-[10px] text-violet-700 bg-violet-50 px-1.5 py-0.5 rounded">{id}</code>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                );
+              })}
             </div>
-          </div>
-        )}
+          )}
 
-        {activeTab === 'remediation' && (
-          <div className="space-y-6">
-            {/* Remediation Overview */}
-            <div className="bg-white shadow-lg rounded-lg p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Remediation Planning</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-red-50 p-4 rounded-lg border-l-4 border-red-400">
-                  <h3 className="font-semibold text-red-800">Immediate Actions (0-7 days)</h3>
-                  <div className="text-2xl font-bold text-red-600 mt-2">5</div>
-                  <p className="text-sm text-red-700 mt-1">Critical issues requiring immediate attention</p>
-                </div>
-                <div className="bg-yellow-50 p-4 rounded-lg border-l-4 border-yellow-400">
-                  <h3 className="font-semibold text-yellow-800">Short Term (8-30 days)</h3>
-                  <div className="text-2xl font-bold text-yellow-600 mt-2">12</div>
-                  <p className="text-sm text-yellow-700 mt-1">Issues to be addressed within 30 days</p>
-                </div>
-                <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-400">
-                  <h3 className="font-semibold text-blue-800">Long Term (31-90 days)</h3>
-                  <div className="text-2xl font-bold text-blue-600 mt-2">8</div>
-                  <p className="text-sm text-blue-700 mt-1">Strategic improvements and enhancements</p>
-                </div>
+          {/* TAB 2: Incident Reporting */}
+          {tab === 'incidents' && (
+            <div className="space-y-4">
+              <div className="bg-violet-50/60 border border-violet-200 rounded-xl p-4">
+                <p className="text-xs text-violet-900 leading-relaxed">
+                  <strong>NIS2 Article 23</strong> requires reportable incidents to be sent to the CSIRT (USOM in Türkiye) within{' '}
+                  <strong>24h (early warning)</strong>, <strong>72h (incident report)</strong>, and <strong>1 month (final report)</strong>.
+                  An incident is reportable when it has substantial operational impact.
+                </p>
               </div>
-            </div>
-
-            {/* Remediation Tasks */}
-            <div className="bg-white shadow-lg rounded-lg overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">Remediation Tasks</h3>
-              </div>
-              <div className="divide-y divide-gray-200">
-                {requirements.filter(r => r.status === 'non-compliant' || r.status === 'partially-compliant').map((req, index) => (
-                  <div key={req.id} className="p-6">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <h4 className="text-lg font-medium text-gray-900">{req.requirement}</h4>
-                        <p className="text-sm text-gray-600 mt-1">{req.description}</p>
-                        <div className="flex items-center space-x-4 mt-2">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPriorityColor(req.priority)}`}>
-                            {req.priority} priority
-                          </span>
-                          <span className="text-sm text-gray-600">Estimated cost: $5,000 - $15,000</span>
-                          <span className="text-sm text-gray-600">Timeline: 2-4 weeks</span>
+              {data.reportableIncidents.length === 0 ? (
+                <p className="text-xs text-slate-500 text-center py-8">No reportable incidents at the moment. ✓</p>
+              ) : (
+                <div className="space-y-2">
+                  {data.reportableIncidents.map((inc, i) => (
+                    <motion.div
+                      key={inc.alertId}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.04 }}
+                      className={`border rounded-xl p-4 transition ${
+                        inc.earlyWarningStatus === 'OVERDUE' ? 'border-rose-300 bg-rose-50/40' : 'border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ring-1 ${
+                              inc.severity === 'CRITICAL' ? 'bg-rose-50 text-rose-700 ring-rose-200' : 'bg-amber-50 text-amber-700 ring-amber-200'
+                            }`}>{inc.severity}</span>
+                            {inc.protocol && (
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">{inc.protocol}</span>
+                            )}
+                            <span className="text-[10px] text-slate-500">detected {formatDateShort(inc.detectedAt)}</span>
+                          </div>
+                          <p className="text-sm font-semibold text-slate-900 mt-1 truncate">{inc.title}</p>
                         </div>
-                      </div>
-                      <div className="text-right">
-                        <button className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 text-sm">
-                          Create Task
+                        <div className="flex-shrink-0 text-right">
+                          <p className="text-[10px] uppercase font-bold tracking-wider text-slate-500">24h Early warning</p>
+                          <p className={`text-sm font-bold ${inc.earlyWarningStatus === 'OVERDUE' ? 'text-rose-600' : 'text-slate-900'}`}>
+                            {formatTimeRemaining(inc.earlyWarningDeadline)}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => generateEarlyWarning(inc.alertId)}
+                          className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white text-xs font-semibold hover:shadow-lg hover:shadow-violet-500/30 transition"
+                        >
+                          Generate report
                         </button>
                       </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+
+              <AnimatePresence>
+                {earlyWarning && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 12 }}
+                    className="border border-violet-200 bg-violet-50/40 rounded-xl p-5"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-sm font-bold text-slate-900">ENISA Article 23.4(a) Early Warning Report</h4>
+                      <button onClick={() => setEarlyWarning(null)} className="text-xs text-slate-500 hover:text-slate-900">Close</button>
                     </div>
-                  </div>
-                ))}
-              </div>
+                    <pre className="text-[11px] font-mono bg-white p-3 rounded-lg max-h-[400px] overflow-auto whitespace-pre-wrap">
+                      {JSON.stringify(earlyWarning, null, 2)}
+                    </pre>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        onClick={() => {
+                          const blob = new Blob([JSON.stringify(earlyWarning, null, 2)], { type: 'application/json' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `nis2-early-warning-${earlyWarning?.incident?.alertId ?? 'report'}.json`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-semibold hover:bg-violet-700 transition"
+                      >
+                        Download JSON
+                      </button>
+                      <button
+                        className="px-3 py-1.5 rounded-lg bg-white text-slate-700 text-xs font-semibold ring-1 ring-slate-300 hover:bg-slate-50 transition"
+                        onClick={() => alert('Submission to USOM CSIRT is mocked in this demo.')}
+                      >
+                        Submit to USOM
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-          </div>
-        )}
+          )}
 
-        {activeTab === 'analytics' && (
-          <AdvancedAnalytics 
-            complianceScore={complianceScore()}
-            requirements={requirements}
-            assetCompliance={assetCompliance}
-          />
-        )}
+          {/* TAB 3: Evidence Library */}
+          {tab === 'evidence' && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="bg-violet-50 border border-violet-200 rounded-xl p-4">
+                  <p className="text-[10px] uppercase font-bold tracking-wider text-violet-700">Total artifacts</p>
+                  <p className="text-3xl font-bold text-violet-900 tabular-nums mt-1">
+                    <AnimatedNumber value={data.evidenceLibrary.totalArtifacts} />
+                  </p>
+                  <p className="text-xs text-violet-700/80">Logs · Alerts · Policies · Reviews</p>
+                </div>
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                  <p className="text-[10px] uppercase font-bold tracking-wider text-emerald-700">Retention compliance</p>
+                  <p className="text-3xl font-bold text-emerald-900 tabular-nums mt-1">
+                    <AnimatedNumber value={data.retentionPolicy.currentRetention} suffix="mo" />
+                  </p>
+                  <p className="text-xs text-emerald-700/80">NIS2 minimum: {data.retentionPolicy.requiredMonths} months</p>
+                </div>
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                  <p className="text-[10px] uppercase font-bold tracking-wider text-amber-700">Oldest evidence</p>
+                  <p className="text-base font-bold text-amber-900 mt-1">{formatDateShort(data.evidenceLibrary.oldestArtifact)}</p>
+                  <p className="text-xs text-amber-700/80">First captured artifact</p>
+                </div>
+              </div>
 
-        {activeTab === 'reports' && (
-          <div className="space-y-6">
-            <PDFReportGenerator
-              complianceScore={complianceScore()}
-              requirements={requirements}
-              assetCompliance={assetCompliance}
-              onGenerate={(reportData) => {
-                console.log('Generated report:', reportData);
-                alert('Report generated successfully! Check console for details.');
-              }}
-            />
-          </div>
-        )}
+              <div className="bg-white rounded-xl border border-slate-200">
+                <div className="px-4 py-3 border-b border-slate-200">
+                  <p className="text-sm font-semibold text-slate-900">Artifacts by Article</p>
+                  <p className="text-xs text-slate-500">Telemetry cross-referenced to NIS2 Article 21 measures</p>
+                </div>
+                <div className="p-4 space-y-2">
+                  {Object.entries(data.evidenceLibrary.byArticle).map(([article, count], i) => {
+                    const max = Math.max(...Object.values(data.evidenceLibrary.byArticle));
+                    const pct = Math.round((count / max) * 100);
+                    return (
+                      <motion.div
+                        key={article}
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.03 }}
+                        className="grid grid-cols-12 items-center gap-3 py-1.5"
+                      >
+                        <div className="col-span-2 text-xs font-semibold text-slate-700">{article}</div>
+                        <div className="col-span-8">
+                          <div className="h-5 bg-slate-100 rounded-md overflow-hidden">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${pct}%` }}
+                              transition={{ duration: 0.8, delay: 0.2 + i * 0.03 }}
+                              className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 rounded-md"
+                            />
+                          </div>
+                        </div>
+                        <div className="col-span-2 text-right text-sm tabular-nums font-bold text-slate-900">
+                          {count.toLocaleString()}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              </div>
 
-        {activeTab === 'notifications' && (
-          <EmailNotifications />
-        )}
+              {data.evidenceLibrary.recentArtifacts.length > 0 && (
+                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+                    <p className="text-sm font-semibold text-slate-900">Recent artifacts</p>
+                    <button
+                      className="text-xs font-semibold text-violet-700 hover:text-violet-900"
+                      onClick={() => {
+                        const csv = [
+                          'id,type,article,description,timestamp',
+                          ...data.evidenceLibrary.recentArtifacts.map(
+                            (a) => `"${a.id}","${a.type}","${a.article}","${a.description.replace(/"/g, '""')}","${a.timestamp ?? ''}"`,
+                          ),
+                        ].join('\n');
+                        const blob = new Blob([csv], { type: 'text/csv' });
+                        const url = URL.createObjectURL(blob);
+                        const aEl = document.createElement('a');
+                        aEl.href = url;
+                        aEl.download = 'nis2-evidence-export.csv';
+                        aEl.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                    >
+                      Export CSV ↓
+                    </button>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
+                        <tr>
+                          <th className="text-left px-4 py-2 font-semibold">Artifact ID</th>
+                          <th className="text-left px-4 py-2 font-semibold">Type</th>
+                          <th className="text-left px-4 py-2 font-semibold">Article</th>
+                          <th className="text-left px-4 py-2 font-semibold">Description</th>
+                          <th className="text-left px-4 py-2 font-semibold">Timestamp</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.evidenceLibrary.recentArtifacts.map((a, i) => (
+                          <motion.tr
+                            key={a.id}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ delay: i * 0.03 }}
+                            className="border-t border-slate-100 hover:bg-slate-50"
+                          >
+                            <td className="px-4 py-2 font-mono text-xs text-slate-700">{a.id}</td>
+                            <td className="px-4 py-2 text-xs">{a.type}</td>
+                            <td className="px-4 py-2">
+                              <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 ring-1 ring-violet-200">
+                                {a.article}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2 text-xs text-slate-700">{a.description}</td>
+                            <td className="px-4 py-2 text-xs text-slate-500 tabular-nums">{formatDateShort(a.timestamp)}</td>
+                          </motion.tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
-        {activeTab === 'language' && (
-          <MultiLanguageSupport />
-        )}
-      </div>
-    </div>
+          {/* TAB 4: Self-Assessment */}
+          {tab === 'assessment' && (
+            <div className="space-y-5">
+              <div className="bg-gradient-to-br from-violet-50 to-fuchsia-50 border border-violet-200 rounded-xl p-5 flex items-center gap-6">
+                <div className="flex-1">
+                  <p className="text-xs uppercase font-bold tracking-wider text-violet-700">Self-Assessment Score</p>
+                  <p className="text-4xl font-bold text-slate-900 tabular-nums mt-1">
+                    <AnimatedNumber value={assessmentScore.score} suffix="%" />
+                  </p>
+                  <p className="text-xs text-slate-600 mt-1">
+                    {assessmentScore.answered}/{assessmentScore.total} questions answered
+                  </p>
+                </div>
+                <div className="flex-1">
+                  <div className="h-3 bg-white rounded-full overflow-hidden ring-1 ring-violet-200">
+                    <motion.div
+                      animate={{ width: `${assessmentScore.score}%` }}
+                      transition={{ duration: 0.6 }}
+                      className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 rounded-full"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-2">YES = full credit · PARTIAL = half credit · NO = no credit</p>
+                </div>
+              </div>
+
+              {data.selfAssessment.map((section, idx) => (
+                <motion.div
+                  key={section.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.04 }}
+                  className="bg-white border border-slate-200 rounded-xl overflow-hidden"
+                >
+                  <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
+                    <p className="text-sm font-semibold text-slate-900">{section.id} · {section.title}</p>
+                  </div>
+                  <div className="p-4 space-y-3">
+                    {section.questions.map((q) => {
+                      const ans = answers[q.id];
+                      return (
+                        <div key={q.id} className="flex items-start gap-3 py-2 border-b border-slate-100 last:border-0">
+                          <p className="flex-1 text-xs text-slate-700">{q.question}</p>
+                          <div className="flex gap-1">
+                            {(['YES', 'PARTIAL', 'NO'] as const).map((opt) => (
+                              <button
+                                key={opt}
+                                onClick={() => setAnswers((s) => ({ ...s, [q.id]: ans === opt ? null : opt }))}
+                                className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ring-1 transition ${
+                                  ans === opt
+                                    ? opt === 'YES'
+                                      ? 'bg-emerald-500 text-white ring-emerald-500'
+                                      : opt === 'PARTIAL'
+                                      ? 'bg-amber-500 text-white ring-amber-500'
+                                      : 'bg-rose-500 text-white ring-rose-500'
+                                    : 'bg-white text-slate-600 ring-slate-300 hover:bg-slate-50'
+                                }`}
+                              >
+                                {opt}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              ))}
+
+              {assessmentScore.answered > 0 && (
+                <div className="bg-white border border-slate-200 rounded-xl p-5">
+                  <h4 className="text-sm font-bold text-slate-900 mb-3">Gap Analysis</h4>
+                  <div className="space-y-2">
+                    {data.selfAssessment.map((section) => {
+                      const gaps = section.questions.filter((q) => answers[q.id] === 'NO');
+                      const partial = section.questions.filter((q) => answers[q.id] === 'PARTIAL');
+                      if (gaps.length === 0 && partial.length === 0) return null;
+                      return (
+                        <div key={section.id} className="border-l-4 border-rose-400 pl-3 py-1">
+                          <p className="text-xs font-semibold text-slate-900">{section.id} · {section.title}</p>
+                          <p className="text-[11px] text-slate-600">
+                            {gaps.length} gap{gaps.length === 1 ? '' : 's'}, {partial.length} partial coverage
+                          </p>
+                        </div>
+                      );
+                    })}
+                    {data.selfAssessment.every((s) =>
+                      s.questions.every((q) => answers[q.id] !== 'NO' && answers[q.id] !== 'PARTIAL'),
+                    ) && (
+                      <p className="text-xs text-emerald-700">✓ No gaps identified in answered questions</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
   );
 };
 
-export default NIS2Compliance; 
+export default NIS2Compliance;

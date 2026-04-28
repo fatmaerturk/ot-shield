@@ -94,7 +94,7 @@ public class Alert {
     @Column(name = "escalated_to")
     private String escalatedTo;
 
-    @ElementCollection
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "alert_tags", joinColumns = @JoinColumn(name = "alert_id"))
     @Column(name = "tag")
     private List<String> tags;

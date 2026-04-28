@@ -23,6 +23,11 @@ public class AlertDTO {
     private String protocol;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    /** Alias of {@link #createdAt} for legacy frontend code that reads
+     *  `alert.timestamp` to render the detection time. Populated by the
+     *  AlertMapper from createdAt so callers don't need to know which name
+     *  to use. */
+    private LocalDateTime timestamp;
     private LocalDateTime resolvedAt;
     private String assignedTo;
     private Boolean falsePositive;

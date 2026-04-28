@@ -220,19 +220,13 @@ const NAV: NavItem[] = [
     label: 'Govern',
     modes: 'soc',
     icon: <Icon.CheckCircle className="w-4 h-4" />,
-    match: (p) => p.startsWith('/compliance') || p === '/hazop',
+    match: (p) => p.startsWith('/compliance'),
     children: [
       {
         label: 'NIS2 Compliance',
         path: '/compliance/nis2',
         description: 'Network and Information Security Directive 2',
         icon: <Icon.CheckCircle className="w-4 h-4" />,
-      },
-      {
-        label: 'HAZOP Analysis',
-        path: '/hazop',
-        description: 'Hazard & operability safety review',
-        icon: <Icon.Lock className="w-4 h-4" />,
       },
     ],
   },
