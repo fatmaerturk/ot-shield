@@ -257,12 +257,16 @@ const decoyIcon = L.divIcon({
   iconAnchor: [30, 30],
 });
 
-// Severity → stroke color for the attack arc + projectile
+// Severity → stroke color for the attack arc + projectile.
+// MUST stay in sync with the on-map legend below and the .attacker-pulse
+// CSS rules in App.css — otherwise the dot, the arc, and the legend swatch
+// disagree for the same severity. The "unknown" default is a neutral slate
+// so it visually reads as "uncategorised" rather than reusing the LOW colour.
 const sevColor = (sev: string | null): string => {
-  if (sev === 'HIGH' || sev === 'CRITICAL') return '#e11d48';
-  if (sev === 'MEDIUM') return '#fb923c';
-  if (sev === 'LOW') return '#10b981';
-  return '#a855f7';
+  if (sev === 'HIGH' || sev === 'CRITICAL') return '#f43f5e';
+  if (sev === 'MEDIUM') return '#f97316';
+  if (sev === 'LOW') return '#a855f7';
+  return '#64748b';
 };
 // Canned coordinates for common country labels (simple fallback when we only know the country)
 const COUNTRY_COORDS: Record<string, L.LatLngTuple> = {
