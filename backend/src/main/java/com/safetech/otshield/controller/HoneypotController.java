@@ -156,26 +156,29 @@ public class HoneypotController {
             String details = (String) logData.get("details");
             String timestamp = (String) logData.get("timestamp");
             Integer sourcePort = (Integer) logData.get("sourcePort");
-            
+            String severity = (String) logData.get("severity");
+            String descriptionOverride = (String) logData.get("description");
+
             // Validate required fields
             if (sourceIp == null || protocol == null || attackType == null) {
                 log.warn("Missing required fields in log data: {}", logData);
                 return ResponseEntity.badRequest().build();
             }
-            
+
             // Create payload from details
             String payload = details != null ? details : "No details provided";
-            
-            // Create description with additional context
-            String description = String.format("Attack from %s:%d using %s protocol. %s", 
-                sourceIp, 
-                sourcePort != null ? sourcePort : 0, 
-                protocol, 
-                payload);
-            
+
             HoneypotLog honeypotLog = new HoneypotLog(sourceIp, protocol, attackType, payload);
-            honeypotLog.setSeverity("MEDIUM"); // Default severity
-            honeypotLog.setDescription(description);
+            // Honour caller-supplied severity (LOW/MEDIUM/HIGH/CRITICAL); fall back to MEDIUM.
+            // The map arc colour is driven off this field, so the default needs to stay neutral.
+            honeypotLog.setSeverity(severity != null ? severity.toUpperCase() : "MEDIUM");
+            // Prefer the caller-provided description, otherwise auto-format one.
+            honeypotLog.setDescription(descriptionOverride != null ? descriptionOverride
+                : String.format("Attack from %s:%d using %s protocol. %s",
+                    sourceIp,
+                    sourcePort != null ? sourcePort : 0,
+                    protocol,
+                    payload));
             
             // Set timestamp if provided
             if (timestamp != null) {
