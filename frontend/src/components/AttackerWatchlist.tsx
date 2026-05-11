@@ -146,9 +146,9 @@ const tierStyle = (tier: string) => {
 };
 
 const formatTimeAgo = (iso: string | null): string => {
-  if (!iso) return '—';
+  if (!iso) return '-';
   const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return '—';
+  if (Number.isNaN(t)) return '-';
   const diffMs = Date.now() - t;
   const m = Math.floor(diffMs / 60000);
   if (m < 1) return 'just now';
@@ -271,7 +271,7 @@ const AttackerWatchlist: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      {/* Header strip — tier counts */}
+      {/* Header strip - tier counts */}
       <motion.div
         initial="hidden"
         animate="visible"
@@ -580,7 +580,7 @@ const AttackerWatchlist: React.FC = () => {
                                         {step.technique}
                                       </p>
                                       <p className="text-[10px] text-slate-500 mt-0.5">
-                                        {step.protocol ?? '—'} · {step.attackType ?? '—'}
+                                        {step.protocol ?? '-'} · {step.attackType ?? '-'}
                                       </p>
                                     </div>
                                   </motion.li>
@@ -617,7 +617,7 @@ const AttackerWatchlist: React.FC = () => {
                               <p className="text-xs text-slate-700 mt-0.5 tabular-nums">
                                 {p.firstSeen
                                   ? p.firstSeen.replace('T', ' ').slice(0, 19)
-                                  : '—'}
+                                  : '-'}
                               </p>
                             </div>
                             <div>
@@ -627,7 +627,7 @@ const AttackerWatchlist: React.FC = () => {
                               <p className="text-xs text-slate-700 mt-0.5 tabular-nums">
                                 {p.lastSeen
                                   ? p.lastSeen.replace('T', ' ').slice(0, 19)
-                                  : '—'}
+                                  : '-'}
                               </p>
                             </div>
                           </div>

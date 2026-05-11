@@ -92,7 +92,7 @@ const Conpot: React.FC = () => {
   const [stats, setStats] = useState<ConpotStats>(EMPTY_STATS);
   const [backendReachable, setBackendReachable] = useState<boolean | null>(null);
   const [remoteMode, setRemoteMode] = useState<boolean | null>(null);
-  // Total events the backend has persisted — when this counter ticks up between
+  // Total events the backend has persisted - when this counter ticks up between
   // polls we light up the "ingest live" indicator briefly.
   const [lastEventCount, setLastEventCount] = useState<number>(0);
   const [eventsRecentlyGrew, setEventsRecentlyGrew] = useState(false);
@@ -143,7 +143,7 @@ const Conpot: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastEventCount]);
 
-  // ---------- (Read-only — decoy lifecycle is managed remotely; no actions exposed in UI) ----------
+  // ---------- (Read-only - decoy lifecycle is managed remotely; no actions exposed in UI) ----------
 
   // ---------- Derived chart data ----------
   const protocolChart = useMemo(() => {
@@ -242,7 +242,7 @@ const Conpot: React.FC = () => {
   }, [stats.severityBreakdown]);
 
   // Block effectiveness: blocked / total events
-  // (We don't have isBlocked in the conpot stats response — derive a proxy from
+  // (We don't have isBlocked in the conpot stats response - derive a proxy from
   // severity. HIGH events are what blocking rules typically catch.)
   const blockEffectiveness = useMemo(() => {
     const high = stats.severityBreakdown['HIGH'] || 0;
@@ -281,7 +281,7 @@ const Conpot: React.FC = () => {
     };
   }, [stats.protocolBreakdown]);
 
-  // MITRE ATT&CK for ICS — heuristic mapping of observed protocols/attack types to tactics.
+  // MITRE ATT&CK for ICS - heuristic mapping of observed protocols/attack types to tactics.
   const mitreTactics = useMemo(() => {
     const tactics: Array<{ id: string; name: string; observed: number; color: string }> = [
       { id: 'TA0102', name: 'Reconnaissance', observed: 0, color: 'from-violet-500 to-fuchsia-500' },
@@ -659,7 +659,7 @@ const Conpot: React.FC = () => {
                   const max = Math.max(1, ...stats.hourlySeries.map(x => x.count));
                   const h = Math.max(2, (p.count / max) * 100);
                   return (
-                    <div key={i} className="flex-1 rounded-t bg-gradient-to-t from-violet-500 to-fuchsia-400 opacity-70 hover:opacity-100 transition" style={{ height: `${h}%` }} title={`${String(p.hour).padStart(2,'0')}:00 — ${p.count}`} />
+                    <div key={i} className="flex-1 rounded-t bg-gradient-to-t from-violet-500 to-fuchsia-400 opacity-70 hover:opacity-100 transition" style={{ height: `${h}%` }} title={`${String(p.hour).padStart(2,'0')}:00 - ${p.count}`} />
                   );
                 })}
               </div>
@@ -772,7 +772,7 @@ const Conpot: React.FC = () => {
             </div>
           </div>
 
-          {/* ===== MITRE ATT&CK for ICS — observed tactics strip ===== */}
+          {/* ===== MITRE ATT&CK for ICS - observed tactics strip ===== */}
           <div className="bg-white rounded-2xl p-6 ring-1 ring-slate-200/70 shadow-sm hover:shadow-md transition">
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -832,7 +832,7 @@ const Conpot: React.FC = () => {
                   </svg>
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900">Top Attackers — decoy instance</h2>
+                  <h2 className="text-lg font-semibold text-slate-900">Top Attackers - decoy instance</h2>
                   <p className="text-xs text-slate-500 mt-0.5">Source IPs ranked by event count · {stats.uniqueIPs} unique IPs across {stats.totalLogs} log lines</p>
                 </div>
               </div>

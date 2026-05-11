@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office"
+      xmlns:w="urn:schemas-microsoft-com:office:word"
+      xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="UTF-8">
+<meta name="ProgId" content="Word.Document">
+<title>Annex B: OTShield Capability &amp; Live Threat Intel Evidence</title>
+<!--[if gte mso 9]><xml>
+<w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument>
+</xml><![endif]-->
+<style>
+@page { size: 8.5in 11in; margin: 0.7in 0.8in 0.7in 0.8in; }
+body { font-family: Arial, sans-serif; font-size: 10.5pt; line-height: 1.35; color: #1F1F1F; }
+h1.title { font-size: 18pt; color: #5B2C8A; margin: 0 0 4pt 0; font-weight: bold; }
+h2.subtitle { font-size: 13pt; color: #1F1F1F; margin: 0 0 4pt 0; }
+p.tagline { font-style: italic; color: #595959; font-size: 10pt; margin: 0 0 8pt 0; border-bottom: 1.5pt solid #5B2C8A; padding-bottom: 4pt; }
+h1 { font-size: 14pt; color: #5B2C8A; margin: 14pt 0 6pt 0; font-weight: bold; }
+h2 { font-size: 11.5pt; color: #1F1F1F; margin: 10pt 0 4pt 0; font-weight: bold; }
+p { margin: 0 0 6pt 0; }
+ul { margin: 4pt 0 8pt 18pt; }
+li { margin: 0 0 3pt 0; }
+table { border-collapse: collapse; width: 100%; margin: 4pt 0 8pt 0; font-size: 9.5pt; page-break-inside: avoid; }
+th { background: #5B2C8A; color: white; text-align: left; padding: 5pt 7pt; font-weight: bold; border: 0.5pt solid #BFBFBF; }
+td { border: 0.5pt solid #BFBFBF; padding: 5pt 7pt; vertical-align: top; }
+td.shade { background: #F2F2F2; }
+td.center { text-align: center; }
+.purple { color: #5B2C8A; font-weight: bold; }
+.box { background: #EDE3F5; border: 1pt solid #5B2C8A; padding: 8pt 10pt; margin: 6pt 0; }
+.stat-grid { display: table; width: 100%; margin: 6pt 0; }
+.stat { background: #F8F4FB; border: 1pt solid #BFA8D6; padding: 8pt; text-align: center; font-size: 9.5pt; }
+.stat-num { font-size: 18pt; color: #5B2C8A; font-weight: bold; display: block; line-height: 1.1; }
+</style>
+</head>
+<body lang=EN-GB>
+
+<h1 class="title">Annex B</h1>
+<h2 class="subtitle">OTShield Capability Profile &amp; Live Threat-Intel Evidence</h2>
+<p class="tagline">Supporting document to OTShield's HMGCC Co-Creation Proposal: Smart Personal Assistant for Security Researchers</p>
+
+<p>This annex is <b>optional reference material</b> that provides supporting evidence for the dual-use claim already made and assessable within the six-page main proposal (Section 1 and Section 8). Per HMGCC Q&amp;A (Q6), all assessable information is contained in the main proposal itself; this annex is provided only to give the reviewer faster verification of the live-platform numbers (157 attackers, 20 countries, 12,968 attacks) and the dual-use commercial framing, should they wish to verify those claims directly. Reading this annex is not required for evaluation. Summary: OTShield is a working ICS security platform with an internet-facing live threat-intel feed running today, and an active commercial pipeline targeting critical-infrastructure operators. We are pre-revenue: no paying customer is yet deployed, but the platform that HMGCC's Phase 1 funding extends is the same platform we are taking to market commercially, so HMGCC will not be a sole customer.</p>
+
+<h1>B.1 OTShield platform: live capabilities at a glance</h1>
+
+<table>
+<tr><th style="width:28%">Capability</th><th style="width:18%">TRL today</th><th>Evidence</th></tr>
+<tr><td class="shade"><b class="purple">Research Mode (Workbench)</b></td><td>TRL 3 to 4</td><td>Operational Bundles, Library, Summary, Inventory, Ports &amp; Services, Threads, Findings, Vulns. Local LLM (Ollama, q4_K_M) running per-bundle technical summaries offline. The HMGCC Phase 1 work extends this baseline to TRL 6.</td></tr>
+<tr><td class="shade"><b class="purple">SOC Mode + Decoy fabric</b></td><td>TRL 5 (internet-exposed decoy fabric)</td><td>Realistic protocol-aware decoys for Modbus, S7Comm, EtherNet/IP, OPC UA, DNP3 and additional ICS protocols. Fake HMIs (Siemens WinCC, Rockwell, Schneider, Generic) running with full alarm trees, phase voltages, control breakers, refinery pipelines, water plants and substations. Deployed and continuously running on an internet-exposed decoy fabric operated by Safetech Global; not yet deployed inside a paying customer's environment.</td></tr>
+<tr><td class="shade"><b class="purple">PCAP &amp; live network analysis</b></td><td>TRL 5 (internet-exposed decoy fabric)</td><td>Purdue-aware deep-packet inspection, IOA detection, protocol distribution, top talkers, zone crossings (East-West vs. North-South). PCAP upload and live capture from network interface. Validated against real attacker traffic captured by the decoy fabric above.</td></tr>
+<tr><td class="shade"><b class="purple">Asset inventory + Purdue topology</b></td><td>TRL 5 (internet-exposed decoy fabric)</td><td>Auto-discovered PLCs, RTUs, HMIs, engineering workstations, SCADA, switches, routers, with risk scoring and Purdue-level mapping (L0 to L5). Demo scenario: phishing &rarr; engineering workstation &rarr; lateral movement &rarr; PI Historian &rarr; SCADA &rarr; PLC &rarr; pump actuator manipulation.</td></tr>
+<tr><td class="shade"><b class="purple">MITRE ATT&amp;CK for ICS coverage</b></td><td>TRL 5 (internet-exposed decoy fabric)</td><td>Attacker TTPs aggregated per attacker; behavioural fingerprints; campaign clustering; IOC export in JSON / CSV / plain formats with SIEM / TAXII / MISP push interfaces in the platform (production-grade TAXII / MISP push hardened in Phase 2). Full ATT&amp;CK for ICS kill chain wired into the data model: initial access, execution, persistence, discovery, lateral movement, collection, command-and-control, inhibit response, impair process control, impact.</td></tr>
+<tr><td class="shade"><b class="purple">Alerts &amp; incident triage</b></td><td>TRL 5 (internet-exposed decoy fabric)</td><td>High-confidence signals from the deception layer ranked by severity; MTTA / MTTR metrics; CSV / XLSX / PDF export; integrated alert correlation, threat intelligence enrichment and threat hunting.</td></tr>
+<tr><td class="shade"><b class="purple">Live ICS threat-intel feed</b></td><td>TRL 5 (live, internet-exposed)</td><td>Internet-exposed decoy fabric operated by Safetech Global capturing real ICS-protocol attacks. See Section B.2 below for current numbers.</td></tr>
+</table>
+
+<h1>B.2 Live threat-intel evidence: real attackers, real ICS commands</h1>
+
+<p>OTShield operates an internet-exposed decoy fabric, capturing real ICS-protocol attacks. The numbers below are from the first days of live operation alone:</p>
+
+<div class="box" style="margin:10pt 0;">
+<table style="margin:0; font-size:11pt;">
+<tr style="background:none;">
+<td style="border:none; text-align:center; width:25%; padding:6pt;"><span style="font-size:24pt; color:#5B2C8A; font-weight:bold; display:block;">157</span><span style="color:#595959;">unique attackers</span></td>
+<td style="border:none; text-align:center; width:25%; padding:6pt;"><span style="font-size:24pt; color:#5B2C8A; font-weight:bold; display:block;">20</span><span style="color:#595959;">source countries</span></td>
+<td style="border:none; text-align:center; width:25%; padding:6pt;"><span style="font-size:24pt; color:#5B2C8A; font-weight:bold; display:block;">12,968</span><span style="color:#595959;">total attacks</span></td>
+<td style="border:none; text-align:center; width:25%; padding:6pt;"><span style="font-size:24pt; color:#5B2C8A; font-weight:bold; display:block;">~ days</span><span style="color:#595959;">live deployment window</span></td>
+</tr>
+</table>
+</div>
+
+<h2>Attacker profile mix</h2>
+<p>The captured traffic spans the full ICS attacker spectrum:</p>
+<ul>
+<li><b class="purple">Script-kiddie / opportunistic scanners:</b> the majority of unique sources. Mass-scan tooling probing common ICS ports (502 Modbus, 102 S7, 44818 EtherNet/IP, 4840 OPC UA, 20000 DNP3) without protocol-aware payloads. These are valuable because they establish a baseline of internet noise against ICS-shaped decoys.</li>
+<li><b class="purple">Advanced ICS-aware actors:</b> a smaller but operationally significant subset of attackers issuing genuinely protocol-aware commands. Examples observed in the live data include unauthorised write attempts, out-of-range values, interlock-override attempts, and reconnaissance commands such as <i>Remote System Discovery</i> and <i>Spoof Reporting Message</i> mapped to the MITRE ATT&amp;CK for ICS framework. This is exactly the behaviour HMGCC researchers will encounter in real tear-downs.</li>
+</ul>
+
+<h2>Why this matters for the HMGCC challenge</h2>
+<ol>
+<li><b class="purple">Dual-use evidence:</b> the platform is already operational against real ICS attacker traffic beyond any HMGCC use case. What the HMGCC funding extends is not a prototype written for this competition: it is a working platform that is capturing live attacker behaviour against an internet-exposed decoy fabric right now, on the same code base we are taking to commercial customers under three published price tiers.</li>
+<li><b class="purple">A real corpus the air-gapped tool can use:</b> the captured TTPs, IOCs and protocol-level commands feed directly into the trusted-source register and the verifier agent's knowledge of "what attackers actually do at this protocol level". For the air-gapped researcher tool, this material is delivered via signed update bundles (see Annex A.4): the laptop never connects to the internet, but it benefits from intel that internet-facing infrastructure has gathered.</li>
+<li><b class="purple">Sustained &amp; refreshed:</b> the feed grows continuously while the decoy fabric is online. Phase 2 productionises this into a regular update cadence (signed bundles published on a fixed schedule), funded by Safetech Global's commercial roadmap as paying customers come on board, and available to HMGCC at no marginal cost.</li>
+</ol>
+
+<h1>B.3 Why this is fundamentally different from a RAG-only proposal</h1>
+
+<p>Most applicants to this challenge will deliver a fairly conventional document-Q&amp;A system: drop documents in, ask questions, get answers grounded in the documents. That is RAG, and it is well understood.</p>
+
+<p>OTShield's approach is qualitatively different because the existing platform brings two things a RAG-only system cannot:</p>
+<ul>
+<li><b class="purple">Real network behaviour to validate against documentation.</b> When a vendor manual says "the device exposes Modbus on TCP/502 with read-only function codes", a RAG system can repeat that. OTShield can also run that claim against the captured PCAPs to confirm or refute it. Documentation is a starting point, not the truth.</li>
+<li><b class="purple">Real attacker behaviour as a knowledge source.</b> When a researcher asks "what TTPs target this PLC family", a RAG system can summarise public advisories. OTShield can also surface the live, recent attacker behaviour observed against equivalent decoys, mapped to MITRE ATT&amp;CK for ICS, with confidence scores and source citations.</li>
+</ul>
+
+<p>This is why we describe the Phase 1 deliverable as <i>true analytical support</i>, not as a search tool: the assistant has access to evidence beyond the document corpus the researcher feeds it.</p>
+
+<h1>B.4 Commercial pipeline and target segments (dual-use proof)</h1>
+
+<p>OTShield is pre-revenue: we are not yet deployed inside a paying customer's environment. What we have today is (i) a working platform, (ii) an internet-exposed decoy fabric validating the deception layer against real attackers, (iii) three published commercial pricing tiers (see Annex E), and (iv) an active commercial pipeline of conversations with the segments below. The point relevant to HMGCC is that the same platform reaches more than one buyer, so HMGCC will not be a sole customer.</p>
+
+<table>
+<tr><th style="width:35%">Segment</th><th>Status &amp; notes</th></tr>
+<tr><td class="shade"><b class="purple">Critical-infrastructure operators</b><br>(energy, water, transport, pharma)</td><td>Active commercial conversations via OTShield's pipeline. Target use case: deploying the Workbench inside the operator's air-gapped engineering environment for vendor product assessment and internal red-team work. No paying deployment yet; first contracts targeted in 2026.</td></tr>
+<tr><td class="shade"><b class="purple">UK national security &amp; defence (beyond HMGCC)</b></td><td>Other UK government departments running ICS tear-downs and supply-chain assurance: MOD, NCSC, NPSA, defence prime contractors' security functions. Same Phase 1 capability, different customer.</td></tr>
+<tr><td class="shade"><b class="purple">ICS vendor red teams &amp; product security</b></td><td>Internal red teams at Siemens-, Rockwell-, Schneider-class vendors run product-security tear-downs today on ad-hoc tooling. OTShield is a structured replacement.</td></tr>
+<tr><td class="shade"><b class="purple">International allies</b></td><td>Five Eyes &amp; NATO partner governments doing equivalent ICS assurance. Phase 2 onwards.</td></tr>
+</table>
+
+<h1>B.5 Roadmap and sustainability beyond Phase 1</h1>
+
+<p>OTShield's roadmap beyond Phase 1 is funded by Safetech Global's continued commercial investment in the platform, with paying revenue expected to ramp in 2026 as the segments above convert. HMGCC's &pound;60k Phase 1 contribution is leveraged against:</p>
+<ul>
+<li>Continued operation of the internet-exposed decoy fabric and threat-intel feed.</li>
+<li>Hardening and certification of the Workbench beyond TRL 6.</li>
+<li>Ongoing protocol-extractor library updates as new ICS protocols emerge.</li>
+<li>Phase 2 features (collaborative multi-researcher workspaces, hardware-in-the-loop firmware extraction).</li>
+</ul>
+
+<p>The practical meaning of "commercially supported tool, not a one-off bespoke build": the platform exists for reasons beyond HMGCC, the maintenance burden does not fall on HMGCC, and the Phase 1 royalty-free licence to HMGCC remains in place regardless of how the commercial pipeline converts.</p>
+
+<p style="margin-top:14pt; font-size:9pt; color:#595959; text-align:center; border-top:0.5pt solid #BFBFBF; padding-top:6pt;"><i>OFFICIAL. Submitted in confidence under HMGCC Co-Creation T&amp;Cs. End of Annex B.</i></p>
+
+</body>
+</html>

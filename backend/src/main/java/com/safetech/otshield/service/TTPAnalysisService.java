@@ -429,8 +429,8 @@ public class TTPAnalysisService {
         Set<String> icsAttackers = new HashSet<>();
 
         for (HoneypotLog l : logs) {
-            String u = l.getUsernameAttempt();
-            String p = l.getPasswordAttempt();
+            String u = sanitizeCredential(l.getUsernameAttempt());
+            String p = sanitizeCredential(l.getPasswordAttempt());
             if (u == null || p == null) continue;
             String pair = u + ":" + p;
             attemptCounts.merge(pair, 1L, Long::sum);
@@ -542,5 +542,24 @@ public class TTPAnalysisService {
         wrapper.put("slowLowAttackers", slowLowAttackers.size() > 10 ? slowLowAttackers.subList(0, 10) : slowLowAttackers);
         wrapper.put("multiProtocolPivots", pivotAttackers.size() > 10 ? pivotAttackers.subList(0, 10) : pivotAttackers);
         return wrapper;
+    }
+
+    /**
+     * Normalize a credential captured from raw protocol logs by stripping
+     * trailing CR/LF, leading/trailing whitespace, surrounding quote pairs
+     * and any other ASCII control characters. Without this, e.g. FTP
+     * passwords arrive as "admin\r\n" and bucket separately from "admin".
+     */
+    private static String sanitizeCredential(String raw) {
+        if (raw == null) return null;
+        String cleaned = raw.replaceAll("\\p{Cntrl}", "").trim();
+        if (cleaned.length() >= 2) {
+            char first = cleaned.charAt(0);
+            char last = cleaned.charAt(cleaned.length() - 1);
+            if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
+                cleaned = cleaned.substring(1, cleaned.length() - 1).trim();
+            }
+        }
+        return cleaned.isEmpty() ? null : cleaned;
     }
 }

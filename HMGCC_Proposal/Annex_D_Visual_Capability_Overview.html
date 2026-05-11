@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office"
+      xmlns:w="urn:schemas-microsoft-com:office:word"
+      xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="UTF-8">
+<meta name="ProgId" content="Word.Document">
+<title>Annex D: OTShield Visual Capability Overview</title>
+<style>
+@page { size: 8.5in 11in; margin: 0.7in 0.8in 0.7in 0.8in; }
+body { font-family: Arial, sans-serif; font-size: 10.5pt; line-height: 1.35; color: #1F1F1F; }
+h1.title { font-size: 18pt; color: #5B2C8A; margin: 0 0 4pt 0; font-weight: bold; }
+h2.subtitle { font-size: 13pt; color: #1F1F1F; margin: 0 0 4pt 0; }
+p.tagline { font-style: italic; color: #595959; font-size: 10pt; margin: 0 0 8pt 0; border-bottom: 1.5pt solid #5B2C8A; padding-bottom: 4pt; }
+h1 { font-size: 14pt; color: #5B2C8A; margin: 14pt 0 6pt 0; font-weight: bold; }
+h2 { font-size: 11.5pt; color: #1F1F1F; margin: 10pt 0 4pt 0; font-weight: bold; }
+p { margin: 0 0 6pt 0; }
+ul { margin: 4pt 0 8pt 18pt; }
+li { margin: 0 0 3pt 0; }
+table { border-collapse: collapse; width: 100%; margin: 4pt 0 8pt 0; font-size: 10pt; page-break-inside: avoid; }
+th { background: #5B2C8A; color: white; text-align: left; padding: 5pt 7pt; font-weight: bold; border: 0.5pt solid #BFBFBF; }
+td { border: 0.5pt solid #BFBFBF; padding: 5pt 7pt; vertical-align: top; }
+td.shade { background: #F2F2F2; }
+.purple { color: #5B2C8A; font-weight: bold; }
+.box { background: #EDE3F5; border: 1pt solid #5B2C8A; padding: 8pt 10pt; margin: 6pt 0; }
+.note { font-size: 9pt; color: #595959; font-style: italic; }
+</style>
+</head>
+<body lang=EN-GB>
+
+<h1 class="title">Annex D</h1>
+<h2 class="subtitle">OTShield Visual Capability Overview</h2>
+<p class="tagline">Supporting document to OTShield's HMGCC Co-Creation Proposal: Smart Personal Assistant for Security Researchers</p>
+
+<h1>D.1 Purpose of this annex</h1>
+
+<p>This annex is <b>optional reference material</b>: a visual screenshot pack from the OTShield platform that backs the Phase 1 proposal. Per HMGCC Q&amp;A (Q6), all assessable information is contained in the six-page main proposal; this annex is provided only as fast visual confirmation of features already named and assessed in the main proposal. Reading this annex is not required for evaluation.</p>
+
+<p>The pages that follow are taken from OTShield's standard capability overview document and are referenced from the main proposal:</p>
+
+<ul>
+<li><b class="purple">Section 1 (Scope):</b> the "OTShield today" table summarises the live capabilities; the screens in this annex show what those capabilities look like as they run today on the platform.</li>
+<li><b class="purple">Section 2 (System approach &amp; innovation):</b> the platform foundations described in Annex A (Bundles, Library, Summary, Inventory, Threads, Findings, Vulns, plus the SOC-side decoy fabric, attacker analytics and Purdue topology) are all rendered in the screens overleaf.</li>
+<li><b class="purple">Annex B (Live threat-intel evidence):</b> the decoy-layer and attacker-TTP screens correspond to the internet-exposed decoy fabric operation that produced the 20-country, 157-attacker, 12,968-attack figures.</li>
+</ul>
+
+<h1>D.2 What the reviewer will see</h1>
+
+<table>
+<tr><th style="width:30%">Page in the visual document</th><th>What it demonstrates for the HMGCC challenge</th></tr>
+<tr><td class="shade"><b class="purple">1. OTShield Research Assistant cover</b></td><td>One-page positioning: "From Deception to Understanding Adversaries". Establishes the dual mission (deception + research) and the air-gap-ready, evidence-based, human + AI teaming philosophy that maps directly onto the HMGCC challenge brief.</td></tr>
+<tr><td class="shade"><b class="purple">2. HMGCC Challenge, Our Answer</b></td><td>The "cognitive layer for vulnerability research" framing, the bottleneck statement that mirrors HMGCC's own challenge wording, and the three impact dimensions (faster decisions, higher confidence, stronger outcomes).</td></tr>
+<tr><td class="shade"><b class="purple">3. Research Mode + SOC Mode (one platform, two missions)</b></td><td>Side-by-side screens of the two operating modes with a shared data layer. This is the dual-use story made literal: the same platform that HMGCC researchers use offline is the platform Safetech Global is taking to commercial SOCs to run live decoys.</td></tr>
+<tr><td class="shade"><b class="purple">4 to 7. Research Workbench detail</b></td><td>Screens of Workspace, Library, Summary, Inventory, Ports &amp; Services, Threads and Findings. Each screen also calls out how it meets HMGCC requirements (air-gapped ready, curated reference library, copilot-ready intelligence, traceable and reproducible).</td></tr>
+<tr><td class="shade"><b class="purple">8. Vulns view (find &amp; prioritise)</b></td><td>The 'needs more sources' flag, draft-status and confidence labels as they run today on the platform. Direct evidence for the L3 confidence-scoring and evidence-ledger layer described in Section 2.</td></tr>
+<tr><td class="shade"><b class="purple">9. OT Network Dashboard</b></td><td>Purdue-aware deep-packet inspection, IOA detection, protocol distribution, top talkers, zone crossings, PCAP upload &amp; live capture. Direct evidence for the on-wire cross-check capability that differentiates this proposal from RAG-only submissions.</td></tr>
+<tr><td class="shade"><b class="purple">10. Asset inventory &amp; risk</b></td><td>Discovered PLCs, RTUs, HMIs, engineering workstations, SCADA, network gear, with risk scoring and Purdue-level mapping.</td></tr>
+<tr><td class="shade"><b class="purple">11. Network topology &amp; demo attack chain</b></td><td>Live view of OT/IT assets with a demo attack chain (phishing &rarr; engineering workstation &rarr; lateral movement &rarr; PI Historian &rarr; SCADA &rarr; PLC &rarr; pump actuator). Realistic ICS attacker journey rendered in the live platform.</td></tr>
+<tr><td class="shade"><b class="purple">12. Alerts &amp; incident triage</b></td><td>High-confidence signals from the deception layer with severity, MTTA / MTTR metrics and CSV / XLSX / PDF export.</td></tr>
+<tr><td class="shade"><b class="purple">13. Decoy layer (live engagement geography)</b></td><td>Real-time map of attacker source countries against the decoy fabric across multiple facility profiles (refinery, plant, pharma, water). The basis for the live threat-intel feed referenced in Annex B.</td></tr>
+<tr><td class="shade"><b class="purple">14. Fake HMIs running on the decoy fabric</b></td><td>Screens of Siemens SIMATIC WinCC, Schneider, Rockwell and generic HMIs running as decoys, with full alarm trees, phase voltages and substation control. The protocol-aware decoy fabric as it runs today on Safetech Global's internet-exposed deployment.</td></tr>
+<tr><td class="shade"><b class="purple">15. Attacker TTPs &amp; behavioural intel</b></td><td>MITRE ATT&amp;CK for ICS coverage, behavioural fingerprints, campaign clustering, IOC export to SIEM / TAXII / MISP. Direct evidence for the attacker-knowledge corpus that feeds the verifier agent's on-wire cross-checks.</td></tr>
+</table>
+
+<h1>D.3 How to read this annex alongside the main proposal</h1>
+
+<div class="box">
+<p style="margin:0;">The visual document overleaf is provided as <b>supporting evidence</b>, not as a substitute for any part of the main 6-page proposal. It exists to demonstrate that the live capabilities listed in Section 1 ("OTShield today") and the architectural building blocks described in Section 2 / Annex A are not aspirational: they are operational today, with the screens included.</p>
+</div>
+
+<p class="note">All figures in the visual document are taken from production OTShield deployments. Any customer-identifying information has been redacted or replaced with representative example data.</p>
+
+<h1>D.4 Document attached overleaf</h1>
+
+<p><b>File:</b> <i>OTShield Capability Overview (visual document).pdf</i><br>
+<b>Length:</b> approximately 18 pages of full-bleed dashboard and feature visuals.<br>
+<b>Source:</b> Safetech Global Limited (OTShield), April 2026.<br>
+<b>Confidentiality:</b> submitted under HMGCC Co-Creation confidentiality terms.</p>
+
+<p style="margin-top:14pt; font-size:9pt; color:#595959; text-align:center; border-top:0.5pt solid #BFBFBF; padding-top:6pt;"><i>OFFICIAL. Submitted in confidence under HMGCC Co-Creation T&amp;Cs. End of Annex D cover. Visual document follows.</i></p>
+
+</body>
+</html>

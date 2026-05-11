@@ -98,6 +98,29 @@ public class HoneypotLogService {
         }
     }
 
+    /**
+     * Normalize a credential string captured from raw honeypot protocol logs.
+     * Strips trailing CR/LF, leading/trailing whitespace, and any other ASCII
+     * control characters so that "admin\r\n", "admin\n", "  admin  " and
+     * "admin" all collapse to the same bucket in the top-credentials list.
+     * Returns null when the input is null or becomes blank after cleaning.
+     */
+    private static String sanitizeCredential(String raw) {
+        if (raw == null) return null;
+        // Remove all ASCII control characters (\r, \n, \t, \0, etc.)
+        String cleaned = raw.replaceAll("\\p{Cntrl}", "").trim();
+        // Some FTP / SSH templates wrap values in quotes — strip a single
+        // matched pair of surrounding quotes.
+        if (cleaned.length() >= 2) {
+            char first = cleaned.charAt(0);
+            char last = cleaned.charAt(cleaned.length() - 1);
+            if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
+                cleaned = cleaned.substring(1, cleaned.length() - 1).trim();
+            }
+        }
+        return cleaned.isEmpty() ? null : cleaned;
+    }
+
     // =========================================================================
     //  Reads
     // =========================================================================
@@ -190,15 +213,21 @@ public class HoneypotLogService {
             .collect(Collectors.groupingBy(l -> l.getCity() + ", " + (l.getCountry() != null ? l.getCountry() : ""), Collectors.counting()));
         stats.put("cityBreakdown", sortDescAndLimit(cityCounts, 10));
 
-        // Credential intelligence
+        // Credential intelligence — strip trailing CR/LF and other control
+        // characters that come in from raw protocol log lines (FTP commands
+        // end with "\r\n", and some honeypot templates leave them in place).
+        // Without this normalization the dashboard renders e.g. "admin\r\n"
+        // and "admin" as two distinct entries.
         Map<String, Long> usernames = allLogs.stream()
             .map(HoneypotLog::getUsernameAttempt)
+            .map(HoneypotLogService::sanitizeCredential)
             .filter(u -> u != null && !u.isBlank())
             .collect(Collectors.groupingBy(u -> u, Collectors.counting()));
         stats.put("topUsernames", sortDescAndLimit(usernames, 15));
 
         Map<String, Long> passwords = allLogs.stream()
             .map(HoneypotLog::getPasswordAttempt)
+            .map(HoneypotLogService::sanitizeCredential)
             .filter(p -> p != null && !p.isBlank())
             .collect(Collectors.groupingBy(p -> p, Collectors.counting()));
         stats.put("topPasswords", sortDescAndLimit(passwords, 15));

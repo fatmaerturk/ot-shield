@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { Cog6ToothIcon } from '@heroicons/react/24/outline';
 import { User } from '../types/user';
 import { Icon } from './theme';
 import { useAppMode, AppMode } from '../contexts/AppModeContext';
@@ -231,9 +232,9 @@ const NAV: NavItem[] = [
     ],
   },
   {
-    label: 'Admin',
-    icon: <Icon.Users className="w-4 h-4" />,
-    path: '/user-management',
+    label: 'Settings',
+    icon: <Cog6ToothIcon className="w-4 h-4" />,
+    path: '/settings',
   },
 ];
 
@@ -424,11 +425,19 @@ const Navigation: React.FC<NavigationProps> = ({ user }) => {
                     </div>
                   );
                 }
+                // Settings is a top-level utility entry; add visible gaps on
+                // both sides and a subtle left separator so it stops crowding
+                // both the last content tab on its left and the mode toggle
+                // on its right.
+                const isSettings = item.label === 'Settings';
+                const settingsAlign = isSettings
+                  ? 'ml-4 mr-4 pl-4 border-l border-white/10'
+                  : '';
                 return (
                   <button
                     key={item.label}
                     onClick={() => item.path && navigate(item.path)}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium inline-flex items-center gap-1.5 transition ${
+                    className={`px-3 py-2 rounded-lg text-sm font-medium inline-flex items-center gap-1.5 transition ${settingsAlign} ${
                       active
                         ? item.emphasis
                           ? 'bg-gradient-to-r from-pink-500/30 to-violet-500/30 text-white ring-1 ring-white/20 shadow-inner'
@@ -447,7 +456,7 @@ const Navigation: React.FC<NavigationProps> = ({ user }) => {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Mode toggle pill — two-segment switch between Research
+            {/* Mode toggle pill - two-segment switch between Research
                 and SOC. Research segment lives on the left because
                 that's the default in this build; the gradient chip
                 slides under the active segment. Hidden on narrow

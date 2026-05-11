@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office"
+      xmlns:w="urn:schemas-microsoft-com:office:word"
+      xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="UTF-8">
+<meta name="ProgId" content="Word.Document">
+<title>Annex A: Technical Architecture Deep-Dive</title>
+<!--[if gte mso 9]><xml>
+<w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument>
+</xml><![endif]-->
+<style>
+@page { size: 8.5in 11in; margin: 0.7in 0.8in 0.7in 0.8in; }
+body { font-family: Arial, sans-serif; font-size: 10.5pt; line-height: 1.35; color: #1F1F1F; }
+h1.title { font-size: 18pt; color: #5B2C8A; margin: 0 0 4pt 0; font-weight: bold; }
+h2.subtitle { font-size: 13pt; color: #1F1F1F; margin: 0 0 4pt 0; }
+p.tagline { font-style: italic; color: #595959; font-size: 10pt; margin: 0 0 8pt 0; border-bottom: 1.5pt solid #5B2C8A; padding-bottom: 4pt; }
+h1 { font-size: 14pt; color: #5B2C8A; margin: 14pt 0 6pt 0; font-weight: bold; }
+h2 { font-size: 11.5pt; color: #1F1F1F; margin: 10pt 0 4pt 0; font-weight: bold; }
+p { margin: 0 0 6pt 0; }
+ul { margin: 4pt 0 8pt 18pt; }
+li { margin: 0 0 3pt 0; }
+table { border-collapse: collapse; width: 100%; margin: 4pt 0 8pt 0; font-size: 9.5pt; page-break-inside: avoid; }
+th { background: #5B2C8A; color: white; text-align: left; padding: 5pt 7pt; font-weight: bold; border: 0.5pt solid #BFBFBF; }
+td { border: 0.5pt solid #BFBFBF; padding: 5pt 7pt; vertical-align: top; }
+td.shade { background: #F2F2F2; }
+.purple { color: #5B2C8A; font-weight: bold; }
+.box { background: #EDE3F5; border: 1pt solid #5B2C8A; padding: 8pt 10pt; margin: 6pt 0; border-radius: 3pt; }
+.diagram { font-family: "Courier New", monospace; font-size: 9pt; line-height: 1.2; background: #F8F4FB; border: 1pt solid #BFA8D6; padding: 10pt; margin: 6pt 0; white-space: pre; overflow-x: auto; }
+</style>
+</head>
+<body lang=EN-GB>
+
+<h1 class="title">Annex A</h1>
+<h2 class="subtitle">Technical Architecture Deep-Dive</h2>
+<p class="tagline">Supporting document to OTShield's HMGCC Co-Creation Proposal: Smart Personal Assistant for Security Researchers</p>
+
+<p>This annex is <b>optional reference material</b> that provides supporting evidence for claims already made and assessable within the six-page main proposal (Section 2 in particular). Per HMGCC Q&amp;A (Q6), all assessable information is contained in the main proposal itself; this annex is provided only to give the reviewer faster verification of those claims if desired. It contains the system architecture diagram, the end-to-end data flow, module-by-module specifications, and the new IP register for Phase 1. Reading this annex is not required for evaluation.</p>
+
+<h1>A.1 System architecture: five cooperating modules</h1>
+
+<p>The Phase 1 tool is a locally-hosted web application that runs entirely on the researcher's laptop. The backend, local LLM (Ollama-class), embedding store, indices and structured-data layer all run as local processes on the same machine; the researcher interacts with the tool through their browser at localhost. There are no external network calls. It is built around five cooperating modules wrapped by a research-first UI (Bundles, Library, Summary, Inventory, Threads, Findings, Vulns). All data, models, indices and conversation history stay on the local machine: nothing leaves the laptop.</p>
+
+<p><b>Why a locally-hosted web application rather than a native desktop binary.</b> A localhost-served web UI lets us reuse OTShield's existing, production-tested Research Mode and SOC Mode interfaces without rewriting them as native Windows or Linux desktop apps; gives the researcher a familiar, modern UI without sacrificing the air-gap; supports the same offline browser interface across Windows and Linux laptops with one codebase; and is the same delivery model used by air-gap-friendly tools the researcher already knows (e.g. Jupyter, Wireshark / Stratoshark, Splunk Free, Grafana). The application is packaged with a signed installer that brings up the local services on first run; once installed, the laptop never needs an internet connection.</p>
+
+<div class="diagram">
++---------------+     +-----------------+     +---------------+     +-----------------+     +-----------------+
+|  1 INGEST     | --> |  2 INDEX &      | --> |  3 RETRIEVE   | --> |  4 REASON +     | --> |  5 ANSWER &     |
+|               |     |    EXTRACT      |     |               |     |    VERIFY       |     |    LEDGER       |
+| multi-modal   |     | chunks,         |     | hybrid:       |     | local LLM +     |     | cited answer,   |
+| multi-lingual |     | components,     |     | vector +      |     | verifier agent +|     | Findings,       |
+| files in      |     | protocols,      |     | keyword +     |     | on-wire cross-  |     | persistent      |
+|               |     | ports/services  |     | protocol      |     | check + conf.   |     | memory          |
++---------------+     +-----------------+     +---------------+     +-----------------+     +-----------------+
+                                                                              |
+                                                                              v
+                                                                +-----------------------+
+                                                                | OTShield platform     |
+                                                                | (existing IP):        |
+                                                                | PCAP, decoys, asset   |
+                                                                | inventory, MITRE      |
+                                                                | ATT&CK for ICS        |
+                                                                +-----------------------+
+
+Cross-cutting layers run alongside (1) to (5):
+   - Adaptive researcher profile (terminology, output preferences)
+   - Persistent multi-week memory (Threads + Findings)
+   - Audit/log trail (every claim, every citation, every confidence score)
+   - Joint risk &amp; scope register (shared with HMGCC delivery manager)
+</div>
+
+<h1>A.2 End-to-end flow, by module</h1>
+
+<h2>Module 1, Ingest (multi-modal, multilingual)</h2>
+<p>The researcher drops files into a Bundle: vendor PDFs, datasheets, schematics, draw.io diagrams, hand-drawn notes, photographs, Word / Excel / PowerPoint documents, forum dumps and screenshots (per HMGCC Q21, binary firmware and source code are out of scope for HMGCC test data; the assistant works from documentation about hardware / software systems, not from compiled binaries or source). Module 1 routes each input through the right extractor:</p>
+<ul>
+<li><b>OCR pipeline</b> for scanned and printed documents, tuned to ICS vocabulary (PLC model numbers, register addresses, protocol names).</li>
+<li><b>Handwriting recognition</b> for engineer field notes and annotations.</li>
+<li><b>Image captioning</b> for schematics, board photos and tear-down images.</li>
+<li><b>Language detection</b> per chunk; non-English material is routed through the offline neural translator (Phase 1 deliverable; HMGCC priority languages DE, JA, FR, ZH, with extension headroom for additional languages).</li>
+<li><b>Code parsers</b> for vendor binaries, source and configuration files.</li>
+</ul>
+
+<h2>Module 2, Index &amp; extract</h2>
+<p>Content is chunked, embedded and stored locally. Two parallel pipelines run:</p>
+<ul>
+<li><b>Vector index:</b> language-agnostic ICS-tuned embeddings; non-English chunks indexed in both original and translated form for traceability.</li>
+<li><b>Deep-extract LLM passes:</b> populate structured tables (Inventory, Ports &amp; Services, Components, Protocols). Today the deep-extract pass is LLM-driven and protocol-agnostic (catches references like "uses CoAP over DTLS" that regex misses). Phase 1 layers on protocol-specific extractors for Modbus, S7Comm, EtherNet/IP, OPC UA, DNP3 and IEC 60870-5-104 that recognise function codes, register addresses, object identifiers and protocol-specific terminology, with corresponding network-side dissectors evolved from the existing Modbus and S7Comm DPI rules.</li>
+</ul>
+<p>The output is not just a vector store: it is a structured knowledge base of the device's architecture, ready for the Inventory and Ports &amp; Services views in the UI.</p>
+
+<h2>Module 3, Retrieve</h2>
+<p>When the researcher asks a question, Module 3 runs hybrid retrieval:</p>
+<ul>
+<li>Vector similarity over the embedded chunks.</li>
+<li>Keyword filters over the structured tables (e.g. "give me everything about port 502").</li>
+<li>Protocol-aware filters (e.g. "Modbus function codes only").</li>
+<li>Cross-lingual expansion: an English query also retrieves matching German, French, Chinese passages.</li>
+</ul>
+<p>Result: a ranked list of passages plus the structured-table evidence to support each answer.</p>
+
+<h2>Module 4, Reason &amp; verify (the differentiator)</h2>
+<p>This is where OTShield's existing platform creates a step-change beyond standard RAG. The local LLM drafts an initial answer; an independent <b>verifier agent</b> then runs three parallel checks:</p>
+<ol>
+<li><b>Corpus contradiction check:</b> independently re-queries the corpus to confirm or refute the draft answer.</li>
+<li><b>Trusted-source cross-check:</b> compares against high-confidence sources (manufacturer documentation, academic publications, advisory snapshots) listed in the trusted-source register that we will curate jointly with HMGCC during the kick-off.</li>
+<li><b>On-wire cross-check (unique to OTShield):</b> compares the documented behaviour against actual PCAP traffic, decoy interactions and live asset telemetry from OTShield's existing platform. A claim like "the device exposes Modbus on port 502" can be confirmed (or refuted) against real traffic.</li>
+</ol>
+<p>Each claim emerges with a calibrated 0 to 1 confidence score and a 'needs more sources' flag if evidence is thin.</p>
+
+<h2>Module 5, Answer &amp; ledger</h2>
+<p>The verified answer is rendered in the Threads UI with inline citations. The researcher can:</p>
+<ul>
+<li>Promote any answer (or sub-claim) to a permanent <b>Finding</b>, which is auditable and reproducible.</li>
+<li>Open the <b>Vulns</b> view to track observations and 'needs more sources' items across the whole bundle.</li>
+<li>Continue the conversation across days or weeks; the assistant remembers prior questions, answers and the researcher's preferred output format.</li>
+</ul>
+
+<h1>A.3 Innovation layers mapped to modules</h1>
+
+<table>
+<tr><th style="width:20%">Layer</th><th style="width:14%">Module(s)</th><th>Beyond standard RAG</th></tr>
+<tr>
+  <td class="shade"><b class="purple">L1: Multi-modal ICS-aware &amp; multilingual ingest</b></td>
+  <td>1, 2</td>
+  <td>OCR + handwriting tuned to ICS vocabulary; protocol-aware extractors that auto-build Inventory and Ports &amp; Services. Multilingual extension in Phase 1 (Sprint 1 to Sprint 3): language-agnostic core, offline neural translation for HMGCC priority languages (DE, JA, FR, ZH), bilingual technical-term dictionary curated with HMGCC, and cross-language retrieval so an English query answers from a German datasheet.</td>
+</tr>
+<tr>
+  <td class="shade"><b class="purple">L2: Agentic verification + on-wire cross-check</b></td>
+  <td>4</td>
+  <td>Independent verifier agent runs three parallel checks (corpus, trusted sources, real PCAP/decoy traffic). Hallucinations and unsupported claims are flagged before the answer is published. The on-wire cross-check is unique to OTShield and only possible because the platform already has a live PCAP / decoy / asset stack running today on an internet-exposed decoy fabric. Verifier methodology is shaped by Microsoft PyRIT-class AI red-teaming techniques, applied by Jon Medvenics (ChCSP) on the project (see Annex C).</td>
+</tr>
+<tr>
+  <td class="shade"><b class="purple">L3: Confidence scoring &amp; evidence ledger</b></td>
+  <td>4, 5</td>
+  <td>Every claim ships with a numeric 0 to 1 confidence + source list + 'needs more sources' flag. The Findings ledger is auditable, reproducible and exportable: defensible in a security review or audit.</td>
+</tr>
+<tr>
+  <td class="shade"><b class="purple">L4: Adaptive profile + persistent memory</b></td>
+  <td>cross-cutting</td>
+  <td>Threads + Findings persist for weeks without re-prompting. The system learns the researcher's terminology and preferred output style (table, prose, schematic-style), and proactively surfaces related items from prior bundles. Local only: no telemetry leaves the laptop.</td>
+</tr>
+</table>
+
+<h1>A.4 Updates without internet (the air-gap-safe feed)</h1>
+
+<p>HMGCC's challenge requires a 100 % offline tool. The desirable requirement asks for a mechanism to keep the tool current despite the air gap. Our approach:</p>
+<ol>
+<li>OTShield's <b>commercial</b> threat-intel platform (running outside the air-gapped environment, on OTShield infrastructure) continuously collects ICS attack data from internet-exposed decoys.</li>
+<li>The collected intel is curated, signed and packaged as <b>update bundles</b> (new attacker TTPs, new IOCs, refreshed protocol-aware extractors, refreshed trusted-source snapshots).</li>
+<li>The <b>air-gapped researcher tool</b> ingests these bundles via removable media or a local watch-folder. The laptop never connects to the internet, but its corpus and detection signatures stay current.</li>
+</ol>
+<p>This is the same pattern used by air-gap-safe AV signature distribution and offline mapping data: trusted authority publishes signed bundles, air-gapped client validates and ingests.</p>
+
+<div class="box">
+<b style="color:#5B2C8A;">Architectural separation:</b> the Phase 1 tool delivered to HMGCC contains <i>only</i> the offline components. The internet-facing decoy fabric and intel pipeline are entirely separate, on Safetech Global's own infrastructure. HMGCC receives bundles, never an internet connection.
+</div>
+
+<h1>A.5 New IP generated in Phase 1 (in detail)</h1>
+
+<table>
+<tr><th style="width:30%">New IP module</th><th>Description</th></tr>
+<tr><td class="shade"><b class="purple">Agentic verification stack with on-wire cross-check</b></td><td>Verifier agent orchestration, three-pass cross-checking, contradiction-detection algorithms, bridge to the existing OTShield PCAP / decoy data store.</td></tr>
+<tr><td class="shade"><b class="purple">Calibrated ICS confidence model</b></td><td>0 to 1 confidence calibrated against ICS-domain ground truth (using HMGCC test corpus and OTShield's internal ICS data set), with a 'needs more sources' threshold.</td></tr>
+<tr><td class="shade"><b class="purple">Adaptive researcher-profile module</b></td><td>Per-researcher terminology and output-format learning, with proactive surfacing of related Findings from prior bundles. Local-only model state.</td></tr>
+<tr><td class="shade"><b class="purple">Multilingual / cross-lingual layer</b></td><td>On-device language detection, offline neural translation for HMGCC priority languages (DE, JA, FR, ZH), bilingual technical-term dictionary curated with HMGCC, cross-lingual retrieval expansion.</td></tr>
+<tr><td class="shade"><b class="purple">Long-term memory schema</b></td><td>Cross-bundle, cross-thread, multi-week conversation memory, including 'continue from last week' workflows.</td></tr>
+<tr><td class="shade"><b class="purple">Signed update bundle pipeline</b></td><td>(Phase 1 design, Phase 2 build) bundle format, signature scheme, watch-folder ingest path, conflict resolution. Designed in Phase 1 for delivery in Phase 2.</td></tr>
+</table>
+
+<p style="font-size:9pt; color:#595959; margin-top:8pt;">All IP listed above is owned by OTShield. The Authority is granted a non-exclusive, royalty-free licence under the HMGCC Co-Creation terms and conditions.</p>
+
+<h1>A.6 Existing IP brought to the project (no charge to HMGCC)</h1>
+
+<ul>
+<li>OTShield Research Workbench: Workspace, Library, Summary, Inventory, Ports &amp; Services, Threads, Findings, Vulns.</li>
+<li>Deep-extract pipeline (PDF text via Apache PDFBox + plain-text fallback for markdown / text / CSV) plus an LLM-driven inventory deep-extractor; dedicated network dissectors for Modbus and S7Comm with anomaly rules; port-based identification for DNP3, OPC UA, EtherNet/IP and IEC 60870-5-104 (their dedicated dissectors are extended in Phase 1 against HMGCC test data).</li>
+<li>Java + Spring Boot backend serving the Research and SOC modes; offline Ollama integration running <b>Llama 3.2 1B Instruct Q4_K_M</b> as the chat model and <b>nomic-embed-text</b> as the embedding model. Phase 1 upgrades the chat model to Gemma 4 (see A.7).</li>
+<li>In-memory vector store (ConcurrentHashMap + brute-force cosine similarity) for the existing prototype-scale corpus. Phase 1 adds ChromaDB as the persistent, scalable replacement for production-scale corpora.</li>
+<li>OTShield SOC platform: decoy fabric, attacker behaviour analytics, asset inventory, Purdue-aware network topology, MITRE ATT&amp;CK for ICS coverage.</li>
+<li>Live ICS threat-intelligence feed from an internet-exposed decoy fabric operated by Safetech Global (see Annex B for evidence).</li>
+</ul>
+
+<h1>A.7 Technology stack: today vs. Phase 1 upgrade</h1>
+
+<p>The Research Mode that HMGCC's Phase 1 funding extends is a working prototype today (TRL 3 to 4) running a deliberately minimal, production-stable stack; the SOC-side decoy fabric and threat-intel feed it draws on sit at TRL 5 (validated against live attackers on Safetech Global's internet-exposed deployment, see Annex B). Phase 1 takes the Research Mode stack to TRL 6 on a 3-tier deployment architecture: a Tier 1 edge laptop (4 to 8 GB VRAM) as the primary deliverable, an optional Tier 2 escalation path to HMGCC's hosted OpenAI-style endpoint for higher-accuracy verifier passes, and a Tier 3 OTShield internal dev workstation used for benchmarking and calibration only (not part of the deliverable). We list the today and Phase 1 states side by side so the HMGCC review panel can see exactly what is operational today and exactly what the &pound;60K Phase 1 funding builds.</p>
+
+<p style="font-size:9pt; color:#595959; font-style:italic; margin: 4pt 0 4pt 0;">Note on the chat model vs. embedding model distinction below: these are two distinct layers in the RAG architecture. The <b>chat model</b> generates the natural-language answer the researcher reads; the <b>embedding model</b> encodes both the user's question and every indexed document chunk into vectors so the retriever can rank passages by semantic similarity before the chat model is even invoked. Both layers are upgraded in Phase 1, but for different reasons (chat model: better ICS-jargon accuracy and agentic capability; embedding model: native multilingual coverage for the desirable requirement).</p>
+
+<table>
+<tr><th style="width:22%">Component</th><th style="width:36%">Today (operational, in production code)</th><th style="width:42%">Phase 1 upgrade (delivered by week 12)</th></tr>
+<tr>
+  <td class="shade"><b class="purple">Backend runtime</b></td>
+  <td><b>Java 21 + Spring Boot.</b> Cross-platform, mature, well-suited to UK-government supplier assurance.</td>
+  <td>Retained. Phase 1 work extends the same Spring Boot service tree; no rewrite.</td>
+</tr>
+<tr>
+  <td class="shade"><b class="purple">Local LLM serving</b></td>
+  <td><b>Ollama</b> (localhost:11434), Apache 2.0, packaged for offline use.</td>
+  <td>Retained. New Phase 1 models are pulled into the same Ollama daemon.</td>
+</tr>
+<tr>
+  <td class="shade"><b class="purple">Chat model</b></td>
+  <td><b>Llama 3.2 1B Instruct Q4_K_M.</b> Deliberately small, runs on any laptop CPU, sufficient for prototype-stage research summarisation; 2 048-token context.</td>
+  <td><b>3-tier deployment.</b> <b>Tier 1 (edge laptop, 4 to 8 GB VRAM, primary deliverable):</b> Gemma 4 9B Q4_K_M for 4 GB-class laptops, Gemma 4 13B Q4_K_M for 8 GB-class laptops; both Apache 2.0 open-weights, fully air-gapped, no closed-source model dependency. Llama 3.2 1B retained as CPU-only / ablation fallback. <b>Tier 2 (optional scale-up to HMGCC's OpenAI-style endpoint):</b> any open-weights model of HMGCC's choice (e.g. Llama 3.3 70B, Qwen 2.5 72B, Gemma 4 27B). Used by the L2 verifier for higher-accuracy cross-checking, and by an automatic escalation path when Tier 1 confidence falls below threshold. Air-gap preserved (HMGCC-hosted infrastructure). <b>Tier 3 (OTShield internal dev workstation, RTX 5090 32 GB, not part of HMGCC deliverable):</b> Gemma 4 26B MoE / 31B Dense Q5_K_M for benchmark-driven model selection, conformal-prediction calibration and ablation studies. Broad multilingual coverage on Tiers 1-3, complemented by NLLB-200 (200+ languages) for translation; HMGCC priority languages (DE, JA, FR, ZH) validated and benchmarked in Phase 1.</td>
+</tr>
+<tr>
+  <td class="shade"><b class="purple">Embedding model</b></td>
+  <td><b>nomic-embed-text</b> via Ollama, 768-dim, English-centric.</td>
+  <td><b>BGE-M3</b> (BAAI, multilingual, MIT) added alongside nomic-embed-text: unified dense / sparse / multi-vector retrieval, 100+ languages, 8K input. Multilingual desirable requirement runs on this layer.</td>
+</tr>
+<tr>
+  <td class="shade"><b class="purple">Vector store</b></td>
+  <td><b>InMemoryVectorStore</b> (ConcurrentHashMap + brute-force cosine similarity, &lt; 1 ms search at &le; 500 chunks). Sufficient for prototype-scale corpora; rebuilt on each app start.</td>
+  <td><b>ChromaDB</b> (Apache 2.0, embedded mode, fully offline-capable) as persistent, scalable replacement. Existing &lt; 500-chunk InMemoryVectorStore continues to serve as a fast in-process cache. Hybrid sparse + dense retrieval enabled.</td>
+</tr>
+<tr>
+  <td class="shade"><b class="purple">Retrieval pipeline</b></td>
+  <td>Top-K = 4, min cosine relevance = 0.18, single-modal (vector only).</td>
+  <td>Hybrid retrieval: dense (BGE-M3 + nomic), sparse (BM25 over Chroma), and ICS-protocol-aware filters over the structured Inventory / Ports / Services tables. Cross-lingual expansion at query time.</td>
+</tr>
+<tr>
+  <td class="shade"><b class="purple">Verifier agent</b></td>
+  <td>None today. Answers are returned with retrieved-chunk citations only.</td>
+  <td><b>New IP, Phase 1.</b> Independent agentic verifier orchestrated with <b>LangGraph</b> (MIT). Three parallel checks: corpus re-query, trusted-source cross-check, on-wire cross-check (against OTShield PCAP / decoy data, see Annex B). Adversarial validation by Jon Medvenics with <b>PyRIT</b> (Microsoft, MIT).</td>
+</tr>
+<tr>
+  <td class="shade"><b class="purple">Confidence scoring</b></td>
+  <td>HIGH / MEDIUM / LOW confidence label and binary "needs more sources" flag emitted by the assistant on every answer, plus per-chunk cosine relevance from the retriever (not user-facing as a calibrated 0 to 1 confidence yet).</td>
+  <td><b>New IP, Phase 1.</b> Calibrated 0 to 1 confidence per claim using <b>conformal prediction</b> as the primary technique; Platt scaling and isotonic regression evaluated as baselines on the HMGCC calibration set. "Needs more sources" flag below configurable threshold.</td>
+</tr>
+<tr>
+  <td class="shade"><b class="purple">OCR / handwriting / vision</b></td>
+  <td>PDF text extraction (PDFBox via Spring) and basic image handling.</td>
+  <td><b>Tesseract 5</b> (Apache 2.0) primary OCR; <b>PaddleOCR</b> as a parallel pass for layout-heavy schematics; <b>TrOCR</b> (Microsoft, MIT) for handwriting, prioritising <b>annotations overlaid on existing documents</b> (e.g. handwritten notes on a printed schematic) over standalone notebook pages, per HMGCC Q22; <b>LayoutLMv3</b> for structured page-layout extraction. Vision captions via Gemma 4's native multimodal capability.</td>
+</tr>
+<tr>
+  <td class="shade"><b class="purple">Multilingual translation</b></td>
+  <td>Output translation in production for 5 languages (EN, TR, DE, FR, ES) via the local Ollama chat-model translator with a domain-tuned prompt that preserves citations, CVE ids, port numbers, IPs and ICS acronyms; LRU-cached per session (see A.11).</td>
+  <td><b>NLLB-200 distilled-600M</b> (Meta) packaged offline upgrades the chat-model translator and prioritises HMGCC's stated languages (DE, JA, FR, ZH); bilingual technical-term dictionary curated jointly with HMGCC; cross-lingual retrieval over BGE-M3.</td>
+</tr>
+<tr>
+  <td class="shade"><b class="purple">Frontend</b></td>
+  <td>React (TypeScript) served from localhost; existing Research Mode + SOC Mode UIs.</td>
+  <td>Retained. Phase 1 adds the verifier-output rendering, confidence visualisation and bias-flag UI components.</td>
+</tr>
+<tr>
+  <td class="shade"><b class="purple">Air-gap update bundle</b></td>
+  <td>Manual model pulls via Ollama (offline pre-pulled into project environment).</td>
+  <td>Signed <b>tar.zst</b> bundles with <b>cosign</b> (sigstore, MIT) signatures. Watch-folder ingest verifies signature before unpack. Designed in Phase 1, productionised in Phase 2.</td>
+</tr>
+</table>
+
+<p style="font-size:9pt; color:#595959; margin-top:2pt;">All Phase 1 dependencies are pinned to specific versions in the Phase 1 SBOM (CycloneDX), which is delivered with the build (see Annex C, C.4). At runtime the air-gapped tool makes no internet calls; model weights, indices and toolchain are all part of the offline install package.</p>
+
+<p><b style="color:#5B2C8A;">Why this honest "today vs. Phase 1" framing matters.</b> The HMGCC challenge sets a TRL 6 target. A TRL 6 deliverable cannot be assessed without knowing the starting point. By stating exactly what is operational today (Java + Ollama + Llama 3.2 1B + nomic-embed-text + InMemoryVectorStore) and exactly what the Phase 1 funding adds, we give HMGCC's review panel an unambiguous yardstick for measuring TRL movement at week 12.</p>
+
+<h1>A.8 Performance targets and benchmarks (TRL 6 evidence)</h1>
+
+<p>Phase 1 commits to specific, measurable success criteria, not just qualitative outcomes. The benchmark harness is defined in Sprint 1 with HMGCC and run repeatedly through Sprint 2 and Sprint 3. Targets are deliberately set at "ambitious but achievable" levels for a 12-week project against an HMGCC-supplied corpus.</p>
+
+<table>
+<tr><th style="width:38%">Metric</th><th style="width:22%" class="center">Target</th><th>Definition</th></tr>
+<tr><td><b>Hallucination rate</b> (verifier-flagged or source-contradicted claims, per 100 answers)</td><td class="center">&le; 5 %</td><td>Random sample of 200 generated claims; manually adjudicated by Jon and the HMGCC reviewer pool.</td></tr>
+<tr><td><b>Confidence calibration ECE</b> (Expected Calibration Error)</td><td class="center">&le; 0.10</td><td>Computed against a held-out calibration set with 10 confidence buckets. Conformal prediction baseline.</td></tr>
+<tr><td><b>Retrieval precision@5</b> on ICS protocol queries</td><td class="center">&ge; 0.80</td><td>HMGCC-provided test queries against the project corpus; relevance judged at chunk level.</td></tr>
+<tr><td><b>Cross-lingual retrieval recall@10</b> (English query, non-English source)</td><td class="center">&ge; 0.65</td><td>Across HMGCC priority languages (DE, JA, FR, ZH); uses synthetic + HMGCC-supplied bilingual evaluation pairs.</td></tr>
+<tr><td><b>Median end-to-end answer latency, Tier 1 edge laptop</b> (4 to 8 GB VRAM, fully air-gapped)</td><td class="center">&le; 30 s</td><td>From query submission to grounded, cited answer rendered, including local L2 verifier pass. Measured on Gemma 4 9B Q4_K_M (4 GB-class laptop) and Gemma 4 13B Q4_K_M (8 GB-class laptop).</td></tr>
+<tr><td><b>End-to-end answer latency, Tier 2 HMGCC endpoint</b> (verifier escalation path)</td><td class="center">&le; 8 s</td><td>Same flow when the L2 verifier escalates a low-confidence Tier 1 answer to HMGCC's hosted OpenAI-style endpoint (e.g. Llama 3.3 70B). Air-gap preserved through HMGCC's own infrastructure boundary.</td></tr>
+<tr><td><b>OCR + handwriting accuracy</b> on the schematic-and-notes test set</td><td class="center">&ge; 0.92 character accuracy</td><td>Standard CER on a HMGCC-representative set drawn from Sprint 1 deliverable.</td></tr>
+<tr><td><b>"Needs more sources" precision</b> (when the system flags low confidence, was it right to do so?)</td><td class="center">&ge; 0.85</td><td>Avoids the failure mode where the system over-confidently asserts thin claims.</td></tr>
+</table>
+
+<p>The TRL 6 evidence pack delivered at week 12 includes: the benchmark harness (reproducible by HMGCC), the raw measurement results, calibration plots and confusion matrices, an adjudication log, and a signed-off methodology document.</p>
+
+<h1>A.9 Verifier agent design (the L2 differentiator)</h1>
+
+<p>The verifier agent is the technical heart of how this proposal differs from off-the-shelf RAG. It is implemented as a state machine with explicit pass / flag / escalate transitions, rather than as a single LLM-judges-itself prompt.</p>
+
+<p><b>Per-claim verification protocol:</b></p>
+<ol>
+<li><b>Claim extraction.</b> Module 4 splits the draft answer into atomic claims (entity, predicate, value, citation slot).</li>
+<li><b>Independent corpus re-query.</b> For each claim, the verifier issues an independent retrieval (different prompt phrasing, different top-k) against the same corpus and measures evidence convergence.</li>
+<li><b>Trusted-source cross-check.</b> Claims relating to vendor specifications, protocol behaviour, or component data are cross-checked against the trusted-source register curated with HMGCC in S1.</li>
+<li><b>On-wire cross-check (unique to OTShield).</b> For claims about protocol behaviour, function codes, port numbers and runtime characteristics, the verifier consults OTShield's PCAP / decoy / asset evidence base. A claim like "Modbus function code 0x06 writes a single register" is verified against actual on-wire traffic captured from production decoys (see Annex B).</li>
+<li><b>Contradiction detection.</b> If two retrieval passes return mutually contradictory passages, the claim is flagged as <i>contested</i> and rendered to the researcher with both alternatives, not collapsed into a single answer.</li>
+<li><b>Confidence assignment.</b> A calibrated 0 to 1 confidence score is computed using conformal prediction over the agreement signals from steps 2 to 5.</li>
+<li><b>Threshold gate.</b> Claims below a configurable confidence threshold (default 0.6, HMGCC-tuneable) are rendered with the <i>"needs more sources"</i> flag and an automatically generated suggestion of which source classes are missing.</li>
+</ol>
+
+<p><b>Adversarial validation.</b> Jon Medvenics applies <b>PyRIT-class</b> AI red-team probes against the verifier in Sprint 2 and Sprint 3: prompt injection through ingested documents, conflicting-evidence injection, citation tampering, jailbreak via researcher-impersonating prompts, and language-switching attacks. Every successful attack is converted to a regression test.</p>
+
+<h1>A.10 Multi-modal ingest pipeline (the L1 detail)</h1>
+
+<p>Multi-modal ingest runs as a directed pipeline; each stage is independently testable and can be re-run on existing bundles without re-ingesting raw files.</p>
+
+<ul>
+<li><b class="purple">Stage 1, Format detection.</b> File type is identified from magic bytes, not extension. Routing is deterministic. The detector recognises every format in HMGCC's test-data list: PDF, Word (.docx), Excel (.xlsx), PowerPoint (.pptx), plain-text (.txt, .md, .csv), JPEG, PNG, BMP, TIFF, draw.io (.drawio XML), and scanned / photographed images. An optional desirable extension supports database access (CSV, SQL dump, XML, JDBC / ODBC) as a queryable source.</li>
+<li><b class="purple">Stage 2, Extraction.</b> PDFs through Apache PDFBox (text and basic structure) plus Tesseract / PaddleOCR fallback for scanned pages. Word, Excel, PowerPoint through <b>Apache POI</b> (Apache 2.0, Java-native, fully offline). draw.io diagrams parsed as XML and converted to a structured node-edge graph (text labels, connections and annotations preserved). Images through Gemma 4 vision + LayoutLMv3. Handwriting (both standalone notes and overlaid annotations on schematics) through TrOCR. Forum dumps and screenshots through a custom HTML / JSON normaliser plus OCR.</li>
+<li><b class="purple">Stage 2.1, Architectural-insight extraction and knowledge graph (per HMGCC Q14 + Q21 + Q34 + Q35).</b> The LLM reads the ingested <b>documentation</b> (datasheets, vendor manuals, schematics, technical PDFs, draw.io diagrams) and generates a high-level component model: firmware modules (bootloader, kernel, drivers, OTA updater), communication interfaces (UART / I2C / SPI / ethernet / Wi-Fi), trusted vs. untrusted execution domains, external dependencies (libs, 3rd-party SDKs), and attack surfaces (ports, exposed APIs, file-system mounts). The output is persisted as a <b>component knowledge graph</b>: nodes are firmware modules, communication interfaces, execution domains, external dependencies and attack surfaces; edges capture relationships such as <i>depends-on</i>, <i>exposes</i>, <i>talks-to</i>, <i>is-isolated-from</i>. The graph lives in the same SQLite / DuckDB store as the structured Inventory tables and is queryable by both the conversational Q&amp;A flow (vector + graph hybrid retrieval) and a graph-view UI element. The graph is incrementally built across all bundle documents, so cross-document hierarchies (e.g. "this firmware module depends on a 3rd-party SDK whose CVE is in the local advisories repo") become explicit. SBOM-style hierarchies and firmware memory maps are extracted in the same pass when documentation provides them. This addresses HMGCC's stated dissatisfaction with vanilla RAG (Q34: "poor handling of structured artifacts, difficulty representing hierarchies such as SBOM graphs, firmware memory maps") and answers Q35 ("Both" structured representation and Q&amp;A) directly. HMGCC test data does not include binary firmware or source code (Q21), so this extraction is documentation-driven by design. If a researcher chooses to ingest source code outside HMGCC test data, tree-sitter parsers handle the same architectural extraction at the file level; deep static analysis remains explicitly out of scope (Q14: code analysis is not a priority).</li>
+<li><b class="purple">Stage 3, Language detection.</b> Per-chunk detection using <b>fastText lid.176</b>. Triggers translation pipeline for non-English chunks; both original and translated forms are stored, citations always reference the original.</li>
+<li><b class="purple">Stage 4, ICS-specific extraction.</b> Protocol-aware extractors run after generic NLP. Each ICS protocol (Modbus, S7Comm, EtherNet/IP, OPC UA, DNP3, IEC 60870-5-104) has a dedicated extractor that recognises function codes, register addresses, object identifiers and protocol-specific terminology, and writes structured records into the Inventory / Ports / Services / Components tables.</li>
+<li><b class="purple">Stage 5, Embedding and indexing.</b> Each chunk gets a BGE-M3 dense embedding plus a sparse representation; both are stored in ChromaDB (the existing in-memory vector store is kept as a fast in-process cache). Structured records are written to SQLite / DuckDB.</li>
+<li><b class="purple">Stage 6, Provenance recording.</b> Every chunk and every structured record carries an immutable provenance record (source file hash, extraction stage, model versions, timestamp). This is what makes Findings reproducible across the project.</li>
+</ul>
+
+<h1>A.11 Multilingual / cross-lingual implementation</h1>
+
+<p><b>Existing baseline (already in production code).</b> OTShield ships an offline output translator today across <b>5 languages</b> (English, Turkish, German, French, Spanish), implemented in <code>TranslationService.java</code> as a thin layer over the local Ollama chat model. The system prompt is hand-tuned for the ICS / cyber-security domain: citation markers ([1], [2], [3], etc.), CVE ids, port numbers, IP / MAC addresses, file names, version strings and ICS acronyms (PLC, HMI, ICS, SCADA, Modbus, S7Comm, OPC UA, etc.) are preserved verbatim. Translations are LRU-cached in memory so reopening a thread does not re-translate identical content. Failure modes are non-blocking: on Ollama timeout, error or empty output the original text is returned, so translation is never load-bearing on the user flow. The frontend (<code>translationService.ts</code>, <code>/api/assistant/translate</code>) exposes the language dropdown directly in the Threads tab.</p>
+
+<p><b>Phase 1 upgrade.</b> The Phase 1 multilingual capability extends this baseline in four concrete sub-systems that map onto the desirable requirement in main proposal Section 3.</p>
+
+<ul>
+<li><b class="purple">Dedicated NMT model.</b> Distilled NLLB-200 weights prioritising HMGCC-stated languages (DE, JA, FR, ZH) are packaged offline and replace the chat-model translator on the languages it supports. Quantised to int8 to fit alongside Gemma 4 in workstation memory. NLLB-200 covers 200+ languages, so additional priorities can be activated without re-packaging. The chat-model translator is retained as a fallback for languages outside the NLLB priority set.</li>
+<li><b class="purple">Bilingual ICS-term dictionary.</b> Curated jointly with HMGCC during S3, seeded from open ICS standards (IEC 60870, IEC 61850, ISA-99 / IEC 62443 glossaries) and from OTShield's training corpus. The dictionary acts as a <i>translation override</i>: ICS-specific terms are translated through the dictionary, not through generic NLLB, to avoid loss of meaning (e.g. "function code", "coil", "holding register" are precise terms that NLLB alone would mis-translate).</li>
+<li><b class="purple">Cross-lingual retrieval.</b> BGE-M3's native multilingual embedding space allows an English query to retrieve relevant German, French, Chinese passages without round-trip translation. Translation is invoked only at <i>presentation</i> time, not at retrieval time, which preserves precision.</li>
+<li><b class="purple">Translation-quality benchmark.</b> A held-out set of 200 ICS-specific bilingual sentence pairs is used to compute BLEU and chrF++ in Sprint 2. Targets: BLEU &ge; 35, chrF++ &ge; 60 on the ICS-specific test set, deliberately stricter than generic NLLB benchmarks because the dictionary override raises the floor.</li>
+</ul>
+
+<h1>A.12 Bias mitigation (cultural-bias desirable requirement)</h1>
+
+<p>This section expands the cultural-bias mitigation summary in main proposal Section 3 desirable (c). The design follows the HMGCC Q&amp;A Q15 framing precisely: a four-layer mechanism with three user-selectable policy modes, integrated with the existing offline MT engine. The bias-flag layer sits on top of the verifier agent's output rather than inside model fine-tuning, because air-gap update bundles cannot retrain the model in place. Aligned with NCSC RTAU (Responsible Technology Adoption Unit) bias-mitigation guidance (rtau.blog.gov.uk/category/bias).</p>
+
+<h2>Three policy modes (user-selectable)</h2>
+
+<table>
+<tr><th style="width:22%">Policy</th><th>Behaviour</th></tr>
+<tr><td class="shade"><b class="purple">PROACTIVE</b></td><td>Assistant automatically pulls missing alternative-cultural sources from the local repo (or prompts the user to obtain them) and corrects biased statements without asking.</td></tr>
+<tr><td class="shade"><b class="purple">SUGGESTIVE</b></td><td>Assistant flags potential biases to the user but takes no automatic corrective action.</td></tr>
+<tr><td class="shade"><b class="purple">OFF</b></td><td>Vanilla retrieval; no bias checking. For situations where the corpus is known to be limited and the researcher wants raw output.</td></tr>
+</table>
+
+<h2>Four-layer mechanism with concrete UI flow</h2>
+
+<table>
+<tr><th style="width:18%">Layer</th><th style="width:42%">Action</th><th>User sees</th></tr>
+<tr><td class="shade"><b class="purple">1. Ingestion</b></td><td>User uploads a folder (e.g. <code>ThermoCo_T200/</code>) containing only English documents. Ingestion engine tags each chunk with <code>lang=EN</code> and <code>origin=NL</code> (vendor HQ jurisdiction). It compares against locally available repositories: "Missing Dutch source &rarr; 0/2 Dutch documents available in local repo".</td><td><b>Modal banner</b> at top of chat window: <i>"All uploaded documents for ThermoCo are English. Two Dutch advisories exist locally (see Cultural-Gap tab)."</i> If no local alternative exists, just the message about 100% English for a Dutch manufacturer.</td></tr>
+<tr><td class="shade"><b class="purple">2. Corpus audit</b></td><td>On upload completion, a corpus-level audit produces a coverage summary across all current bundles plus a follow-up <b>checklist</b>: e.g. "add Dutch security advisories", "include Chinese CERT notices".</td><td><b>Cultural-Gap tab</b> with the audit summary and checklist. Each item is actionable (click to mark resolved or to open the source-search panel).</td></tr>
+<tr><td class="shade"><b class="purple">3. Retrieval</b></td><td>Vector search returns sources; the system computes a diversity score per answer. Example: query against ThermoCo returns 1) English NVD entry (CVE-2023-1234), 2) English vendor advisory (ThermoCo-ReleaseNotes), 3) (no Dutch docs) &rarr; diversity score = 100% English.</td><td><b>Coverage label</b> appended to every answer: <i>"Coverage: English 90% / Dutch 0%"</i>. The label is clickable and opens the Cultural-Gap tab.</td></tr>
+<tr><td class="shade"><b class="purple">4. Interaction (PROACTIVE)</b></td><td>System looks for missing Dutch documentation in known sources / repos. Finds <code>ThermoCo_T200_NL_Bulletin_2023_02.pdf</code>. The <b>offline MT engine</b> (existing TranslationService for EN/TR/DE/FR/ES today; NLLB-200 distilled-600M prioritising HMGCC's stated languages DE, JA, FR, ZH in Phase 1) translates the relevant paragraph into English and adds it to the response, with a provenance link/alert.</td><td>Answer shows the translated paragraph inline, with a <b>provenance link</b> back to the original Dutch source plus an alert that the translation was machine-generated.</td></tr>
+</table>
+
+<h2>Why this design satisfies HMGCC Q15</h2>
+
+<ul>
+<li><b class="purple">Stage of workflow</b>: bias mitigation is applied at <b>all four stages</b> the bidder asked about (ingestion, retrieval, reasoning, interaction), not just one.</li>
+<li><b class="purple">User assumption correction</b>: the PROACTIVE mode automatically corrects biased statements without asking; SUGGESTIVE mode flags them; OFF mode is vanilla. The choice respects researcher autonomy.</li>
+<li><b class="purple">Concrete example</b>: the ThermoCo / Dutch flow above is the working implementation of HMGCC's worked example in Q15.</li>
+<li><b class="purple">Translator integration</b>: the offline MT engine is the same one that today serves the multilingual desirable (b); cultural-bias mitigation re-uses that infrastructure without new model deployment cost.</li>
+<li><b class="purple">Audit and explainability</b>: every coverage label, every translation, every PROACTIVE auto-pull is logged in the human-readable decision log (per HMGCC Q12) so the researcher can see exactly what the system did and why.</li>
+</ul>
+
+<p><b>Region of origin</b> is determined per source via a small lookup table built in Sprint 2 with HMGCC: vendor HQ jurisdiction, forum domain country, publication country. The lookup is open and editable by the researcher; new origins can be added via the same Cultural-Gap tab. This implements the desirable requirement <i>"recognise and mitigate cultural biases to ensure a nuanced understanding"</i> in a way that is both auditable and defensible.</p>
+
+<p style="margin-top:14pt; font-size:9pt; color:#595959; text-align:center; border-top:0.5pt solid #BFBFBF; padding-top:6pt;"><i>OFFICIAL. Submitted in confidence under HMGCC Co-Creation T&amp;Cs. End of Annex A.</i></p>
+
+</body>
+</html>

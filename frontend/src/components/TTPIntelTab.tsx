@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence, Variants } from 'framer-motion';
 
 // =====================================================================
-// Attacker TTPs & Behavioral Intelligence tab — animated edition
+// Attacker TTPs & Behavioral Intelligence tab - animated edition
 // Renders /api/honeypot/ttp-analysis as 7 widgets with staggered fade-ins,
 // growing bars, animated counters, and timeline reveal animations.
 // =====================================================================
@@ -189,7 +189,7 @@ const tierStyle = (tier: string) => {
   }
 };
 
-// ─── animated number — counts up from 0 to target on mount ──────────────
+// ─── animated number - counts up from 0 to target on mount ──────────────
 const AnimatedNumber: React.FC<{ value: number; duration?: number }> = ({
   value,
   duration = 900,
@@ -453,7 +453,7 @@ const TTPIntelTab: React.FC = () => {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-base font-semibold text-slate-900">
-              MITRE ATT&amp;CK ICS — Tactic Heatmap
+              MITRE ATT&amp;CK ICS - Tactic Heatmap
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
               Distribution of observed tactics across the ICS Kill Chain.
@@ -529,7 +529,7 @@ const TTPIntelTab: React.FC = () => {
           </div>
           {tools.length === 0 ? (
             <p className="text-xs text-slate-500">
-              No recognizable tool signatures yet — no User-Agent strings observed.
+              No recognizable tool signatures yet - no User-Agent strings observed.
             </p>
           ) : (
             <motion.ul
@@ -631,7 +631,7 @@ const TTPIntelTab: React.FC = () => {
               {report.attackerProfiles.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-4 py-6 text-center text-xs text-slate-500">
-                    No profiled attackers yet — at least 2 events per IP required.
+                    No profiled attackers yet - at least 2 events per IP required.
                   </td>
                 </tr>
               ) : (
@@ -655,7 +655,7 @@ const TTPIntelTab: React.FC = () => {
                             <Flag country={p.country} size={14} />
                             {p.country}
                           </span>
-                        ) : '—'}
+                        ) : '-'}
                       </td>
                       <td className="px-4 py-2">
                         <motion.span
@@ -727,7 +727,7 @@ const TTPIntelTab: React.FC = () => {
         </div>
         {!selectedChain ? (
           <p className="text-xs text-slate-500 py-6 text-center">
-            No multi-step kill chains detected yet — need ≥3 events per attacker.
+            No multi-step kill chains detected yet - need ≥3 events per attacker.
           </p>
         ) : (
           <div className="relative">
@@ -769,7 +769,7 @@ const TTPIntelTab: React.FC = () => {
                       </div>
                       <p className="text-xs text-violet-700 mt-0.5">{step.technique}</p>
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        {step.protocol ?? '—'} · {step.attackType ?? '—'}
+                        {step.protocol ?? '-'} · {step.attackType ?? '-'}
                       </p>
                     </div>
                   </motion.li>
@@ -927,8 +927,8 @@ const TTPIntelTab: React.FC = () => {
                     transition={{ duration: 0.25, delay: 0.04 * i }}
                     className="border-t border-slate-100 hover:bg-slate-50 transition-colors"
                   >
-                    <td className="px-4 py-2 font-mono text-xs">{p.username || '—'}</td>
-                    <td className="px-4 py-2 font-mono text-xs">{p.password || '—'}</td>
+                    <td className="px-4 py-2 font-mono text-xs">{p.username || '-'}</td>
+                    <td className="px-4 py-2 font-mono text-xs">{p.password || '-'}</td>
                     <td className="px-4 py-2 text-xs">
                       <span
                         className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ring-1 ${
@@ -964,7 +964,7 @@ const TTPIntelTab: React.FC = () => {
         {[
           {
             title: 'Burst attackers',
-            hint: 'High event rate (>10/min) — automated tool / botnet.',
+            hint: 'High event rate (>10/min) - automated tool / botnet.',
             rows: report.behavioralAnomalies.burstAttackers,
             metric: (r: BehavioralRow) => `${r.eventsPerMinute ?? 0}/min`,
             color: 'bg-rose-50 text-rose-700 ring-rose-200',
@@ -972,7 +972,7 @@ const TTPIntelTab: React.FC = () => {
           },
           {
             title: 'Slow-and-low',
-            hint: 'Long active window with low rate — likely manual recon.',
+            hint: 'Long active window with low rate - likely manual recon.',
             rows: report.behavioralAnomalies.slowLowAttackers,
             metric: (r: BehavioralRow) => `${r.activeMinutes ?? 0} min`,
             color: 'bg-amber-50 text-amber-700 ring-amber-200',
@@ -980,7 +980,7 @@ const TTPIntelTab: React.FC = () => {
           },
           {
             title: 'Multi-protocol pivots',
-            hint: '3+ distinct protocols — ICS-aware operator.',
+            hint: '3+ distinct protocols - ICS-aware operator.',
             rows: report.behavioralAnomalies.multiProtocolPivots,
             metric: (r: BehavioralRow) => `${(r.protocols ?? []).length} protos`,
             color: 'bg-fuchsia-50 text-fuchsia-700 ring-fuchsia-200',

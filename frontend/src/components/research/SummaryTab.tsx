@@ -11,7 +11,7 @@ import {
 import { listDocuments, ResearchDocument } from '../../services/researchService';
 
 /* ---------------------------------------------------------------------------
- * Research Studio — Summary tab
+ * Research Studio - Summary tab
  *
  * HMGCC requirement: "Generate a clear technical summary of the
  * product and its individual components." One summary per active
@@ -21,9 +21,9 @@ import { listDocuments, ResearchDocument } from '../../services/researchService'
  * ------------------------------------------------------------------------ */
 
 const formatRelative = (iso: string | null): string => {
-  if (!iso) return '—';
+  if (!iso) return '-';
   const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return '—';
+  if (Number.isNaN(t)) return '-';
   const diff = (Date.now() - t) / 1000;
   if (diff < 60) return `${Math.round(diff)}s ago`;
   if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
@@ -169,7 +169,7 @@ const SummaryTab: React.FC = () => {
             <div className="flex-1">
               <div className="font-semibold">Generating summary…</div>
               <div className="text-xs text-violet-700 mt-0.5">
-                Running locally on Ollama ({elapsedSecs}s elapsed). This can take a couple of minutes on CPU-only hosts. You can leave this tab and come back — progress is saved server-side.
+                Running locally on Ollama ({elapsedSecs}s elapsed). This can take a couple of minutes on CPU-only hosts. You can leave this tab and come back - progress is saved server-side.
               </div>
             </div>
           </div>

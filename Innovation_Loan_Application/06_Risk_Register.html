@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>06 — Risk Register</title>
+<style>
+body{font-family:Calibri,Arial,sans-serif;max-width:1100px;margin:30px auto;padding:0 28px;color:#222;line-height:1.5;background:#fff}
+h1{color:#1f3a5f;border-bottom:3px solid #1f3a5f;padding-bottom:8px}
+h2{color:#1f3a5f;border-left:4px solid #1f3a5f;padding-left:10px;margin-top:32px;background:#f4f6fa;padding:6px 10px}
+table{border-collapse:collapse;width:100%;margin:12px 0;font-size:12.5px}
+th{background:#1f3a5f;color:#fff;padding:6px 8px;text-align:left;vertical-align:top}
+td{border:1px solid #d5d8de;padding:6px 8px;vertical-align:top}
+.HIGH{background:#fce4d6;font-weight:600}
+.MED{background:#fff2cc;font-weight:600}
+.LOW{background:#e2efda;font-weight:600}
+.meta{background:#fff8d6;border:1px solid #e6c75a;padding:10px 14px;border-radius:4px;font-size:13px;margin:10px 0 22px}
+.callout{background:#eef3fa;border-left:4px solid #1f3a5f;padding:10px 14px;margin:14px 0}
+ul{margin:6px 0 6px 20px}
+</style>
+</head>
+<body>
+
+<h1>06 — Risk Register</h1>
+<div class="meta">
+<strong>Programme:</strong> Defence Innovation Loan FY26/27 Cycle 1 |
+<strong>Applicant:</strong> Safetech Global Limited (OTShield) |
+<strong>Scoring:</strong> Likelihood (L1-5) × Impact (I1-5) → Score 1-25 (HIGH ≥15, MED 8-14, LOW ≤7)
+</div>
+
+<h2>1. Project Delivery Risks (Technical &amp; Operational)</h2>
+
+<table>
+<tr><th>ID</th><th>Risk</th><th>L</th><th>I</th><th>Score</th><th>Mitigation</th><th>Owner</th></tr>
+<tr><td>P1</td><td>Customer-side decoy detected by sophisticated adversary, reducing intel value</td><td>3</td><td>4</td><td class="MED">12</td><td>Multi-layer behavioural mimicry; AI-verifier (Jon) checks output realism; quarterly protocol-fingerprint refresh; red-team validation by external pen-test (£25k budget)</td><td>CTO + Jon</td></tr>
+<tr><td>P2</td><td>ICS protocol coverage gaps slow customer onboarding</td><td>3</td><td>3</td><td class="MED">9</td><td>6 major protocols already covered; lab rig (£35k) supports vendor-specific extensions M3-M9; modular architecture allows fast addition</td><td>CTO + Dhruv Rathod</td></tr>
+<tr><td>P3</td><td>IEC 62443 certification delayed beyond M12 stage gate</td><td>2</td><td>4</td><td class="MED">8</td><td>Stage-gated approach (M6, M12, M18); engaged accredited assurance lab early; £25k pen-test budget; partial cert path acceptable to most CNI customers</td><td>CTO + Alan (advisor)</td></tr>
+<tr><td>P4</td><td>Threat-intel feed false positive rate too high for partner SOC adoption</td><td>3</td><td>3</td><td class="MED">9</td><td>Two-stage validation (AI-enrichment + human review); partner-SOC feedback loop; M6 launch is intentionally conservative scope</td><td>CTO + Dhruv Rathod</td></tr>
+<tr><td>P5</td><td>Pilot customer deployment friction (change control, network access)</td><td>3</td><td>3</td><td class="MED">9</td><td>Henrique (Customer Success) leads onboarding; staged deployment (sandbox → monitor-only → active deception); template change-control packets prepared M3</td><td>Henrique</td></tr>
+<tr><td>P6</td><td>Loss of key team member (CTO, Henrique) during 18-month delivery</td><td>2</td><td>4</td><td class="MED">8</td><td>Lean team with documented architecture; 3 senior advisors (Diana, Alan, Jon) provide redundancy; equity vesting / retention plans</td><td>CEO</td></tr>
+<tr><td>P7</td><td>Hire delays (no hires planned in current model — risk lower than typical)</td><td>1</td><td>2</td><td class="LOW">2</td><td>Lean structure deliberately avoids hiring dependency; existing 4 full-time + 3 advisors deliver scope</td><td>CEO</td></tr>
+</table>
+
+<h2>2. Commercial Risks</h2>
+
+<table>
+<tr><th>ID</th><th>Risk</th><th>L</th><th>I</th><th>Score</th><th>Mitigation</th><th>Owner</th></tr>
+<tr><td>C1</td><td>First CNI lighthouse pilot signing slower than M9 target</td><td>3</td><td>5</td><td class="HIGH">15</td><td>3-pipeline strategy: Cyber Runway intros, UKDI Innovation Partner channel, direct CNI outreach. Multiple parallel conversations underway. M6 is fallback signing target.</td><td>CEO + Henrique</td></tr>
+<tr><td>C2</td><td>Defence reference environment access blocked / delayed</td><td>3</td><td>4</td><td class="MED">12</td><td>UKDI Innovation Partner Paul Wright engagement; HMGCC Phase 1 channel (decision 22 May 2026); fall-back to additional CNI customer if defence path closed</td><td>CEO</td></tr>
+<tr><td>C3</td><td>Pricing pressure from US-headquartered competitors entering UK market</td><td>3</td><td>3</td><td class="MED">9</td><td>Sovereign UK positioning is a structural moat for CNI/defence customers; pricing tiers (£35-90k/yr) below US competitor average</td><td>CEO + Diana</td></tr>
+<tr><td>C4</td><td>Customer reference reluctance — CNI operators secretive about cyber posture</td><td>4</td><td>2</td><td class="MED">8</td><td>Anonymised case studies; sector-level testimonials (NCSC sector forums); private reference calls under NDA</td><td>Henrique + Diana</td></tr>
+<tr><td>C5</td><td>International expansion (Phase 3, Y3+) export-control complications</td><td>2</td><td>3</td><td class="LOW">6</td><td>Engage UK Export Control Joint Unit (ECJU) early; deception tech generally not on Wassenaar dual-use list; legal budget covers export licence applications</td><td>CEO</td></tr>
+</table>
+
+<h2>3. Financial Risks</h2>
+
+<table>
+<tr><th>ID</th><th>Risk</th><th>L</th><th>I</th><th>Score</th><th>Mitigation</th><th>Owner</th></tr>
+<tr><td>F1</td><td>VC follow-on round (£1M, of which £190K is matched funding) does not close after M9 commercial trigger</td><td>2</td><td>5</td><td class="MED">10</td><td>Primary pathway: UK cyber/defence VC with soft interest, converting on signed first paying CNI customer (M9 milestone). Fall-back pathways: R&amp;D tax credit advance, pilot revenue commitment letter, smaller angel round (£200-400k). Project drawdown gated on matched-funding confirmation — if none materialise, loan not drawn, no default risk.</td><td>CEO</td></tr>
+<tr><td>F2</td><td>Y3 (FY28) cashflow tighter than forecast (loan repayment commences Apr 2028)</td><td>2</td><td>3</td><td class="LOW">6</td><td>Y3 closing cash £667k positive (post-VC round). Net change Y3 -£241k (loan repayment + working capital), but opening £908k cushions adequately. Liquidity ratio Y3 = 11.80 (well above 1.10 target). Fall-back if needed: R&amp;D tax credit refund FY28 (~£100-150k); operating revenue scaling Y3-Y4. Y4 recovery to £1,116k closing cash.</td><td>CEO</td></tr>
+<tr><td>F3</td><td>Bridge funding shortfall ahead of first loan tranche (Aug 2026)</td><td>3</td><td>4</td><td class="MED">12</td><td>Founder time + deferred liabilities; HMGCC Phase 1 award (decision 22 May 2026); R&amp;D tax credit advance; loan drawdown timing alignment. Discussed transparently with Innovation Partner.</td><td>CEO</td></tr>
+<tr><td>F4</td><td>Pilot revenue Y2-Y3 underperforms forecast</td><td>3</td><td>3</td><td class="MED">9</td><td>Stress-test in finance model: revenue −30% scenario shows DSCR positive Y5+; pilot revenue tied to milestone gates rather than flat scaling assumption</td><td>CEO + Henrique</td></tr>
+<tr><td>F5</td><td>Subsidy intensity calculation challenged by Innovate UK</td><td>1</td><td>3</td><td class="LOW">3</td><td>GGE-based intensity ~12% (per Competition Doc §9.1: subsidy = market-rate-vs-7.4% benefit, not loan principal); well below 45% small SME cap; auto-calculated by Qualtrics portal; reconciles to xlsx model; advisor sign-off available.</td><td>CEO</td></tr>
+<tr><td>F6</td><td>Loan repayment default risk (Y4-Y8)</td><td>2</td><td>5</td><td class="MED">10</td><td>DSCR Y4=4.75, Y5=13.0, Y6=28.7, Y7=55.8 (all well above 1.0). Stress test (revenue −30%) DSCR positive from Y5. Hardship grace clause as ultimate fallback.</td><td>CEO</td></tr>
+</table>
+
+<h2>4. Strategic / External Risks</h2>
+
+<table>
+<tr><th>ID</th><th>Risk</th><th>L</th><th>I</th><th>Score</th><th>Mitigation</th><th>Owner</th></tr>
+<tr><td>S1</td><td>UK Defence procurement priorities shift away from cyber innovation</td><td>2</td><td>4</td><td class="MED">8</td><td>Diversified revenue base — defence is ~25% of Y7 revenue, CNI ~50%, international ~22%. Civilian CNI demand is recession-resistant.</td><td>CEO</td></tr>
+<tr><td>S2</td><td>Major regulatory shift (e.g., NIS2 weakening, UK pulling back on cyber mandates)</td><td>1</td><td>3</td><td class="LOW">3</td><td>Threat landscape itself is the primary demand driver, not regulation alone; OPSWAT 146% YoY attack rise drives spend regardless of regulation</td><td>CEO</td></tr>
+<tr><td>S3</td><td>Geopolitical disruption affecting trans-Atlantic expansion</td><td>2</td><td>3</td><td class="LOW">6</td><td>UK + EU NIS2 markets sufficient to support business case independently; international is upside, not core to base case</td><td>CEO + Diana</td></tr>
+<tr><td>S4</td><td>Competitive M&amp;A — major prime acquires deception incumbent and dumps prices</td><td>2</td><td>3</td><td class="LOW">6</td><td>Sovereign UK moat; OT-native specialisation; ARR growth Y3+ provides exit optionality if needed</td><td>CEO</td></tr>
+<tr><td>S5</td><td>Reputational harm from a pilot customer breach (real attack succeeds)</td><td>2</td><td>4</td><td class="MED">8</td><td>Deception is detection layer not prevention; clear customer contracting on responsibility boundaries; cyber-insurance £8k budget; standard Operating Agreement template</td><td>CEO + CTO</td></tr>
+</table>
+
+<h2>5. Risk Heatmap Summary</h2>
+
+<table>
+<tr><th>Risk level</th><th>Count</th><th>IDs</th></tr>
+<tr><td class="HIGH">HIGH (≥15)</td><td>1</td><td>C1 (pilot signing pace)</td></tr>
+<tr><td class="MED">MEDIUM (8-14)</td><td>14</td><td>P1, P2, P3, P4, P5, P6, C2, C3, C4, F1, F2, F3, F4, F6, S1, S5</td></tr>
+<tr><td class="LOW">LOW (≤7)</td><td>5</td><td>P7, C5, F5, S2, S3, S4</td></tr>
+</table>
+
+<div class="callout">
+<strong>Single HIGH risk has explicit gating logic:</strong> Pilot signing (C1) is the primary commercial milestone — the entire commercial plan and the VC follow-on round trigger both rest on signing the first paying customer by M9; mitigation is multi-channel pipeline (Cyber Runway intros, UKDI Innovation Partner channel, direct CNI outreach). Matched funding (F1) is downgraded to MEDIUM under VC-round framing because a UK cyber/defence VC has expressed soft interest and three fall-back pathways exist; project drawdown is gated on confirmation, so worst case is "loan not drawn", not "default". Both risks are managed through transparency with the Innovation Partner and structured fall-back planning.
+</div>
+
+<h2>6. Risk Review Cadence</h2>
+<ul>
+<li><strong>Weekly:</strong> CEO standup — top 3 risks tracked.</li>
+<li><strong>Monthly:</strong> Full register reviewed by CEO + CTO.</li>
+<li><strong>Quarterly:</strong> Innovation Partner update; Innovate UK milestone gate review; Risk register version-controlled.</li>
+<li><strong>Trigger-based:</strong> Any HIGH risk shift escalated within 48 hours.</li>
+</ul>
+
+<hr>
+<p style="font-size:11px;color:#888;text-align:center">
+Safetech Global Limited — OTShield — Defence Innovation Loan FY26/27 Cycle 1 — Document 06/07
+</p>
+
+</body>
+</html>

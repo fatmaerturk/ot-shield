@@ -32,7 +32,7 @@ const formatRelative = (iso: string | null): string => {
 };
 
 /**
- * Tripwire alarms banner — shown above the Fake HMI grid.
+ * Tripwire alarms banner - shown above the Fake HMI grid.
  * Sources real internal-decoy events from the OTShield backend (the
  * docker-compose tripwire fleet under /decoys/), tagged with
  * `decoySource = "internal-decoy"`. These are CRITICAL by definition:
@@ -61,7 +61,7 @@ const TripwireAlarmsBanner: React.FC = () => {
           setExternalCount(d.decoySourceBreakdown['external'] || 0);
         }
       } catch {
-        /* backend unreachable — banner just stays empty */
+        /* backend unreachable - banner just stays empty */
       }
     };
     load();

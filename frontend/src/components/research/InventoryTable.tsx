@@ -419,14 +419,14 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                       </span>
                     </td>
                     <td className="py-3 px-3 text-xs text-slate-700 font-mono">
-                      {it.reference ?? <span className="text-slate-400 font-sans">—</span>}
+                      {it.reference ?? <span className="text-slate-400 font-sans">-</span>}
                     </td>
                     <td className="py-3 px-3 text-xs text-slate-600">
                       {it.tags
                         ? it.tags.split(',').map((t, i) =>
                             <span key={i} className="inline-block mr-1 mb-0.5 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">{t.trim()}</span>
                           )
-                        : <span className="text-slate-400">—</span>}
+                        : <span className="text-slate-400">-</span>}
                     </td>
                     <td className="py-3 px-3 text-xs text-slate-500">
                       {formatRelative(it.updatedAt)}
@@ -468,9 +468,9 @@ const Labelled: React.FC<{ label: string; children: React.ReactNode }> = ({ labe
 );
 
 const formatRelative = (iso: string | null): string => {
-  if (!iso) return '—';
+  if (!iso) return '-';
   const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return '—';
+  if (Number.isNaN(t)) return '-';
   const diff = (Date.now() - t) / 1000;
   if (diff < 60) return `${Math.round(diff)}s ago`;
   if (diff < 3600) return `${Math.round(diff / 60)}m ago`;

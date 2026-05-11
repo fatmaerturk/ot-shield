@@ -72,7 +72,7 @@ interface Alert {
 }
 
 // ---------------------------------------------------------------------------
-// SLA policy — response targets per severity, in milliseconds.
+// SLA policy - response targets per severity, in milliseconds.
 // CRITICAL 2h / HIGH 8h / MEDIUM 24h / LOW 72h / INFO has no clock.
 // Used for the row badge and drawer countdown.
 // ---------------------------------------------------------------------------
@@ -176,7 +176,7 @@ function readCurrentUserName(): string {
 /**
  * Compute mean time from createdAt to a target timestamp across a set
  * of alerts, ignoring entries that don't have the target timestamp.
- * Returns {ms, count} so the caller can render "—" when nothing has
+ * Returns {ms, count} so the caller can render "-" when nothing has
  * been acknowledged yet.
  */
 function meanDurationMs(
@@ -662,7 +662,7 @@ const Alerts: React.FC = () => {
   }, [autoRefresh]);
 
   // --------------------------------------------------------------------
-  // Quick per-row action: "Assign to me" — stamps the current user onto
+  // Quick per-row action: "Assign to me" - stamps the current user onto
   // assignedTo and tries to persist via the standard assign endpoint.
   // Falls back to optimistic local state if the backend isn't wired.
   // --------------------------------------------------------------------
@@ -2508,7 +2508,7 @@ const Alerts: React.FC = () => {
         {/* Alert Statistics Dashboard.
             Seven buckets: four severity tiers, an "Unassigned" ops KPI
             (ported from the deleted AlertManagement page), plus MTTA
-            and MTTR — SOC-standard response metrics derived from each
+            and MTTR - SOC-standard response metrics derived from each
             alert's createdAt → acknowledgedAt/resolvedAt deltas. */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6">
           {[
@@ -2549,7 +2549,7 @@ const Alerts: React.FC = () => {
           <div className="relative overflow-hidden bg-white rounded-2xl p-4 ring-1 ring-slate-200/70 shadow-sm">
             <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-violet-500 to-pink-500" />
             <div className="text-3xl font-bold text-violet-700 leading-none">
-              {mtta.count === 0 ? '—' : formatShortDuration(mtta.ms)}
+              {mtta.count === 0 ? '-' : formatShortDuration(mtta.ms)}
             </div>
             <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold mt-1">MTTA</div>
             <div className="text-[10px] text-slate-400 mt-0.5">{mtta.count} ack{mtta.count === 1 ? '' : 's'}</div>
@@ -2559,7 +2559,7 @@ const Alerts: React.FC = () => {
           <div className="relative overflow-hidden bg-white rounded-2xl p-4 ring-1 ring-slate-200/70 shadow-sm">
             <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-pink-500 to-rose-500" />
             <div className="text-3xl font-bold text-pink-700 leading-none">
-              {mttr.count === 0 ? '—' : formatShortDuration(mttr.ms)}
+              {mttr.count === 0 ? '-' : formatShortDuration(mttr.ms)}
             </div>
             <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold mt-1">MTTR</div>
             <div className="text-[10px] text-slate-400 mt-0.5">{mttr.count} resolved</div>
@@ -4447,7 +4447,7 @@ const Alerts: React.FC = () => {
         </div>
       </div>
 
-      {/* Alert detail drawer — mounted at root so it floats over the
+      {/* Alert detail drawer - mounted at root so it floats over the
           whole page and doesn't participate in the main grid layout.
           The drawer handles its own Esc / backdrop dismissal. */}
       {drawerAlertId && (() => {
@@ -4731,16 +4731,16 @@ const AlertDetailDrawer: React.FC<AlertDetailDrawerProps> = ({
           <div className="grid grid-cols-2 gap-3 text-sm mb-6">
             <MetaField label="Type">{alert.type}</MetaField>
             <MetaField label="Source">{alert.source}</MetaField>
-            <MetaField label="Source IP">{alert.sourceIp ?? <span className="text-slate-400">—</span>}</MetaField>
-            <MetaField label="Destination IP">{alert.destinationIp ?? <span className="text-slate-400">—</span>}</MetaField>
-            <MetaField label="Source port">{alert.sourcePort ?? <span className="text-slate-400">—</span>}</MetaField>
-            <MetaField label="Destination port">{alert.destinationPort ?? <span className="text-slate-400">—</span>}</MetaField>
-            <MetaField label="Protocol">{alert.protocol ?? <span className="text-slate-400">—</span>}</MetaField>
-            <MetaField label="Assigned to">{alert.assignedTo ?? <span className="text-slate-400">—</span>}</MetaField>
-            <MetaField label="Detected at">{alert.timestamp ? new Date(alert.timestamp).toLocaleString() : '—'}</MetaField>
-            <MetaField label="Acknowledged at">{alert.acknowledgedAt ? new Date(alert.acknowledgedAt).toLocaleString() : <span className="text-slate-400">—</span>}</MetaField>
-            <MetaField label="Resolved at">{alert.resolvedAt ? new Date(alert.resolvedAt).toLocaleString() : <span className="text-slate-400">—</span>}</MetaField>
-            <MetaField label="MITRE">{alert.mitreId ?? <span className="text-slate-400">—</span>}</MetaField>
+            <MetaField label="Source IP">{alert.sourceIp ?? <span className="text-slate-400">-</span>}</MetaField>
+            <MetaField label="Destination IP">{alert.destinationIp ?? <span className="text-slate-400">-</span>}</MetaField>
+            <MetaField label="Source port">{alert.sourcePort ?? <span className="text-slate-400">-</span>}</MetaField>
+            <MetaField label="Destination port">{alert.destinationPort ?? <span className="text-slate-400">-</span>}</MetaField>
+            <MetaField label="Protocol">{alert.protocol ?? <span className="text-slate-400">-</span>}</MetaField>
+            <MetaField label="Assigned to">{alert.assignedTo ?? <span className="text-slate-400">-</span>}</MetaField>
+            <MetaField label="Detected at">{alert.timestamp ? new Date(alert.timestamp).toLocaleString() : '-'}</MetaField>
+            <MetaField label="Acknowledged at">{alert.acknowledgedAt ? new Date(alert.acknowledgedAt).toLocaleString() : <span className="text-slate-400">-</span>}</MetaField>
+            <MetaField label="Resolved at">{alert.resolvedAt ? new Date(alert.resolvedAt).toLocaleString() : <span className="text-slate-400">-</span>}</MetaField>
+            <MetaField label="MITRE">{alert.mitreId ?? <span className="text-slate-400">-</span>}</MetaField>
           </div>
 
           {/* Description */}

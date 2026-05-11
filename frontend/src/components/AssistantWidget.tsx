@@ -13,7 +13,7 @@ import {
 } from '../services/assistantService';
 
 /**
- * OTShield Copilot — a floating chat assistant that sits in the bottom
+ * OTShield Copilot - a floating chat assistant that sits in the bottom
  * right corner of every authenticated page. Streaming answers come from
  * the local Ollama-backed backend at `/api/assistant/chat`.
  *
@@ -24,7 +24,7 @@ import {
  *    ~380×520 panel on click.
  *  - Show liveness clearly (typing dots, streaming tokens appear as they
  *    arrive, backend health ping on mount).
- *  - Survive backend failures gracefully — a red banner tells the user
+ *  - Survive backend failures gracefully - a red banner tells the user
  *    the assistant is offline instead of leaving them staring at a spinner.
  */
 const AssistantWidget: React.FC = () => {
@@ -431,7 +431,7 @@ const EmptyState: React.FC<{ offline: boolean }> = ({ offline }) => (
     <p className="mt-1 text-xs text-slate-500 max-w-[260px]">
       {offline
         ? 'Local LLM is unavailable. Make sure the Ollama service is running and reopen the panel.'
-        : 'Deception, honeypots, Modbus/S7, case management — what would you like explained?'}
+        : 'Deception, honeypots, Modbus/S7, case management - what would you like explained?'}
     </p>
     {!offline && (
       <div className="mt-3 flex flex-wrap gap-2 justify-center">

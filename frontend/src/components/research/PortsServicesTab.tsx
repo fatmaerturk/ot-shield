@@ -1,7 +1,7 @@
 import React from 'react';
 import InventoryTable from './InventoryTable';
 
-/** Ports & Services tab — network/interface ports and running services. */
+/** Ports & Services tab - network/interface ports and running services. */
 const PortsServicesTab: React.FC = () => (
   <InventoryTable
     allowedKinds={['PORT', 'SERVICE']}

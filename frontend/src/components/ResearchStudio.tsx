@@ -13,7 +13,7 @@ import BundleSidebar from './research/BundleSidebar';
 import { useBundles } from '../contexts/BundleContext';
 
 /* ---------------------------------------------------------------------------
- * Research Studio — bundle-aware workbench
+ * Research Studio - bundle-aware workbench
  *
  * Layout is a two-column flex: a fixed-width BundleSidebar on the left
  * (the list of parallel investigations), and a content area on the
@@ -86,7 +86,7 @@ const TABS: TabDef[] = [
     key: 'vulns',
     path: '/research/vulns',
     label: 'Vulns',
-    hint: 'Vulnerability observations — researcher-authored, offline-first',
+    hint: 'Vulnerability observations - researcher-authored, offline-first',
     icon: <Icon.Shield className="w-4 h-4" />,
   },
 ];

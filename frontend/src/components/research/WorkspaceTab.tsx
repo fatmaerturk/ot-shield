@@ -5,7 +5,7 @@ import { useBundles } from '../../contexts/BundleContext';
 import api from '../../services/api';
 
 /**
- * Workspace tab — per-bundle settings.
+ * Workspace tab - per-bundle settings.
  *
  * <p>Rename the active bundle, edit tags/description, manage the watch
  * folder, and delete the bundle. HMGCC-flavoured: the watch folder is
@@ -132,7 +132,7 @@ const WorkspaceTab: React.FC = () => {
 
   /**
    * Fetch the bundle as a polished PDF report and trigger a browser
-   * download. Same pattern as {@link handleExportSnapshot} — blob
+   * download. Same pattern as {@link handleExportSnapshot} - blob
    * response so axios doesn't try to JSON-parse the bytes, header
    * sniff for filename, object URL for the download trigger.
    */
@@ -257,7 +257,7 @@ const WorkspaceTab: React.FC = () => {
               onChange={(e) => setWatchEnabled(e.target.checked)}
             />
             Enable watch folder polling
-            <span className="text-xs text-slate-400">(poller lives in Faz 4.5 — toggle is saved but inert until then)</span>
+            <span className="text-xs text-slate-400">(poller lives in Faz 4.5 - toggle is saved but inert until then)</span>
           </label>
         </div>
       </Panel>
@@ -276,7 +276,7 @@ const WorkspaceTab: React.FC = () => {
           type="button"
           onClick={() => void handleExportSnapshot()}
           disabled={exporting}
-          title="Download a single ZIP containing the full bundle — manifest, documents, threads, findings, vulns — for air-gapped hand-off."
+          title="Download a single ZIP containing the full bundle - manifest, documents, threads, findings, vulns - for air-gapped hand-off."
           className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 ring-1 ring-slate-200 hover:bg-slate-200 transition inline-flex items-center gap-1.5 disabled:opacity-50"
         >
           <Icon.Layers className="w-3.5 h-3.5" />

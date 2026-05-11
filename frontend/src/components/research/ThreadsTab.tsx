@@ -45,7 +45,7 @@ import {
 import { useBundles } from '../../contexts/BundleContext';
 
 /* ---------------------------------------------------------------------------
- * Research Studio — Threads tab
+ * Research Studio - Threads tab
  *
  * Left rail: list of persistent conversations, newest-updated first.
  * Right pane: messages for the selected thread, with a compose box that
@@ -58,9 +58,9 @@ import { useBundles } from '../../contexts/BundleContext';
  * ------------------------------------------------------------------------ */
 
 const formatRelative = (iso: string | null): string => {
-  if (!iso) return '—';
+  if (!iso) return '-';
   const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return '—';
+  if (Number.isNaN(t)) return '-';
   const diff = (Date.now() - t) / 1000;
   if (diff < 60) return `${Math.round(diff)}s ago`;
   if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
@@ -372,7 +372,7 @@ const AlternativesList: React.FC<AlternativesListProps> = ({ alternatives }) => 
           Alternative theories · {alternatives.length}
         </span>
         <span className="text-[10px] text-slate-400">
-          Contrarian review — treat as hypotheses, not answers.
+          Contrarian review - treat as hypotheses, not answers.
         </span>
       </div>
       <ol className="space-y-2">
@@ -1113,7 +1113,7 @@ const ThreadsTab: React.FC = () => {
 };
 
 // ---------------------------------------------------------------------------
-// PromoteToVulnModal — quick classifier sheet over an assistant message.
+// PromoteToVulnModal - quick classifier sheet over an assistant message.
 // The backend already copies the message text + citations verbatim; here
 // the researcher just classifies it (severity / confidence / component
 // type) so the resulting observation lands in a useful bucket.

@@ -5,10 +5,10 @@ import { motion, AnimatePresence, Variants } from 'framer-motion';
 // NIS2 Directive (EU 2022/2555) Compliance Page
 // Real, working compliance posture driven by /api/compliance/nis2/posture.
 // Four tabs:
-//   1. Article 21 Measures — status board for the 10 mandatory measures
-//   2. Incident Reporting — Article 23 24h/72h/1m clock per alert
-//   3. Evidence Library — telemetry artifacts cross-referenced to articles
-//   4. Self-Assessment — interactive questionnaire with gap analysis
+//   1. Article 21 Measures - status board for the 10 mandatory measures
+//   2. Incident Reporting - Article 23 24h/72h/1m clock per alert
+//   3. Evidence Library - telemetry artifacts cross-referenced to articles
+//   4. Self-Assessment - interactive questionnaire with gap analysis
 // =====================================================================
 
 interface OrgProfile {
@@ -91,12 +91,12 @@ const scoreColor = (score: number) => {
 };
 
 const formatDateShort = (iso: string | null): string => {
-  if (!iso) return '—';
+  if (!iso) return '-';
   return iso.replace('T', ' ').slice(0, 16);
 };
 
 const formatTimeRemaining = (deadline: string | null): string => {
-  if (!deadline) return '—';
+  if (!deadline) return '-';
   const t = new Date(deadline).getTime();
   const diff = t - Date.now();
   if (diff < 0) {

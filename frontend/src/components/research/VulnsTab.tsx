@@ -24,7 +24,7 @@ import {
 } from '../../services/vulnService';
 
 /* ---------------------------------------------------------------------------
- * Research Studio — Vulnerability Observations tab
+ * Research Studio - Vulnerability Observations tab
  *
  * HMGCC Co-Creation "Smart personal assistant for security researchers":
  * a researcher-authored hypothesis ledger with an explicit lifecycle
@@ -76,9 +76,9 @@ const confidenceStyle = (c: VulnConfidence) => {
 };
 
 const formatRelative = (iso: string | null): string => {
-  if (!iso) return '—';
+  if (!iso) return '-';
   const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return '—';
+  if (Number.isNaN(t)) return '-';
   const diff = (Date.now() - t) / 1000;
   if (diff < 60) return `${Math.round(diff)}s ago`;
   if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
@@ -327,7 +327,7 @@ const VulnsTab: React.FC = () => {
                       {' '}· {scanToast.cryptoCount} crypto
                       {' '}· {scanToast.firmwareCount} firmware
                       {' '}· {scanToast.cveCount} CVE mention(s).
-                      {' '}All land as <b>DRAFT</b> with low confidence — verify before trusting.
+                      {' '}All land as <b>DRAFT</b> with low confidence - verify before trusting.
                     </>
                   )}
                 </div>
@@ -417,7 +417,7 @@ const VulnsTab: React.FC = () => {
                         <td className="py-3 px-3 text-slate-600 text-xs">
                           {v.citations.length > 0
                             ? `${v.citations.length} cited`
-                            : <span className="text-slate-400">—</span>}
+                            : <span className="text-slate-400">-</span>}
                         </td>
                         <td className="py-3 px-3 text-slate-500 text-xs">
                           {formatRelative(v.updatedAt)}
@@ -456,7 +456,7 @@ const VulnsTab: React.FC = () => {
 };
 
 // ---------------------------------------------------------------------------
-// Select — compact dropdown used in the filter bar
+// Select - compact dropdown used in the filter bar
 // ---------------------------------------------------------------------------
 
 interface SelectProps {
@@ -486,7 +486,7 @@ const Select: React.FC<SelectProps> = ({ label, value, onChange, options, emptyL
 );
 
 // ---------------------------------------------------------------------------
-// VulnDetailDrawer — right-side slide-over
+// VulnDetailDrawer - right-side slide-over
 // ---------------------------------------------------------------------------
 
 interface VulnDetailDrawerProps {
@@ -701,7 +701,7 @@ const VulnDetailDrawer: React.FC<VulnDetailDrawerProps> = ({ id, onClose }) => {
                       onChange={(e) => setEditDraft({ ...editDraft, componentRef: e.target.value })}
                       className="w-full px-2 py-1 rounded-lg ring-1 ring-slate-200 text-sm"
                     />
-                  ) : (vuln.componentRef ?? <span className="text-slate-400">—</span>)}
+                  ) : (vuln.componentRef ?? <span className="text-slate-400">-</span>)}
                 </Field>
                 <Field label="Affected product">
                   {editing ? (
@@ -710,7 +710,7 @@ const VulnDetailDrawer: React.FC<VulnDetailDrawerProps> = ({ id, onClose }) => {
                       onChange={(e) => setEditDraft({ ...editDraft, affectedProduct: e.target.value })}
                       className="w-full px-2 py-1 rounded-lg ring-1 ring-slate-200 text-sm"
                     />
-                  ) : (vuln.affectedProduct ?? <span className="text-slate-400">—</span>)}
+                  ) : (vuln.affectedProduct ?? <span className="text-slate-400">-</span>)}
                 </Field>
                 <Field label="Severity">
                   {editing ? (
@@ -731,7 +731,7 @@ const VulnDetailDrawer: React.FC<VulnDetailDrawerProps> = ({ id, onClose }) => {
                       onChange={(e) => setEditDraft({ ...editDraft, cveId: e.target.value })}
                       className="w-full px-2 py-1 rounded-lg ring-1 ring-slate-200 text-sm font-mono"
                     />
-                  ) : (vuln.cveId ?? <span className="text-slate-400">—</span>)}
+                  ) : (vuln.cveId ?? <span className="text-slate-400">-</span>)}
                 </Field>
                 <Field label="CVSS v3.1">
                   {editing ? (
@@ -741,7 +741,7 @@ const VulnDetailDrawer: React.FC<VulnDetailDrawerProps> = ({ id, onClose }) => {
                       onChange={(e) => setEditDraft({ ...editDraft, cvssV31: e.target.value })}
                       className="w-full px-2 py-1 rounded-lg ring-1 ring-slate-200 text-sm font-mono"
                     />
-                  ) : (vuln.cvssV31 ?? <span className="text-slate-400">—</span>)}
+                  ) : (vuln.cvssV31 ?? <span className="text-slate-400">-</span>)}
                 </Field>
                 <Field label="Confidence">
                   {editing ? (
@@ -780,7 +780,7 @@ const VulnDetailDrawer: React.FC<VulnDetailDrawerProps> = ({ id, onClose }) => {
                   />
                 ) : (
                   <div className="whitespace-pre-wrap text-sm text-slate-800 bg-slate-50 rounded-lg p-3 ring-1 ring-slate-100">
-                    {vuln.summary || <span className="text-slate-400">—</span>}
+                    {vuln.summary || <span className="text-slate-400">-</span>}
                   </div>
                 )}
               </div>
@@ -800,7 +800,7 @@ const VulnDetailDrawer: React.FC<VulnDetailDrawerProps> = ({ id, onClose }) => {
                   />
                 ) : (
                   <div className="whitespace-pre-wrap text-sm text-slate-800 bg-amber-50/40 rounded-lg p-3 ring-1 ring-amber-200/60">
-                    {vuln.alternativeHypotheses || <span className="text-slate-400">—</span>}
+                    {vuln.alternativeHypotheses || <span className="text-slate-400">-</span>}
                   </div>
                 )}
               </div>
@@ -820,7 +820,7 @@ const VulnDetailDrawer: React.FC<VulnDetailDrawerProps> = ({ id, onClose }) => {
                     />
                   ) : (
                     <div className="whitespace-pre-wrap text-sm text-slate-800 bg-emerald-50/40 rounded-lg p-3 ring-1 ring-emerald-200/60">
-                      {vuln.mitigationSummary || <span className="text-slate-400">—</span>}
+                      {vuln.mitigationSummary || <span className="text-slate-400">-</span>}
                     </div>
                   )}
                 </div>
@@ -962,7 +962,7 @@ const Badge: React.FC<BadgeProps> = ({ kind, value }) => {
 };
 
 // ---------------------------------------------------------------------------
-// NewVulnModal — manual create
+// NewVulnModal - manual create
 // ---------------------------------------------------------------------------
 
 interface NewVulnModalProps {

@@ -2,7 +2,7 @@ import React from 'react';
 import InventoryTable from './InventoryTable';
 
 /**
- * Inventory tab — components and protocols.
+ * Inventory tab - components and protocols.
  *
  * <p>HMGCC requirement: "understand system architecture... physical
  * interface interactions, data interfaces and protocols." We surface

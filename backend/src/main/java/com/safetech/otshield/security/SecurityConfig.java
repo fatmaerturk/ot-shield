@@ -36,7 +36,7 @@ public class SecurityConfig {
             .csrf()
             .disable()
             .authorizeHttpRequests()
-            .requestMatchers("/api/auth/**", "/h2-console/**", "/api/upload/**", "/api/conpot/**", "/api/honeypot/**", "/api/decoy/**", "/api/deception/**", "/api/threat-intel/**", "/api/cases", "/api/cases/**", "/api/assistant/**", "/api/research/**", "/api/compliance/**", "/pcap/**", "/ws/**", "/pcap/interfaces", "/pcap/pcap-interfaces")
+            .requestMatchers("/api/auth/**", "/h2-console/**", "/api/upload/**", "/api/conpot/**", "/api/honeypot/**", "/api/decoy/**", "/api/deception/**", "/api/threat-intel/**", "/api/cases", "/api/cases/**", "/api/assistant/**", "/api/research/**", "/api/compliance/**", "/api/settings/**", "/pcap/**", "/ws/**", "/pcap/interfaces", "/pcap/pcap-interfaces")
             .permitAll()
             .requestMatchers("/api/anomalies/**").hasAnyRole("ADMIN", "ANALYST", "USER")
             .requestMatchers("/api/assets/**").hasAnyRole("ADMIN", "ANALYST", "USER")

@@ -10,7 +10,7 @@ import {
 } from '../../services/findingService';
 
 /* ---------------------------------------------------------------------------
- * Research Studio — Findings tab
+ * Research Studio - Findings tab
  *
  * The curated knowledge ledger. Rows land here either by promoting an
  * assistant message from the Threads tab or by authoring a finding
@@ -20,7 +20,7 @@ import {
 
 const formatDate = (iso: string): string => {
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
+  if (Number.isNaN(d.getTime())) return '-';
   return d.toLocaleString();
 };
 

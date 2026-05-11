@@ -117,7 +117,7 @@ const FakeHmisTab: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      {/* Tripwire alarms banner — sourced from real /api/honeypot/stats events
+      {/* Tripwire alarms banner - sourced from real /api/honeypot/stats events
           where decoySource = "internal-decoy" (the docker-compose tripwire fleet) */}
       <TripwireAlarmsBanner />
 
@@ -415,7 +415,7 @@ const FakeHmiDetailModal: React.FC<{ hmi: FakeHmiInstance; onClose: () => void }
                 </span>
               </div>
               <div className="mt-3 pt-2 border-t border-white/10 text-[9.5px] text-white/50 leading-relaxed">
-                Real Docker tripwire — every TCP probe POSTs to
+                Real Docker tripwire - every TCP probe POSTs to
                 <span className="text-emerald-300"> /api/honeypot/ingest</span> and lights up this card as a CRITICAL alarm.
               </div>
             </div>

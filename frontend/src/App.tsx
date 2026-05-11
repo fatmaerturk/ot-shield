@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
@@ -9,6 +9,7 @@ import Anomalies from './components/Anomalies';
 import Honeypot from './components/Honeypot';
 import MitreMatrix from './components/MitreMatrix';
 import UserManagement from './components/UserManagement';
+import Settings from './components/Settings';
 import ThreatIntelligence from './components/ThreatIntelligence';
 import Alerts from './components/Alerts';
 import Conpot from './components/Conpot';
@@ -20,6 +21,20 @@ import Cases from './components/Cases';
 import ResearchStudio from './components/ResearchStudio';
 import { BundleProvider } from './contexts/BundleContext';
 import { AppModeProvider, useAppMode } from './contexts/AppModeContext';
+
+/** Apply persisted theme preference before rendering routes so the
+ *  user's choice survives page reloads. Reads from localStorage; falls
+ *  back to the OS-level preference when set to 'system'. */
+function applyPersistedTheme() {
+  const saved = localStorage.getItem('themePreference');
+  if (!saved) return;
+  const dark =
+    saved === 'dark' ||
+    (saved === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  if (dark) document.documentElement.classList.add('dark');
+  else document.documentElement.classList.remove('dark');
+}
+applyPersistedTheme();
 
 /** Lightweight wrapper so every Research route shares one BundleProvider instance. */
 const ResearchRoute: React.FC = () => (
@@ -55,7 +70,9 @@ const App: React.FC = () => {
           {/* Backwards-compatible redirect: keep old /otpot URLs working */}
           <Route path="/otpot" element={<Navigate to="/attack-intelligence" replace />} />
           <Route path="/mitre-matrix" element={<PrivateRoute><MitreMatrix /></PrivateRoute>} />
-          <Route path="/user-management" element={<PrivateRoute><UserManagement /></PrivateRoute>} />
+          <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
+          {/* Backwards-compat: legacy /user-management URLs redirect into the unified Settings page */}
+          <Route path="/user-management" element={<Navigate to="/settings" replace />} />
           <Route path="/threat-intelligence" element={<PrivateRoute><ThreatIntelligence /></PrivateRoute>} />
           <Route path="/integrations/ics-decoy" element={<PrivateRoute><Conpot /></PrivateRoute>} />
           {/* Backwards-compatible redirect: keep old /integrations/conpot URLs working */}

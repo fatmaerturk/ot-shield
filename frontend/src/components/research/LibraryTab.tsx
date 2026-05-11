@@ -15,7 +15,7 @@ import {
 } from '../../services/researchService';
 
 /* ---------------------------------------------------------------------------
- * Research Studio — Library tab
+ * Research Studio - Library tab
  *
  * Extracted verbatim from the original ResearchLibrary.tsx so the new
  * tabbed workbench can host the upload flow alongside Threads and
@@ -47,9 +47,9 @@ const formatBytes = (bytes: number): string => {
 };
 
 const formatRelative = (iso: string | null): string => {
-  if (!iso) return '—';
+  if (!iso) return '-';
   const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return '—';
+  if (Number.isNaN(t)) return '-';
   const diff = (Date.now() - t) / 1000;
   if (diff < 60) return `${Math.round(diff)}s ago`;
   if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
@@ -405,7 +405,7 @@ const LibraryTab: React.FC<LibraryTabProps> = ({ onStatsChange }) => {
                 {uploading ? 'Uploading…' : dragging ? 'Release to upload' : 'Drag & drop documents here'}
               </div>
               <div className="mt-1 text-xs text-slate-500">
-                or click to browse — everything stays on this machine
+                or click to browse - everything stays on this machine
               </div>
               <button
                 type="button"
@@ -516,11 +516,11 @@ const LibraryTab: React.FC<LibraryTabProps> = ({ onStatsChange }) => {
                           }} />
                         </td>
                         <td className="py-3 px-3 text-slate-700">
-                          {doc.productLabel || <span className="text-slate-400">—</span>}
+                          {doc.productLabel || <span className="text-slate-400">-</span>}
                         </td>
                         <td className="py-3 px-3 text-slate-600">{formatBytes(doc.sizeBytes)}</td>
                         <td className="py-3 px-3 text-slate-600">
-                          {doc.pageCount ?? <span className="text-slate-400">—</span>}
+                          {doc.pageCount ?? <span className="text-slate-400">-</span>}
                         </td>
                         <td className="py-3 px-3 text-slate-600">{doc.chunkCount}</td>
                         <td className="py-3 px-3">
