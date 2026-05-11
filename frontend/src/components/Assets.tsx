@@ -361,7 +361,7 @@ const Assets: React.FC = () => {
   interface DataSourcesState {
     // system-level
     honeypotStats: Record<string, unknown> | null;
-    conpotStatus: { isRunning?: boolean; simulationMode?: boolean } | null;
+    conpotStatus: { isRunning?: boolean } | null;
     conpotLogCount: number;
     dpiSessions: Array<{ id: string; eventCount: number; firstSeen?: string; lastSeen?: string }>;
     totalDpiEvents: number;
@@ -632,7 +632,7 @@ const Assets: React.FC = () => {
           return null;
         });
       const conpotStatusP = api
-        .get<{ isRunning?: boolean; simulationMode?: boolean }>('/api/conpot/status')
+        .get<{ isRunning?: boolean }>('/api/conpot/status')
         .then(r => r.data)
         .catch(err => {
           console.warn('conpot status failed', err);
@@ -2177,7 +2177,6 @@ const Assets: React.FC = () => {
       !!dataSources.honeypotStats &&
       Object.keys(dataSources.honeypotStats).length > 0;
     const conpotRunning = !!dataSources.conpotStatus?.isRunning;
-    const conpotSimulated = !!dataSources.conpotStatus?.simulationMode;
     const dpiActive = dataSources.totalDpiEvents > 0;
 
     // ----- asset-scoped booleans
@@ -2233,11 +2232,7 @@ const Assets: React.FC = () => {
               {sourceChip(
                 'ICS decoy',
                 conpotRunning,
-                conpotRunning
-                  ? conpotSimulated
-                    ? 'sim mode'
-                    : 'live'
-                  : 'stopped'
+                conpotRunning ? 'live' : 'stopped'
               )}
               {sourceChip(
                 'Anomaly engine',

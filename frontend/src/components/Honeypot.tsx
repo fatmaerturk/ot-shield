@@ -689,7 +689,7 @@ const Honeypot: React.FC = () => {
                 <div>
                   <h3 className="text-base font-semibold text-slate-900">Global Attack Map</h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    {attackerMarkers.length} geolocated attackers · animated arcs converge on the decoy · severity-coloured
+                    {attackerMarkers.length} geolocated attackers · arcs spawn on each real honeypot hit (SSE) · severity-coloured
                   </p>
                 </div>
               </div>
@@ -729,7 +729,7 @@ const Honeypot: React.FC = () => {
                 })}
 
                 {/* SVG overlay — arcs, packets, impact ripples, country flashes */}
-                <AttackArcLayer attackers={attackerMarkers} decoy={DECOY_POS} onImpact={triggerImpact} />
+                <AttackArcLayer decoy={DECOY_POS} onImpact={triggerImpact} />
               </MapContainer>
 
               {/* Impact flash overlay — centred over map, triggered on projectile hit */}
@@ -1134,17 +1134,14 @@ interface AnimArc {
 }
 
 const AttackArcLayer: React.FC<{
-  attackers: Array<TopAttacker & { pos: L.LatLngTuple }>;
   decoy: L.LatLngTuple;
   onImpact?: (color: string) => void;
-}> = ({ attackers, decoy, onImpact }) => {
+}> = ({ decoy, onImpact }) => {
   const map = useMap();
   const [arcs, setArcs] = useState<AnimArc[]>([]);
   const [impacts, setImpacts] = useState<Array<{ id: number; bornAt: number; color: string }>>([]);
   const [flashes, setFlashes] = useState<Array<{ id: number; pos: L.LatLngTuple; bornAt: number; color: string }>>([]);
   const arcSeq = useRef(1);
-  const attackersRef = useRef(attackers);
-  useEffect(() => { attackersRef.current = attackers; }, [attackers]);
   const onImpactRef = useRef(onImpact);
   useEffect(() => { onImpactRef.current = onImpact; }, [onImpact]);
 
@@ -1174,25 +1171,50 @@ const AttackArcLayer: React.FC<{
     }, duration + 1200);
   }, [decoy]);
 
-  // Ambient storm — fires an arc every 600-1500ms using the current attacker set
+  // Real-time attack stream — one arc per persisted honeypot hit, driven by
+  // SSE from /api/honeypot/events. Position resolution mirrors the marker
+  // layer: prefer MaxMind lat/lon shipped on the event, fall back to canned
+  // country coordinates, drop the event when neither is available.
   useEffect(() => {
-    if (attackers.length === 0) return;
-    let cancelled = false;
-    let timer: number | null = null;
-    const loop = () => {
-      if (cancelled) return;
-      const pool = attackersRef.current;
-      if (pool.length > 0) {
-        const pick = pool[Math.floor(Math.random() * pool.length)];
-        if (pick) spawnAttack(pick);
+    const es = new EventSource('http://localhost:8080/api/honeypot/events');
+    es.addEventListener('attack', (ev: MessageEvent) => {
+      try {
+        const e = JSON.parse(ev.data) as {
+          sourceIp?: string;
+          lat?: number | null;
+          lon?: number | null;
+          country?: string | null;
+          city?: string | null;
+          severity?: string | null;
+          protocol?: string | null;
+        };
+        let pos: L.LatLngTuple | undefined;
+        if (typeof e.lat === 'number' && typeof e.lon === 'number') {
+          pos = [e.lat, e.lon];
+        } else if (e.country && COUNTRY_COORDS[e.country]) {
+          pos = COUNTRY_COORDS[e.country];
+        }
+        if (!pos || !e.sourceIp) return;
+        const synthetic = {
+          ip: e.sourceIp,
+          count: 1,
+          country: e.country ?? null,
+          city: e.city ?? null,
+          lat: typeof e.lat === 'number' ? e.lat : null,
+          lon: typeof e.lon === 'number' ? e.lon : null,
+          topProtocol: e.protocol ?? null,
+          highestSeverity: e.severity ?? null,
+          lastSeen: null,
+          blocked: false,
+          pos,
+        } as TopAttacker & { pos: L.LatLngTuple };
+        spawnAttack(synthetic);
+      } catch {
+        // Malformed event — ignore, the next one will arrive shortly.
       }
-      const delay = 600 + Math.random() * 900;
-      timer = window.setTimeout(loop, delay);
-    };
-    timer = window.setTimeout(loop, 400);
-    return () => { cancelled = true; if (timer) window.clearTimeout(timer); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attackers.length > 0]);
+    });
+    return () => { es.close(); };
+  }, [spawnAttack]);
 
   // rAF tick for smooth packet interpolation
   const [, setTick] = useState(0);

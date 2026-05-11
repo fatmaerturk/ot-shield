@@ -32,7 +32,6 @@ interface ConpotStats {
   errorCount: number;
   totalLogs: number;
   isRunning: boolean;
-  simulationMode: boolean;
   protocolBreakdown: Record<string, number>;
   severityBreakdown: Record<string, number>;
   modbusFunctionBreakdown: Record<string, number>;
@@ -52,7 +51,6 @@ const EMPTY_STATS: ConpotStats = {
   errorCount: 0,
   totalLogs: 0,
   isRunning: false,
-  simulationMode: false,
   protocolBreakdown: {},
   severityBreakdown: {},
   modbusFunctionBreakdown: {},

@@ -30,17 +30,14 @@ public class ConpotController {
             boolean success = conpotService.startConpot();
             response.put("success", success);
             String message;
-            if (success && conpotService.isSimulationMode()) {
-                message = "Running in simulation mode (Conpot not installed for this Python). Use Python 3.11 or 3.12 for real Conpot.";
-            } else if (success) {
+            if (success) {
                 message = "Conpot started successfully";
             } else {
                 message = conpotService.getLastStartError() != null ? conpotService.getLastStartError() : "Failed to start Conpot";
             }
             response.put("message", message);
             response.put("isRunning", conpotService.isRunning());
-            response.put("simulationMode", conpotService.isSimulationMode());
-            
+
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             logger.error("Error starting Conpot", e);
@@ -74,7 +71,6 @@ public class ConpotController {
     public ResponseEntity<Map<String, Object>> getStatus() {
         Map<String, Object> response = new HashMap<>();
         response.put("isRunning", conpotService.isRunning());
-        response.put("simulationMode", conpotService.isSimulationMode());
         response.put("remoteMode", conpotService.isRemoteMode());
         response.put("runtime", conpotService.getRuntime());
         return ResponseEntity.ok(response);

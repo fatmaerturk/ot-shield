@@ -26,6 +26,12 @@ public class HoneypotLogService {
     private final BlockingRuleService blockingRuleService;
     private final GeoIpService geoIpService;
 
+    /** Fans out persisted honeypot hits over SSE so the Attack Intelligence
+     *  map animates one arc per real event. Optional to keep the save path
+     *  decoupled from broadcast — a missing publisher is non-fatal. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private HoneypotEventPublisher eventPublisher;
+
     /** Optional — when present, every saved honeypot log produces a matching
      *  Alert row (subject to the severity floor in fanOutToAlert) so the
      *  Alerts page lights up alongside the Conpot Monitor. Wired as
@@ -322,6 +328,16 @@ public class HoneypotLogService {
         } catch (Exception e) {
             // Never let alert fan-out break the honeypot save path.
             log.warn("Alert fan-out failed for honeypot log id={}: {}", saved.getId(), e.getMessage());
+        }
+
+        // Broadcast to map-animation SSE subscribers. Skip internal noise so
+        // Docker bridge / loopback traffic doesn't trigger arcs.
+        try {
+            if (eventPublisher != null && !isInternalNoise(saved)) {
+                eventPublisher.publish(saved);
+            }
+        } catch (Exception e) {
+            log.debug("SSE publish skipped for honeypot log id={}: {}", saved.getId(), e.getMessage());
         }
 
         return saved;
