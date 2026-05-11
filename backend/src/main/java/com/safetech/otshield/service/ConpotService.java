@@ -30,15 +30,10 @@ public class ConpotService {
     private final Path logDirectory = Paths.get("conpot_logs");
     /** Last error message when start failed; cleared on success. */
     private volatile String lastStartError = null;
-    /** True when running in simulation mode (Conpot not installed or failed to start). */
-    private volatile boolean simulationMode = false;
 
     /** Optional: full path to Python executable if not in PATH (e.g. C:\\Python311\\python.exe). */
     @Value("${conpot.python.path:}")
     private String configuredPythonPath;
-    /** If false, do not fall back to simulation when Conpot is not installed (show real error). */
-    @Value("${conpot.simulation.fallback:true}")
-    private boolean simulationFallbackEnabled;
     /** Runtime for Conpot: "docker" (preferred, uses honeynet/conpot image) or "python" (subprocess). */
     @Value("${conpot.runtime:docker}")
     private String runtime;
@@ -92,10 +87,6 @@ public class ConpotService {
         return lastStartError;
     }
 
-    public boolean isSimulationMode() {
-        return simulationMode;
-    }
-
     public boolean isRemoteMode() {
         return "remote".equalsIgnoreCase(runtime);
     }
@@ -124,57 +115,26 @@ public class ConpotService {
             // Prefer Docker runtime when configured (default)
             if ("docker".equalsIgnoreCase(runtime)) {
                 String dockerCmd = findDockerCommand();
-                if (dockerCmd != null) {
-                    boolean ok = startConpotWithDocker(dockerCmd);
-                    if (ok) {
-                        simulationMode = false;
-                        return true;
-                    }
-                    // Docker present but failed — fall through to simulation if allowed
-                    if (simulationFallbackEnabled) {
-                        logger.info("Docker Conpot start failed, falling back to simulation mode: {}", lastStartError);
-                        lastStartError = null;
-                        simulationMode = true;
-                        return startSimulatedConpot();
-                    }
-                    return false;
-                } else {
+                if (dockerCmd == null) {
                     lastStartError = "Docker not found. Install Docker Desktop and ensure 'docker' is on PATH, or set conpot.docker.path in application.properties.";
                     logger.error(lastStartError);
-                    if (simulationFallbackEnabled) {
-                        logger.info("Docker not available — starting in simulation mode");
-                        lastStartError = null;
-                        simulationMode = true;
-                        return startSimulatedConpot();
-                    }
                     return false;
                 }
+                return startConpotWithDocker(dockerCmd);
             }
 
             // Legacy Python runtime path
             String pythonCommand = findPythonCommand();
-            if (pythonCommand != null) {
-                boolean success = startConpotWithPython(pythonCommand);
-                if (!success && simulationFallbackEnabled && lastStartError != null && lastStartError.contains("No module named conpot")) {
-                    // Conpot not installed for this Python. Fall back to simulation unless disabled.
-                    logger.info("Conpot module not found for this Python - starting in simulation mode");
-                    lastStartError = null;
-                    simulationMode = true;
-                    return startSimulatedConpot();
-                }
-                if (!success) {
-                    if (lastStartError == null) {
-                        lastStartError = "Conpot process failed to start. Check backend logs.";
-                    }
-                    return false;
-                }
-                simulationMode = false;
-                return true;
-            } else {
+            if (pythonCommand == null) {
                 lastStartError = "Python not found. Install Python and add it to PATH, then run: pip install conpot";
                 logger.error("No Python found: {}", lastStartError);
                 return false;
             }
+            boolean success = startConpotWithPython(pythonCommand);
+            if (!success && lastStartError == null) {
+                lastStartError = "Conpot process failed to start. Check backend logs.";
+            }
+            return success;
         } catch (Exception e) {
             lastStartError = "Error: " + e.getMessage();
             logger.error("Failed to start Conpot: {}", e.getMessage());
@@ -301,7 +261,6 @@ public class ConpotService {
 
             // Stream container stdout into the logs list
             startLogMonitoring();
-            simulationMode = false;
             isRunning = true;
             logger.info("Conpot Docker container '{}' is running", dockerContainerName);
             return true;
@@ -473,7 +432,6 @@ public class ConpotService {
             
             // Start log monitoring
             startLogMonitoring();
-            simulationMode = false;
             isRunning = true;
             logger.info("Conpot started successfully from directory: {}", workingDir.getAbsolutePath());
             return true;
@@ -483,134 +441,6 @@ public class ConpotService {
             logger.error("Failed to start Conpot with Python: {}", e.getMessage(), e);
             return false;
         }
-    }
-    
-    private boolean startSimulatedConpot() {
-        logger.info("Starting simulated Conpot for demo purposes");
-        simulationMode = true;
-        isRunning = true;
-        
-        // Create new scheduler if needed
-        if (scheduler == null || scheduler.isShutdown()) {
-            scheduler = Executors.newScheduledThreadPool(1);
-        }
-        
-        // Start simulated log generation - less frequent to avoid WebSocket issues
-        scheduler.scheduleAtFixedRate(this::generateSimulatedLogs, 0, 5, TimeUnit.SECONDS);
-        
-        return true;
-    }
-    
-    /**
-     * Public Russian IP addresses used by simulation mode. These are genuinely
-     * routable RU-allocated addresses (Rostelecom, MTS, MegaFon, VimpelCom,
-     * Yandex, Selectel, Beeline, etc.), so MaxMind GeoLite2 resolves each one
-     * to its real Russian city — Moscow, Saint Petersburg, Novosibirsk,
-     * Yekaterinburg, Kazan, Vladivostok. The map then shows attacks emanating
-     * from across Russia rather than collapsing onto a single pseudo-location.
-     */
-    private static final String[] SIMULATED_RUSSIAN_IPS = new String[] {
-        // Moscow / Central Russia
-        "95.165.163.188",   // Rostelecom, Moscow
-        "5.45.207.88",      // Selectel, Moscow
-        "176.59.3.163",     // Yandex, Moscow
-        "178.140.159.87",   // MTS, Moscow
-        "185.22.152.22",    // MegaFon, Moscow
-        "46.17.96.99",      // VimpelCom (Beeline), Moscow
-        "95.213.181.5",     // Selectel, Moscow
-        "176.192.70.58",    // MTS, Moscow
-        "37.139.41.10",     // Yandex Cloud, Moscow
-        "213.180.193.1",    // Yandex, Moscow
-        // Saint Petersburg / North-West
-        "95.213.181.6",     // Selectel, Saint Petersburg
-        "188.93.16.45",     // Rostelecom, Saint Petersburg
-        "78.107.234.7",     // Beeline, Saint Petersburg
-        "212.193.166.7",    // North-West telecom, Saint Petersburg
-        // Novosibirsk / Siberia
-        "85.114.32.12",     // Sibirtelecom, Novosibirsk
-        "176.124.193.4",    // ER-Telecom, Novosibirsk
-        // Yekaterinburg / Urals
-        "37.193.224.18",    // ER-Telecom, Yekaterinburg
-        "62.122.72.5",      // Convex, Yekaterinburg
-        // Kazan
-        "5.16.205.99",      // Tattelecom, Kazan
-        // Vladivostok / Far East
-        "212.119.224.10",   // Rostelecom, Vladivostok
-    };
-
-    private static final String[] MODBUS_OPS = new String[] {
-        "Function code 3, Address 0x0000",      // Read Holding Registers
-        "Function code 4, Address 0x0002",      // Read Input Registers
-        "Function code 1, Address 0x0000",      // Read Coils
-        "Function code 5, Address 0x0001",      // Write Single Coil
-        "Function code 6, Address 0x0001",      // Write Single Register
-        "Function code 16, Address 0x0010, count=8",
-        "Function code 23, Address 0x0020",
-    };
-
-    private final Random simRandom = new Random();
-
-    private String randomRussianIp() {
-        return SIMULATED_RUSSIAN_IPS[simRandom.nextInt(SIMULATED_RUSSIAN_IPS.length)];
-    }
-
-    private int randomEphemeralPort() {
-        return 30000 + simRandom.nextInt(35000);
-    }
-
-    private void generateSimulatedLogs() {
-        if (!isRunning) return;
-
-        java.time.LocalDateTime now = java.time.LocalDateTime.now();
-        String timestamp = now.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-
-        // Pick one of several attack scenarios and parameterise it with a fresh Russian IP each time
-        String ip = randomRussianIp();
-        int srcPort = randomEphemeralPort();
-        int scenario = simRandom.nextInt(10);
-        String logMessage;
-        switch (scenario) {
-            case 0:
-                logMessage = String.format("New Modbus connection from %s:%d. (sess-%08x)",
-                    ip, srcPort, simRandom.nextInt());
-                break;
-            case 1:
-                logMessage = String.format("Modbus request from %s: %s",
-                    ip, MODBUS_OPS[simRandom.nextInt(MODBUS_OPS.length)]);
-                break;
-            case 2:
-                logMessage = String.format("Modbus exception from %s: Illegal data address (function code 3)", ip);
-                break;
-            case 3:
-                logMessage = String.format("Modbus scan detected from %s — sweeping function codes 1-23", ip);
-                break;
-            case 4:
-                logMessage = String.format("Modbus brute force attempt from %s — credentials root/admin", ip);
-                break;
-            case 5:
-                logMessage = String.format("Modbus unauthorized write attempt from %s — coil 0x0001", ip);
-                break;
-            case 6:
-                logMessage = String.format("New HTTP connection from %s:%d. (sess-%08x) GET /login",
-                    ip, srcPort, simRandom.nextInt());
-                break;
-            case 7:
-                logMessage = String.format("HTTP request from %s: POST /admin login=admin password=123456", ip);
-                break;
-            case 8:
-                logMessage = String.format("New S7Comm connection from %s:%d. (sess-%08x)",
-                    ip, srcPort, simRandom.nextInt());
-                break;
-            case 9:
-            default:
-                logMessage = String.format("Connection reset by peer, remote: %s. (sess-%08x)",
-                    ip, simRandom.nextInt());
-                break;
-        }
-
-        String log = timestamp + " - " + logMessage;
-        logger.debug("Generated simulated log: {}", log);
-        addLog(log);
     }
     
     private boolean checkConpotPorts() {
@@ -687,9 +517,10 @@ public class ConpotService {
         }
 
         // Push this log line into the persistence pipeline so Attack Intelligence
-        // sees it. In real mode ConpotLogIntegrationService also tails the disk
-        // file on a 5s schedule, but simulation mode never writes to disk — so
-        // we invoke the parser directly here for every generated line.
+        // sees it. ConpotLogIntegrationService tails the disk file on a 5s
+        // schedule, but invoking the parser directly here ensures lines streamed
+        // from the container's stdout are persisted without waiting for the file
+        // tail to catch up.
         try {
             conpotLogIntegrationService.processLogLine(log);
         } catch (Exception e) {
@@ -852,7 +683,7 @@ public class ConpotService {
             // If we started a Docker container, stop it via the CLI so the
             // container exits cleanly (destroying the `docker run` java Process
             // alone isn't enough — dockerd keeps the container alive).
-            if ("docker".equalsIgnoreCase(runtime) && !simulationMode) {
+            if ("docker".equalsIgnoreCase(runtime)) {
                 String dockerCmd = findDockerCommand();
                 if (dockerCmd != null) {
                     try {
@@ -890,7 +721,6 @@ public class ConpotService {
             }
 
             isRunning = false;
-            simulationMode = false;
             logger.info("Conpot stopped successfully");
             return true;
         } catch (Exception e) {
@@ -923,7 +753,7 @@ public class ConpotService {
      *
      * Returns the same shape the Conpot Monitor frontend expects:
      *   totalConnections, uniqueIPs, uniqueSessions, modbusRequests,
-     *   resetConnections, errorCount, totalLogs, isRunning, simulationMode,
+     *   resetConnections, errorCount, totalLogs, isRunning,
      *   protocolBreakdown, severityBreakdown, modbusFunctionBreakdown,
      *   httpMethodBreakdown, httpPathBreakdown,
      *   topAttackers (list of {ip, attacks}),
@@ -1062,7 +892,6 @@ public class ConpotService {
         stats.put("errorCount", errorCount);
         stats.put("totalLogs", totalConnections); // same as totalConnections in DB-backed mode
         stats.put("isRunning", isRunning);
-        stats.put("simulationMode", simulationMode);
 
         // Breakdown maps
         stats.put("protocolBreakdown", protocolCounts);

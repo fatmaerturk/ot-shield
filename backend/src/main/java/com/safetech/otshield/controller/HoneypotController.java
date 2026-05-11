@@ -2,12 +2,15 @@ package com.safetech.otshield.controller;
 
 import com.safetech.otshield.model.HoneypotLog;
 import com.safetech.otshield.service.ConpotLogIntegrationService;
+import com.safetech.otshield.service.HoneypotEventPublisher;
 import com.safetech.otshield.service.HoneypotLogService;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.HashMap;
 import java.util.List;
@@ -25,6 +28,7 @@ public class HoneypotController {
 
     private final HoneypotLogService honeypotLogService;
     private final ConpotLogIntegrationService conpotLogIntegrationService;
+    private final HoneypotEventPublisher eventPublisher;
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.safetech.otshield.service.ConpotService conpotService;
@@ -44,9 +48,22 @@ public class HoneypotController {
     private String ingestToken;
 
     public HoneypotController(HoneypotLogService honeypotLogService,
-                              ConpotLogIntegrationService conpotLogIntegrationService) {
+                              ConpotLogIntegrationService conpotLogIntegrationService,
+                              HoneypotEventPublisher eventPublisher) {
         this.honeypotLogService = honeypotLogService;
         this.conpotLogIntegrationService = conpotLogIntegrationService;
+        this.eventPublisher = eventPublisher;
+    }
+
+    /**
+     * Server-Sent Events stream of real honeypot hits. The Attack Intelligence
+     * map subscribes here and spawns one animated arc per "attack" event so the
+     * visualisation reflects actual telemetry instead of a random timer.
+     * Internal-noise rows are filtered upstream in HoneypotLogService.
+     */
+    @GetMapping(value = "/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter streamEvents() {
+        return eventPublisher.register();
     }
 
     @GetMapping("/logs")

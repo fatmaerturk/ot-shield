@@ -36,7 +36,7 @@ ChartJS.register(
 );
 
 // =====================================================================
-//   Types - match /api/honeypot/stats response
+//   Types — match /api/honeypot/stats response
 // =====================================================================
 
 interface HourlyPoint {
@@ -139,7 +139,7 @@ const EMPTY_STATS: HoneypotStats = {
 };
 
 // =====================================================================
-//   Icons (inline SVG - consistent stroke-based style)
+//   Icons (inline SVG — consistent stroke-based style)
 // =====================================================================
 
 const Icon = {
@@ -227,7 +227,7 @@ L.Icon.Default.mergeOptions({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
-// Decoy location (Ankara) - destination for the attack arcs
+// Decoy location (Ankara) — destination for the attack arcs
 const DECOY_POS: L.LatLngTuple = [39.9334, 32.8597];
 
 // --------- Custom Leaflet divIcons for animated markers -----------
@@ -338,7 +338,7 @@ function isoFor(country: string | null | undefined): string | null {
 
 /** Render a country flag as an SVG image (works on every OS, including
  *  Windows where emoji flags don't render natively). Uses flagcdn.com
- *  free CDN - small (≈1kb each, served as PNG/SVG with caching).
+ *  free CDN — small (≈1kb each, served as PNG/SVG with caching).
  *  Falls back to a globe glyph when the country is not in the mapping. */
 const Flag: React.FC<{ country: string | null | undefined; size?: number; className?: string }> = ({
   country,
@@ -377,7 +377,7 @@ const Honeypot: React.FC = () => {
   const [reportTab, setReportTab] = useState<'threat-intel' | 'geographic' | 'time-analytics' | 'owasp' | 'event-distribution' | 'watchlist'>('threat-intel');
   const [mainTab, setMainTab] = useState<'overview' | 'ttp'>('overview');
   const [selectedAttacker, setSelectedAttacker] = useState<TopAttacker | null>(null);
-  // Impact flash state - increments on each projectile hit so we can rotate keys
+  // Impact flash state — increments on each projectile hit so we can rotate keys
   const [impactFlash, setImpactFlash] = useState<{ id: number; color: string } | null>(null);
   const impactCounter = useRef(0);
   const triggerImpact = (color: string) => {
@@ -516,8 +516,8 @@ const Honeypot: React.FC = () => {
   const hasData = stats.totalAttacks > 0;
 
   // Markers for the map. Resolution order:
-  //   1. Backend-provided lat/lon (from MaxMind) - most accurate
-  //   2. Canned country capital coords - fallback when city resolution fails
+  //   1. Backend-provided lat/lon (from MaxMind) — most accurate
+  //   2. Canned country capital coords — fallback when city resolution fails
   // Entries with no usable coords are skipped.
   const attackerMarkers = useMemo(() => {
     return stats.topSourceIps
@@ -689,7 +689,7 @@ const Honeypot: React.FC = () => {
                 <div>
                   <h3 className="text-base font-semibold text-slate-900">Global Attack Map</h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    {attackerMarkers.length} geolocated attackers · animated arcs converge on the decoy · severity-coloured
+                    {attackerMarkers.length} geolocated attackers · arcs spawn on each real honeypot hit (SSE) · severity-coloured
                   </p>
                 </div>
               </div>
@@ -699,7 +699,7 @@ const Honeypot: React.FC = () => {
               <MapContainer center={[25, 15]} zoom={2} scrollWheelZoom={false} style={{ height: '100%', width: '100%' }}>
                 <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; <a href="https://carto.com/">CARTO</a>' />
 
-                {/* Decoy marker - pulsing target */}
+                {/* Decoy marker — pulsing target */}
                 <Marker position={DECOY_POS} icon={decoyIcon}>
                   <Popup>
                     <div className="text-xs">
@@ -728,11 +728,11 @@ const Honeypot: React.FC = () => {
                   );
                 })}
 
-                {/* SVG overlay - arcs, packets, impact ripples, country flashes */}
-                <AttackArcLayer attackers={attackerMarkers} decoy={DECOY_POS} onImpact={triggerImpact} />
+                {/* SVG overlay — arcs, packets, impact ripples, country flashes */}
+                <AttackArcLayer decoy={DECOY_POS} onImpact={triggerImpact} />
               </MapContainer>
 
-              {/* Impact flash overlay - centred over map, triggered on projectile hit */}
+              {/* Impact flash overlay — centred over map, triggered on projectile hit */}
               {impactFlash && (
                 <div
                   key={impactFlash.id}
@@ -745,7 +745,7 @@ const Honeypot: React.FC = () => {
                 />
               )}
 
-              {/* Legend overlay - bottom left, above Leaflet attribution */}
+              {/* Legend overlay — bottom left, above Leaflet attribution */}
               <div className="absolute left-3 bottom-8 z-[500] bg-slate-900/85 backdrop-blur-sm ring-1 ring-white/10 rounded-xl px-3 py-2.5 shadow-lg text-xs text-white">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1.5">Severity</p>
                 <div className="flex items-center gap-2 mb-1">
@@ -766,7 +766,7 @@ const Honeypot: React.FC = () => {
                 </div>
               </div>
 
-              {/* Live counter pill - top right of map */}
+              {/* Live counter pill — top right of map */}
               <div className="absolute right-3 top-3 z-[500] bg-slate-900/85 backdrop-blur-sm ring-1 ring-white/10 rounded-xl px-3 py-2 shadow-lg text-xs text-white flex items-center gap-2">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
@@ -1134,17 +1134,14 @@ interface AnimArc {
 }
 
 const AttackArcLayer: React.FC<{
-  attackers: Array<TopAttacker & { pos: L.LatLngTuple }>;
   decoy: L.LatLngTuple;
   onImpact?: (color: string) => void;
-}> = ({ attackers, decoy, onImpact }) => {
+}> = ({ decoy, onImpact }) => {
   const map = useMap();
   const [arcs, setArcs] = useState<AnimArc[]>([]);
   const [impacts, setImpacts] = useState<Array<{ id: number; bornAt: number; color: string }>>([]);
   const [flashes, setFlashes] = useState<Array<{ id: number; pos: L.LatLngTuple; bornAt: number; color: string }>>([]);
   const arcSeq = useRef(1);
-  const attackersRef = useRef(attackers);
-  useEffect(() => { attackersRef.current = attackers; }, [attackers]);
   const onImpactRef = useRef(onImpact);
   useEffect(() => { onImpactRef.current = onImpact; }, [onImpact]);
 
@@ -1174,25 +1171,50 @@ const AttackArcLayer: React.FC<{
     }, duration + 1200);
   }, [decoy]);
 
-  // Ambient storm - fires an arc every 600-1500ms using the current attacker set
+  // Real-time attack stream — one arc per persisted honeypot hit, driven by
+  // SSE from /api/honeypot/events. Position resolution mirrors the marker
+  // layer: prefer MaxMind lat/lon shipped on the event, fall back to canned
+  // country coordinates, drop the event when neither is available.
   useEffect(() => {
-    if (attackers.length === 0) return;
-    let cancelled = false;
-    let timer: number | null = null;
-    const loop = () => {
-      if (cancelled) return;
-      const pool = attackersRef.current;
-      if (pool.length > 0) {
-        const pick = pool[Math.floor(Math.random() * pool.length)];
-        if (pick) spawnAttack(pick);
+    const es = new EventSource('http://localhost:8080/api/honeypot/events');
+    es.addEventListener('attack', (ev: MessageEvent) => {
+      try {
+        const e = JSON.parse(ev.data) as {
+          sourceIp?: string;
+          lat?: number | null;
+          lon?: number | null;
+          country?: string | null;
+          city?: string | null;
+          severity?: string | null;
+          protocol?: string | null;
+        };
+        let pos: L.LatLngTuple | undefined;
+        if (typeof e.lat === 'number' && typeof e.lon === 'number') {
+          pos = [e.lat, e.lon];
+        } else if (e.country && COUNTRY_COORDS[e.country]) {
+          pos = COUNTRY_COORDS[e.country];
+        }
+        if (!pos || !e.sourceIp) return;
+        const synthetic = {
+          ip: e.sourceIp,
+          count: 1,
+          country: e.country ?? null,
+          city: e.city ?? null,
+          lat: typeof e.lat === 'number' ? e.lat : null,
+          lon: typeof e.lon === 'number' ? e.lon : null,
+          topProtocol: e.protocol ?? null,
+          highestSeverity: e.severity ?? null,
+          lastSeen: null,
+          blocked: false,
+          pos,
+        } as TopAttacker & { pos: L.LatLngTuple };
+        spawnAttack(synthetic);
+      } catch {
+        // Malformed event — ignore, the next one will arrive shortly.
       }
-      const delay = 600 + Math.random() * 900;
-      timer = window.setTimeout(loop, delay);
-    };
-    timer = window.setTimeout(loop, 400);
-    return () => { cancelled = true; if (timer) window.clearTimeout(timer); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attackers.length > 0]);
+    });
+    return () => { es.close(); };
+  }, [spawnAttack]);
 
   // rAF tick for smooth packet interpolation
   const [, setTick] = useState(0);
