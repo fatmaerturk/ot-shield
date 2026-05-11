@@ -330,10 +330,15 @@ public class HoneypotLogService {
             log.warn("Alert fan-out failed for honeypot log id={}: {}", saved.getId(), e.getMessage());
         }
 
-        // Broadcast to map-animation SSE subscribers. Skip internal noise so
-        // Docker bridge / loopback traffic doesn't trigger arcs.
+        // Broadcast to map-animation SSE subscribers. Skip:
+        //   - internal noise (Docker bridge / loopback) so self-traffic doesn't trigger arcs
+        //   - logs that matched a block rule — the "Blocked" KPI then carries real meaning
+        //     ("this attack was suppressed from the live feed"), instead of being a flag
+        //     attached to a still-animated event.
         try {
-            if (eventPublisher != null && !isInternalNoise(saved)) {
+            if (eventPublisher != null
+                && !isInternalNoise(saved)
+                && !Boolean.TRUE.equals(saved.getIsBlocked())) {
                 eventPublisher.publish(saved);
             }
         } catch (Exception e) {
