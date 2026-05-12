@@ -467,6 +467,41 @@ public class HoneypotLogService {
         return result;
     }
 
+    /**
+     * Walk every honeypot_logs row and strip the literal "\r\n" / "\n" / "\t"
+     * sequences that Conpot's Python bytes repr leaked into usernameAttempt
+     * and passwordAttempt before the parser sanitiser was added. Idempotent —
+     * already-clean rows are skipped, so safe to re-run after a future schema
+     * change. Returns { scanned, updated }.
+     */
+    public Map<String, Object> backfillCredentialCleanup() {
+        List<HoneypotLog> all = honeypotLogRepository.findAll();
+        int scanned = all.size();
+        int updated = 0;
+        for (HoneypotLog hp : all) {
+            String u = hp.getUsernameAttempt();
+            String p = hp.getPasswordAttempt();
+            String uClean = ConpotLogIntegrationService.sanitizeCredential(u);
+            String pClean = ConpotLogIntegrationService.sanitizeCredential(p);
+            boolean changed = false;
+            if (!java.util.Objects.equals(u, uClean)) { hp.setUsernameAttempt(uClean); changed = true; }
+            if (!java.util.Objects.equals(p, pClean)) { hp.setPasswordAttempt(pClean); changed = true; }
+            if (changed) {
+                try {
+                    honeypotLogRepository.save(hp);
+                    updated++;
+                } catch (Exception e) {
+                    log.warn("Credential cleanup skipped honeypot id={}: {}", hp.getId(), e.getMessage());
+                }
+            }
+        }
+        Map<String, Object> result = new HashMap<>();
+        result.put("scanned", scanned);
+        result.put("updated", updated);
+        log.info("Credential cleanup complete: scanned={}, updated={}", scanned, updated);
+        return result;
+    }
+
     private static String buildAlertTitle(HoneypotLog hp, boolean isInternalDecoy) {
         String proto = hp.getProtocol() != null ? hp.getProtocol() : "TCP";
         String ip    = hp.getSourceIp() != null ? hp.getSourceIp() : "unknown";

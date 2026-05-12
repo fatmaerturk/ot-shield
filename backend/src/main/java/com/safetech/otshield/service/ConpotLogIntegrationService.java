@@ -159,6 +159,15 @@ public class ConpotLogIntegrationService {
             } catch (Exception ignored) {}
         }
 
+        // Conpot's FTP/Telnet handlers log raw request bytes via Python's
+        // bytes repr (e.g. b'admin\r\n'), so the captured credential ends up
+        // with the literal four-character sequence "\r\n" baked into the
+        // value — not an actual CR/LF that .trim() would strip. Sanitise the
+        // captured values before persisting so the Top Credentials chart shows
+        // "admin" instead of "admin\r\n".
+        username = sanitizeCredential(username);
+        password = sanitizeCredential(password);
+
         Matcher uaM = userAgentPattern.matcher(line);
         if (uaM.find()) userAgent = uaM.group(1).trim();
 
@@ -512,6 +521,24 @@ public class ConpotLogIntegrationService {
         }
     }
     
+    /**
+     * Strip the literal escape sequences (\r, \n, \t) that Conpot leaks into
+     * its log output via Python's bytes repr — and any actual control chars
+     * that happen to slip through. Trims whitespace and returns null when the
+     * remainder is empty so the dashboard's "Top Credentials" chart doesn't
+     * grow blank rows. Cap at 64 chars to match the regex capture limit.
+     */
+    static String sanitizeCredential(String s) {
+        if (s == null) return null;
+        // Remove literal backslash-r / backslash-n / backslash-t (Conpot bytes repr leak)
+        String out = s.replaceAll("\\\\[rnt]", "");
+        // Remove any actual control characters too
+        out = out.replaceAll("[\\r\\n\\t\\f\\v]", "");
+        out = out.trim();
+        if (out.isEmpty()) return null;
+        return out.length() > 64 ? out.substring(0, 64) : out;
+    }
+
     public void resetLogPosition() {
         lastProcessedPosition = 0;
         logger.info("Reset Conpot log integration position");
