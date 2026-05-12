@@ -145,6 +145,17 @@ public class HoneypotController {
         return ResponseEntity.ok(result);
     }
 
+    /**
+     * One-shot cleanup: strip literal "\r\n" / "\n" / "\t" sequences from
+     * usernameAttempt and passwordAttempt across every existing row. Run this
+     * once after deploying the parser sanitiser to clean rows ingested before
+     * the fix. Idempotent.
+     */
+    @PostMapping("/logs/cleanup-credentials")
+    public ResponseEntity<Map<String, Object>> cleanupCredentials() {
+        return ResponseEntity.ok(honeypotLogService.backfillCredentialCleanup());
+    }
+
     @PostMapping("/logs")
     public ResponseEntity<HoneypotLog> addLog(@RequestBody Map<String, Object> logData) {
         try {
