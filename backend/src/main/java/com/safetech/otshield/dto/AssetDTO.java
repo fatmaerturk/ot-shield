@@ -26,6 +26,7 @@ public class AssetDTO {
     private Asset.AssetType assetType;
     private Asset.AssetCategory assetCategory;
     private Asset.PurdueLevel purdueLevel;
+    private String protocol;
     private String manufacturer;
     private String model;
     private String serialNumber;

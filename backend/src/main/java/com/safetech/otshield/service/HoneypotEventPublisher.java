@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit;
  * Fans out newly persisted honeypot logs to all connected Attack Intelligence
  * clients over Server-Sent Events. Each browser tab opens a single long-lived
  * GET /api/honeypot/events stream and receives one "attack" event per real
- * persisted hit — the map animation is driven by these events instead of the
+ * persisted hit - the map animation is driven by these events instead of the
  * previous ambient-storm timer, so arc spawns correspond to real telemetry.
  */
 @Service
@@ -41,7 +41,7 @@ public class HoneypotEventPublisher {
     }
 
     public SseEmitter register() {
-        SseEmitter emitter = new SseEmitter(0L); // no timeout — clients hold the connection
+        SseEmitter emitter = new SseEmitter(0L); // no timeout - clients hold the connection
         emitters.add(emitter);
         emitter.onCompletion(() -> emitters.remove(emitter));
         emitter.onTimeout(() -> { emitters.remove(emitter); emitter.complete(); });

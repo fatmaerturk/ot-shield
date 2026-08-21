@@ -44,7 +44,7 @@ public class AuditLog {
     @Column(name = "source_ip", length = 64)
     private String sourceIp;
 
-    /** Outcome — SUCCESS / FAILURE / PARTIAL. */
+    /** Outcome - SUCCESS / FAILURE / PARTIAL. */
     @Column(name = "outcome", length = 32)
     private String outcome;
 

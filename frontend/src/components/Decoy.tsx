@@ -9,6 +9,7 @@ import {
   DecoyStats,
   DecoyProtocol,
   EngagementStatus,
+  DecoyRecommendation,
 } from '../services/decoyService';
 import { Icon, PageHero, Panel, severityStyle } from './theme';
 import PayloadInspector from './decoy/PayloadInspector';
@@ -17,6 +18,8 @@ import ResponseActionBar from './decoy/ResponseActionBar';
 import WorldAttackerMap from './decoy/WorldAttackerMap';
 import FacilityTopologyMap from './decoy/FacilityTopologyMap';
 import FakeHmisTab from './decoy/hmi/FakeHmisTab';
+import DecoyThreatCopilot from './decoy/DecoyThreatCopilot';
+import SegmentPlanPanel from './decoy/SegmentPlanPanel';
 
 /**
  * Decoy Layer
@@ -70,8 +73,75 @@ const Decoy: React.FC = () => {
   const [streamConnected, setStreamConnected] = useState(false);
   const [liveArc, setLiveArc] = useState<{ engagementId: string; ts: number } | null>(null);
   const [topTab, setTopTab] = useState<'engagements' | 'fakeHmis'>('engagements');
+  const [recommendations, setRecommendations] = useState<DecoyRecommendation[]>([]);
+  const [showRecs, setShowRecs] = useState(true);
+  const [deploying, setDeploying] = useState<string | null>(null);
+  const [deployingAll, setDeployingAll] = useState(false);
+  const [undeploying, setUndeploying] = useState<string | null>(null);
+
+  // ---- Deception coverage summary (derived from the recommendations) ----
+  const coveredCount = recommendations.filter((r) => r.alreadyDeployed).length;
+  const highGaps = recommendations.filter((r) => !r.alreadyDeployed && r.priority === 'HIGH');
+  const coveragePct = recommendations.length
+    ? Math.round((coveredCount / recommendations.length) * 100)
+    : 0;
 
   const streamCloseRef = useRef<(() => void) | null>(null);
+
+  // ---- Adaptive decoy recommendations (self-configuring deception) ----
+  const loadRecommendations = () =>
+    decoyService.getRecommendations()
+      .then(setRecommendations)
+      .catch(() => { /* non-fatal: panel just stays empty */ });
+
+  useEffect(() => {
+    loadRecommendations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ---- One-click deploy: register the decoy + route its traffic, then refresh ----
+  const handleDeploy = async (r: DecoyRecommendation) => {
+    setDeploying(r.protocol);
+    try {
+      await decoyService.deployDecoy(r);
+      await loadAll();            // new decoy card + engagements
+      await loadRecommendations(); // rec flips to "deployed"
+    } catch {
+      /* swallow - button re-enables */
+    } finally {
+      setDeploying(null);
+    }
+  };
+
+  // ---- Undeploy an operator-deployed decoy: remove it + stop routing, refresh ----
+  const handleUndeploy = async (r: DecoyRecommendation) => {
+    setUndeploying(r.protocol);
+    try {
+      await decoyService.undeployDecoy(r.protocol);
+      await loadAll();            // decoy card + its engagements fall away
+      await loadRecommendations(); // rec flips back to a gap
+    } catch {
+      /* swallow - button re-enables */
+    } finally {
+      setUndeploying(null);
+    }
+  };
+
+  // ---- Close every HIGH-priority coverage gap in one click ----
+  const handleDeployAll = async () => {
+    setDeployingAll(true);
+    try {
+      for (const r of highGaps) {
+        await decoyService.deployDecoy(r);
+      }
+      await loadAll();
+      await loadRecommendations();
+    } catch {
+      /* swallow */
+    } finally {
+      setDeployingAll(false);
+    }
+  };
 
   // ---- Initial load ----
   const loadAll = async () => {
@@ -199,6 +269,124 @@ const Decoy: React.FC = () => {
           {error}
         </div>
       )}
+
+      {/* Adaptive decoy recommendations - self-configuring deception */}
+      {showRecs && recommendations.length > 0 && (
+        <Panel
+          title="Recommended decoys"
+          subtitle="Auto-derived from your real assets + observed attacks - deploy these so the deception fabric mirrors your environment."
+          icon={<Icon.Shield />}
+          actions={
+            <div className="flex items-center gap-2">
+              {highGaps.length > 0 && (
+                <button
+                  onClick={handleDeployAll}
+                  disabled={deployingAll}
+                  className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white hover:shadow disabled:opacity-50 whitespace-nowrap"
+                >
+                  {deployingAll ? 'Deploying...' : `Close all gaps (${highGaps.length})`}
+                </button>
+              )}
+              <button
+                onClick={() => setShowRecs(false)}
+                className="text-xs text-slate-400 hover:text-slate-600"
+              >
+                Dismiss
+              </button>
+            </div>
+          }
+        >
+          {/* Deception coverage summary */}
+          <div className="mb-3 flex items-center gap-3">
+            <div className="flex-1">
+              <div className="flex items-center justify-between text-[11px] text-slate-600 mb-1">
+                <span className="font-semibold">Deception coverage</span>
+                <span>
+                  {coveredCount}/{recommendations.length} protocols covered
+                  {highGaps.length > 0 && <span className="text-rose-600 font-semibold"> · {highGaps.length} gap{highGaps.length === 1 ? '' : 's'}</span>}
+                </span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-slate-200 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-violet-500 to-emerald-500 transition-all"
+                  style={{ width: `${coveragePct}%` }}
+                />
+              </div>
+            </div>
+            <span className="text-lg font-bold text-slate-900 tabular-nums">{coveragePct}%</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {recommendations.map((r) => (
+              <div
+                key={r.protocol}
+                className={`rounded-xl p-3 ring-1 ${
+                  r.alreadyDeployed ? 'bg-slate-50 ring-slate-200' : 'bg-white ring-rose-200'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        r.priority === 'HIGH'
+                          ? 'bg-rose-100 text-rose-700'
+                          : r.priority === 'MEDIUM'
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      {r.priority}
+                    </span>
+                    <span className="text-sm font-semibold text-slate-900">{r.protocol}</span>
+                    <span className="text-xs text-slate-500 truncate">
+                      {r.suggestedVendor} · {r.suggestedModel}
+                    </span>
+                  </div>
+                  {r.alreadyDeployed ? (
+                    <div className="flex items-center gap-2 whitespace-nowrap">
+                      <span className="text-[10px] text-emerald-600 font-semibold">✓ deployed</span>
+                      {r.undeployable && (
+                        <button
+                          onClick={() => handleUndeploy(r)}
+                          disabled={undeploying === r.protocol}
+                          className="text-[10px] font-semibold px-2 py-1 rounded-lg ring-1 ring-slate-300 text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                        >
+                          {undeploying === r.protocol ? 'Removing…' : 'Undeploy'}
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleDeploy(r)}
+                      disabled={deploying === r.protocol}
+                      className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white hover:shadow disabled:opacity-50 whitespace-nowrap"
+                    >
+                      {deploying === r.protocol ? 'Deploying…' : 'Deploy'}
+                    </button>
+                  )}
+                </div>
+                <p className="mt-1.5 text-xs text-slate-600 leading-snug">{r.rationale}</p>
+                <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-slate-500">
+                  {r.attackCount > 0 && (
+                    <span className="px-1.5 py-0.5 rounded bg-slate-100">
+                      {r.attackCount} probes · {r.uniqueAttackers} IPs
+                    </span>
+                  )}
+                  {r.assetCount > 0 && (
+                    <span className="px-1.5 py-0.5 rounded bg-slate-100">
+                      {r.assetCount} matching asset{r.assetCount === 1 ? '' : 's'}
+                    </span>
+                  )}
+                  <span className="px-1.5 py-0.5 rounded bg-slate-100">port {r.suggestedPort}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      )}
+
+      {/* Segment-aware placement plan - where twins should sit */}
+      <SegmentPlanPanel />
 
       {/* Top tab bar */}
       <div className="flex items-center gap-2 border-b border-slate-200">
@@ -331,6 +519,7 @@ const Decoy: React.FC = () => {
                   engagement={selected}
                   onActionApplied={() => loadAll()}
                 />
+                {selected.attackerIp && <DecoyThreatCopilot ip={selected.attackerIp} />}
               </Panel>
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div className="lg:col-span-5">

@@ -48,6 +48,11 @@ public class CaseService {
     }
 
     @Transactional(readOnly = true)
+    public Optional<CaseDTO> getByCaseNumber(String caseNumber) {
+        return caseRepository.findByCaseNumber(caseNumber).map(this::toDetailDTO);
+    }
+
+    @Transactional(readOnly = true)
     public CaseStatsDTO stats() {
         LocalDateTime sevenDaysAgo = LocalDateTime.now().minusDays(7);
 

@@ -190,13 +190,33 @@ This isn’t just monitoring – it’s about empowering OT teams to detect, ana
   - *"Top attack types and frequencies"*
   - *"Most targeted assets"*
 
-#### **Conpot Integration**
-*"We've integrated Conpot, the leading industrial honeypot, for enhanced threat detection."*
+#### **Two-Tier Deception Architecture (Production + Research Decoys)**
+*"Behind that map sits the part most platforms can't show you. We run a two-tier deception architecture. In the security literature these map to the two classic roles of a honeypot — a* **production decoy** *for detection, and a* **research decoy** *for intelligence. We operate both, and they feed each other."*
+
+**Tier 1 — Internal tripwire decoys (production deception):**
+*"Inside your OT network we place protocol-aware decoy assets — fake HMIs and controllers that look exactly like the real industrial gear on your floor. These are tripwires, what the literature calls canaries or honeytokens. No legitimate operator, no engineering workstation, no historian ever has a reason to talk to them. So the moment anything connects — a single packet — it is, by definition, a high-confidence intrusion signal with near-zero false positives. This is how we catch an attacker who has already breached IT and is moving laterally toward your controllers. It aligns directly with the MITRE Engage adversary-engagement framework and the assume-breach posture regulators now expect under NIS2 and IEC 62443."*
+
+**Tier 2 — Internet-exposed research decoys (research deception):**
+*"Outside, on the public internet, we operate a research decoy fabric that mimics live ICS endpoints. It protects no plant — its job is to be attacked, so we learn. Every probe, credential attempt and protocol exploit is captured, fingerprinted, and mapped onto MITRE ATT&CK for ICS. That gives you strategic early warning: which ICS protocols, which techniques, which campaigns are trending in the wild — before they reach your perimeter."*
+
+**The feedback loop:**
+*"This is what turns two decoys into one system. The intelligence from the external research layer continuously sharpens the detection logic protecting your internal network. The external layer tells us what's coming; the internal layer tells us if it's already inside — all in a single pane of glass."*
 
 **Actions:**
-- Show Conpot logs
-- Demonstrate log analysis
-- Show threat intelligence feeds
+- Show the internal tripwire decoy assets and a captured lateral-movement alert (critical, near-zero false positive)
+- Switch to the internet-exposed research decoy feed: live attacker sessions, geography, captured TTPs
+- Show the ATT&CK for ICS mapping and how external intelligence feeds internal detection
+
+**Key Features to Highlight:**
+- **Production layer (detection)**
+  - *"Tripwire decoys inside the OT network — any interaction is a breach signal"*
+  - *"Built for lateral-movement detection under an assume-breach model"*
+- **Research layer (intelligence)**
+  - *"Internet-exposed decoys gathering real ICS attacker behaviour"*
+  - *"Strategic early warning, not just IP blocklists"*
+- **MITRE alignment**
+  - *"Defensive deception mapped to MITRE Engage"*
+  - *"Attacker behaviour mapped to MITRE ATT&CK for ICS"*
 
 ---
 

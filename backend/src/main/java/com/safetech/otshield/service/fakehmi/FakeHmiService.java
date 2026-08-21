@@ -173,7 +173,7 @@ public class FakeHmiService {
      *   1. an INTERACTION row (CONFIG_PROBE for read-style protocols,
      *      CONTROL_WRITE for known write/command protocols) so the threat
      *      score and Recent Interactions feed both light up.
-     *   2. a CRITICAL alarm on the HMI's alarm strip — a single inbound
+     *   2. a CRITICAL alarm on the HMI's alarm strip - a single inbound
      *      connection to a tripwire HMI is by definition lateral movement.
      *   3. WebSocket envelopes so the FakeHmisTab card flashes immediately.
      */
@@ -193,7 +193,7 @@ public class FakeHmiService {
         if (hmiId == null && siteTag != null && !siteTag.isBlank()) {
             hmiId = hmiBySiteTag.get(siteTag.trim());
         }
-        if (hmiId == null) return; // unknown tripwire — leave the HoneypotLog row but skip routing
+        if (hmiId == null) return; // unknown tripwire - leave the HoneypotLog row but skip routing
         FakeHmiInstanceDTO h = instances.get(hmiId);
         if (h == null) return;
 
@@ -233,13 +233,13 @@ public class FakeHmiService {
         ixEnv.put("interaction", ix);
         emit(ixEnv);
 
-        // 3) Raise a CRITICAL alarm — every tripwire hit is lateral movement
+        // 3) Raise a CRITICAL alarm - every tripwire hit is lateral movement
         HmiAlarmDTO a = new HmiAlarmDTO();
         a.setId("alm-tw-" + seq.getAndIncrement());
         a.setTag("tripwire");
         a.setSeverity(HmiAlarmSeverity.CRITICAL);
         a.setMessage(String.format(
-            "Lateral-movement probe on %s tripwire (%s) from %s:%s — site %s, dst :%s",
+            "Lateral-movement probe on %s tripwire (%s) from %s:%s - site %s, dst :%s",
             proto, vendor != null ? vendor : "GENERIC",
             src, sourcePort != null ? sourcePort.toString() : "?",
             site, destPort != null ? destPort.toString() : "?"));
@@ -489,7 +489,7 @@ public class FakeHmiService {
             a.setId("alm-seed-" + h.getId());
             a.setSeverity(HmiAlarmSeverity.LOW);
             a.setMessage("Tripwire HMI on " + h.getIpAddress() + ":" + h.getPort()
-                + " online — no inbound connections (healthy)");
+                + " online - no inbound connections (healthy)");
             a.setTs(Instant.now().minusSeconds(120));
             a.setAcknowledged(true);
             a.setSource("Tripwire");

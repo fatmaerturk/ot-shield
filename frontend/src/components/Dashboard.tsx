@@ -222,6 +222,10 @@ const Dashboard: React.FC = () => {
   const [analysisSearch, setAnalysisSearch] = useState<string>('');
   const [analysisProtocolFilter, setAnalysisProtocolFilter] = useState<string>('');
   const uploadPageSize = 500;
+  // Upper bound on packets loaded into the on-screen table in one pass. The full
+  // capture is always parsed and persisted (DPI events + asset discovery); this
+  // only bounds the raw-packet preview so a huge capture stays responsive.
+  const MAX_TABLE_PACKETS = 50000;
   const [ioas, setIOAs] = useState<IOA[]>([]);
 
   // Function to convert IOA to Alert and send to backend
@@ -299,9 +303,20 @@ const Dashboard: React.FC = () => {
     }
   }, []);
 
-  // Add useEffect to sync packetInfos with localStorage
+  // Persist the packet preview so a reload keeps it - but localStorage is only
+  // ~5MB, so a large capture (tens of thousands of packets) blows the quota.
+  // Cache only a small preview, and never let a quota error crash the UI; the
+  // full parsed traffic always lives in the DPI / Network Topology views.
   useEffect(() => {
-    localStorage.setItem('packetInfos', JSON.stringify(packetInfos));
+    try {
+      if (packetInfos.length > 0 && packetInfos.length <= 1500) {
+        localStorage.setItem('packetInfos', JSON.stringify(packetInfos));
+      } else {
+        localStorage.removeItem('packetInfos');
+      }
+    } catch {
+      try { localStorage.removeItem('packetInfos'); } catch { /* ignore */ }
+    }
   }, [packetInfos]);
 
   // Framer Motion variants for table animation
@@ -492,7 +507,12 @@ const Dashboard: React.FC = () => {
           message: string;
         };
       }>(
-        '/api/upload/pcap',
+        // Return the whole capture in one pass (the backend parses the full file
+        // regardless, and re-requesting pages would re-parse and duplicate the
+        // stored DPI events). Cap the on-screen table at MAX_TABLE_PACKETS so a
+        // very large capture stays responsive; the full parsed traffic is always
+        // available in the DPI / Network Topology views.
+        `/api/upload/pcap?page=0&size=${MAX_TABLE_PACKETS}`,
         formData,
         {
           headers: {
@@ -506,9 +526,12 @@ const Dashboard: React.FC = () => {
       setTotalPacketCount(total);
       setPacketInfos(packets || []);
       setIOAs(detectedIoas ? detectedIoas.map(mapIOAToMitre) : []);
-      
+
       // Handle asset detection message
-      let statusMessage = `File analyzed: ${total} packets found, showing first ${packets.length} packets.`;
+      const shown = packets ? packets.length : 0;
+      let statusMessage = shown >= total
+        ? `File analyzed: all ${total.toLocaleString()} packets loaded.`
+        : `File analyzed: ${total.toLocaleString()} packets found, showing ${shown.toLocaleString()} (full parsed traffic is in the Network Topology / DPI views).`;
       if (assetDetection?.assetsDetected) {
         statusMessage += ` ${assetDetection.message}`;
       }

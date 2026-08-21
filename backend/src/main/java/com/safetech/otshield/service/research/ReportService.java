@@ -29,9 +29,9 @@ import java.util.Optional;
 
 /**
  * Renders a tear-down research report as a single PDF the analyst can
- * hand to a reviewer. The report is deliberately linear — cover,
+ * hand to a reviewer. The report is deliberately linear - cover,
  * executive summary, findings ledger, vulnerability observations,
- * thread transcripts (with citations and consistency warnings) — so a
+ * thread transcripts (with citations and consistency warnings) - so a
  * PDF reader with no interactive chrome is enough to read the whole
  * investigation end-to-end.
  *
@@ -185,7 +185,7 @@ public class ReportService {
                         String tag = "user".equalsIgnoreCase(m.getRole()) ? "Q:" : "A:";
                         writer.writeParagraph(indent(tag + " " + safe(m.getContent()), 3));
                         if ("assistant".equalsIgnoreCase(m.getRole())) {
-                            String confLabel = m.getConfidence() == null ? "—" : m.getConfidence();
+                            String confLabel = m.getConfidence() == null ? "-" : m.getConfidence();
                             String nmsLabel = m.getNeedsMoreSources() == null
                                     ? ""
                                     : (m.getNeedsMoreSources() ? " · needs more sources" : "");
@@ -262,7 +262,7 @@ public class ReportService {
     }
 
     // ------------------------------------------------------------------
-    // PageWriter — tiny helper that abstracts "current page + cursor"
+    // PageWriter - tiny helper that abstracts "current page + cursor"
     // so the report-building code stays linear.
     // ------------------------------------------------------------------
 

@@ -137,6 +137,13 @@ export const alertService = {
     return response.data;
   },
 
+  // Alerts linked to an asset: attacks on the protocol it speaks (the protocol
+  // its decoy mirrors) plus any alert that directly references its IP.
+  getAlertsForAsset: async (assetId: string): Promise<Alert[]> => {
+    const response = await api.get<Alert[]>(`/api/decoy/asset-alerts/${encodeURIComponent(assetId)}`);
+    return Array.isArray(response.data) ? response.data : [];
+  },
+
   // Get alerts by date range
   getAlertsByDateRange: async (startDate: string, endDate: string): Promise<Alert[]> => {
     const params = new URLSearchParams({ startDate, endDate });

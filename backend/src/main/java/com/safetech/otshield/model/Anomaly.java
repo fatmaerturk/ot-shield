@@ -187,9 +187,11 @@ public class Anomaly {
     // Helper methods
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        detectedAt = LocalDateTime.now();
-        isActive = true;
+        if (createdAt == null) createdAt = LocalDateTime.now();
+        // Preserve a caller-supplied detection time (e.g. the DPI rule engine sets
+        // it from the packet's event time); only default it when absent.
+        if (detectedAt == null) detectedAt = LocalDateTime.now();
+        if (isActive == null) isActive = true;
         if (status == null) {
             status = AnomalyStatus.DETECTED;
         }

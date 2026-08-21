@@ -22,7 +22,7 @@ public class NIS2ComplianceController {
         this.service = service;
     }
 
-    /** Full posture payload — drives the page. */
+    /** Full posture payload - drives the page. */
     @GetMapping("/posture")
     public ResponseEntity<Map<String, Object>> getPosture() {
         try {

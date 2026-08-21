@@ -64,7 +64,7 @@ public class ThreadController {
 
     /**
      * Generate 2–3 contrarian alternative hypotheses for the given
-     * assistant message. Synchronous — this call blocks for up to ~45s
+     * assistant message. Synchronous - this call blocks for up to ~45s
      * (the underlying {@link AlternativesService} enforces its own
      * timeout). The parsed list is persisted onto the message so
      * subsequent GETs of the transcript surface it immediately, and

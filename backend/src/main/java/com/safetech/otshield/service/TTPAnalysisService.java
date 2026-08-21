@@ -12,7 +12,7 @@ import java.util.stream.Collectors;
 /**
  * Computes attacker TTPs (Tactics, Techniques, Procedures) and behavioral
  * intelligence from collected honeypot logs. All numbers are derived from
- * the honeypot_logs table — no external feeds. The output drives the
+ * the honeypot_logs table - no external feeds. The output drives the
  * "Attacker TTPs &amp; Behavioral Intel" tab on the Attack Intelligence page.
  */
 @Service
@@ -54,7 +54,7 @@ public class TTPAnalysisService {
     }
 
     // ───────────────────────────────────────────────────────────
-    // 1. ATTACKER PROFILES — per-IP behavior summary
+    // 1. ATTACKER PROFILES - per-IP behavior summary
     // ───────────────────────────────────────────────────────────
     private List<Map<String, Object>> buildAttackerProfiles(List<HoneypotLog> logs) {
         Map<String, List<HoneypotLog>> byIp = logs.stream()
@@ -296,40 +296,40 @@ public class TTPAnalysisService {
     private String describeTool(String tool) {
         switch (tool) {
             case "Mirai-class IoT botnet":
-                return "Default-credential IoT botnet — opportunistic, very high volume.";
+                return "Default-credential IoT botnet - opportunistic, very high volume.";
             case "Nikto":
-                return "Web vulnerability scanner — produces dense HTTP probe waves.";
+                return "Web vulnerability scanner - produces dense HTTP probe waves.";
             case "Nmap NSE":
                 return "Service/version detection scanner with ICS scripts.";
             case "Mass scanner (masscan/zmap)":
-                return "Internet-wide port scanner — pre-attack reconnaissance.";
+                return "Internet-wide port scanner - pre-attack reconnaissance.";
             case "Metasploit":
-                return "Exploitation framework — likely targeted operator.";
+                return "Exploitation framework - likely targeted operator.";
             case "sqlmap":
-                return "SQL injection tester — web-app-focused attacker.";
+                return "SQL injection tester - web-app-focused attacker.";
             case "Hydra/Medusa":
                 return "Credential brute-force tool.";
             case "Dir brute-forcer":
                 return "Directory/path enumerator (dirb, gobuster, dirbuster).";
             case "Custom Python script":
-                return "Custom tooling — possibly hand-rolled exploit / scraper.";
+                return "Custom tooling - possibly hand-rolled exploit / scraper.";
             case "Manual / curl":
-                return "Hand-driven probing — likely a human investigator.";
+                return "Hand-driven probing - likely a human investigator.";
             case "Manual / wget":
-                return "Hand-driven probing — likely a human investigator.";
+                return "Hand-driven probing - likely a human investigator.";
             case "Shodan/Censys crawler":
-                return "Internet asset indexing service — passive recon.";
+                return "Internet asset indexing service - passive recon.";
             case "Brute-force tool (Hydra-class)":
                 return "Inferred from sustained credential attempts.";
             case "Modbus client (pymodbus/msf)":
-                return "Direct Modbus library use — ICS-aware attacker.";
+                return "Direct Modbus library use - ICS-aware attacker.";
             default:
                 return "Unrecognized tool signature.";
         }
     }
 
     // ───────────────────────────────────────────────────────────
-    // 4. KILL CHAINS — per-attacker timeline of tactic progression
+    // 4. KILL CHAINS - per-attacker timeline of tactic progression
     // ───────────────────────────────────────────────────────────
     private List<Map<String, Object>> buildKillChains(List<HoneypotLog> logs) {
         Map<String, List<HoneypotLog>> byIp = logs.stream()
@@ -407,7 +407,7 @@ public class TTPAnalysisService {
     }
 
     // ───────────────────────────────────────────────────────────
-    // 6. CREDENTIAL INTELLIGENCE — wordlist family detection
+    // 6. CREDENTIAL INTELLIGENCE - wordlist family detection
     // ───────────────────────────────────────────────────────────
     private Map<String, Object> buildCredentialIntelligence(List<HoneypotLog> logs) {
         // Families inferred from credential overlap
@@ -475,7 +475,7 @@ public class TTPAnalysisService {
     }
 
     // ───────────────────────────────────────────────────────────
-    // 7. BEHAVIORAL ANOMALIES — burst, slow-low, multi-protocol pivot
+    // 7. BEHAVIORAL ANOMALIES - burst, slow-low, multi-protocol pivot
     // ───────────────────────────────────────────────────────────
     private Map<String, Object> buildBehavioralAnomalies(List<HoneypotLog> logs) {
         Map<String, List<HoneypotLog>> byIp = logs.stream()
@@ -501,31 +501,31 @@ public class TTPAnalysisService {
                 .map(HoneypotLog::getProtocol).filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
-            // Burst — high event rate (>10 events/min sustained)
+            // Burst - high event rate (>10 events/min sustained)
             if (eventsPerMin > 10 && events.size() >= 30) {
                 Map<String, Object> r = new LinkedHashMap<>();
                 r.put("sourceIp", ip);
                 r.put("eventsPerMinute", Math.round(eventsPerMin * 10.0) / 10.0);
                 r.put("totalEvents", events.size());
-                r.put("note", "High-rate burst — automated tool / botnet.");
+                r.put("note", "High-rate burst - automated tool / botnet.");
                 burstAttackers.add(r);
             }
-            // Slow-low — long active window with very low rate (suggests manual)
+            // Slow-low - long active window with very low rate (suggests manual)
             if (minutes >= 60 && eventsPerMin < 1.0 && events.size() >= 5) {
                 Map<String, Object> r = new LinkedHashMap<>();
                 r.put("sourceIp", ip);
                 r.put("activeMinutes", minutes);
                 r.put("totalEvents", events.size());
-                r.put("note", "Slow-and-low pattern — possible manual reconnaissance.");
+                r.put("note", "Slow-and-low pattern - possible manual reconnaissance.");
                 slowLowAttackers.add(r);
             }
-            // Multi-protocol pivot — 3+ distinct protocols (ICS-aware)
+            // Multi-protocol pivot - 3+ distinct protocols (ICS-aware)
             if (protos.size() >= 3) {
                 Map<String, Object> r = new LinkedHashMap<>();
                 r.put("sourceIp", ip);
                 r.put("protocols", new ArrayList<>(new TreeSet<>(protos)));
                 r.put("totalEvents", events.size());
-                r.put("note", "Pivots across multiple OT/IT protocols — ICS-aware operator.");
+                r.put("note", "Pivots across multiple OT/IT protocols - ICS-aware operator.");
                 pivotAttackers.add(r);
             }
         }

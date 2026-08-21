@@ -99,14 +99,14 @@ public class ConpotService {
         lastStartError = null;
         if (isRunning) {
             logger.warn("Conpot is already running");
-            lastStartError = "Conpot is already running.";
+            lastStartError = "Internet-exposed decoy is already running.";
             return false;
         }
 
         // Remote runtime: Conpot runs on a separate host (e.g. GCP VM) and ships
         // logs via /api/honeypot/ingest. Nothing to start locally.
         if ("remote".equalsIgnoreCase(runtime)) {
-            lastStartError = "Conpot is configured as remote. Logs are ingested from /api/honeypot/ingest. No local container is started.";
+            lastStartError = "Decoy is configured as remote. Logs are ingested via /api/honeypot/ingest. No local container is started.";
             logger.info(lastStartError);
             return false;
         }
@@ -126,13 +126,13 @@ public class ConpotService {
             // Legacy Python runtime path
             String pythonCommand = findPythonCommand();
             if (pythonCommand == null) {
-                lastStartError = "Python not found. Install Python and add it to PATH, then run: pip install conpot";
+                lastStartError = "Python not found. Install Python and add it to PATH to run a local decoy.";
                 logger.error("No Python found: {}", lastStartError);
                 return false;
             }
             boolean success = startConpotWithPython(pythonCommand);
             if (!success && lastStartError == null) {
-                lastStartError = "Conpot process failed to start. Check backend logs.";
+                lastStartError = "Internet-exposed decoy process failed to start. Check backend logs.";
             }
             return success;
         } catch (Exception e) {
@@ -254,7 +254,7 @@ public class ConpotService {
                 } catch (IOException ignored) {}
                 if (err.length() > 200) err.setLength(200);
                 lastStartError = err.length() > 0
-                    ? "Conpot container exited (code " + exitCode + "): " + err
+                    ? "Decoy container exited (code " + exitCode + "): " + err
                     : "Conpot container exited with code " + exitCode + ". Check Docker Desktop is running and ports are free.";
                 return false;
             }
@@ -682,7 +682,7 @@ public class ConpotService {
         try {
             // If we started a Docker container, stop it via the CLI so the
             // container exits cleanly (destroying the `docker run` java Process
-            // alone isn't enough — dockerd keeps the container alive).
+            // alone isn't enough - dockerd keeps the container alive).
             if ("docker".equalsIgnoreCase(runtime)) {
                 String dockerCmd = findDockerCommand();
                 if (dockerCmd != null) {
@@ -822,7 +822,7 @@ public class ConpotService {
             if (typeLower.contains("exception") || typeLower.contains("error")
                 || descLower.contains("exception") || descLower.contains("illegal")) errorCount++;
 
-            // Modbus function codes — pulled from description/payload if present
+            // Modbus function codes - pulled from description/payload if present
             String hay = (row.getDescription() == null ? "" : row.getDescription()) + " "
                        + (row.getPayload() == null ? "" : row.getPayload()) + " "
                        + (row.getAttackType() == null ? "" : row.getAttackType());
@@ -861,7 +861,7 @@ public class ConpotService {
             })
             .collect(java.util.stream.Collectors.toList());
 
-        // Hourly series — ordered 0..23
+        // Hourly series - ordered 0..23
         List<Map<String, Object>> hourlySeries = new ArrayList<>();
         for (int h = 0; h < 24; h++) {
             Map<String, Object> m = new HashMap<>();

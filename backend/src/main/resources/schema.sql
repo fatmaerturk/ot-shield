@@ -2,8 +2,10 @@
 DROP TABLE IF EXISTS user_groups CASCADE;
 DROP TABLE IF EXISTS audit_records CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
-DROP TABLE IF EXISTS asset_tags CASCADE;
-DROP TABLE IF EXISTS assets CASCADE;
+-- assets + asset_tags are NOT dropped on boot: the inventory is discovered from
+-- uploaded/live traffic and must persist across restarts.
+-- DROP TABLE IF EXISTS asset_tags CASCADE;
+-- DROP TABLE IF EXISTS assets CASCADE;
 DROP TABLE IF EXISTS anomaly_tags CASCADE;
 DROP TABLE IF EXISTS anomaly_indicators CASCADE;
 DROP TABLE IF EXISTS anomalies CASCADE;
@@ -79,7 +81,7 @@ CREATE TABLE audit_records (
 );
 
 -- Create assets table
-CREATE TABLE assets (
+CREATE TABLE IF NOT EXISTS assets (
     id                    VARCHAR(36)   PRIMARY KEY,
     name                  VARCHAR(255)  NOT NULL,
     description           TEXT,
@@ -88,6 +90,7 @@ CREATE TABLE assets (
     asset_type            VARCHAR(50)   NOT NULL,
     asset_category        VARCHAR(50),
     purdue_level          VARCHAR(20),
+    protocol              VARCHAR(32),
     manufacturer          VARCHAR(255),
     model                 VARCHAR(255),
     serial_number         VARCHAR(255),
@@ -125,7 +128,7 @@ CREATE TABLE assets (
 );
 
 -- Create asset_tags table for ElementCollection
-CREATE TABLE asset_tags (
+CREATE TABLE IF NOT EXISTS asset_tags (
     asset_id VARCHAR(36) NOT NULL,
     tag      VARCHAR(255)
 );
@@ -192,25 +195,25 @@ CREATE TABLE anomaly_indicators (
 );
 
 -- Add indexes for better performance
-CREATE INDEX idx_assets_ip_address ON assets(ip_address);
-CREATE INDEX idx_assets_mac_address ON assets(mac_address);
-CREATE INDEX idx_assets_hostname ON assets(hostname);
-CREATE INDEX idx_assets_asset_type ON assets(asset_type);
-CREATE INDEX idx_assets_purdue_level ON assets(purdue_level);
-CREATE INDEX idx_assets_criticality_level ON assets(criticality_level);
-CREATE INDEX idx_assets_is_active ON assets(is_active);
-CREATE INDEX idx_assets_is_online ON assets(is_online);
-CREATE INDEX idx_assets_last_seen ON assets(last_seen);
-CREATE INDEX idx_assets_created_at ON assets(created_at);
-CREATE INDEX idx_assets_updated_at ON assets(updated_at);
-CREATE INDEX idx_assets_manufacturer ON assets(manufacturer);
-CREATE INDEX idx_assets_location ON assets(location);
-CREATE INDEX idx_assets_department ON assets(department);
-CREATE INDEX idx_assets_owner ON assets(owner);
-CREATE INDEX idx_assets_risk_score ON assets(risk_score);
-CREATE INDEX idx_assets_vulnerability_count ON assets(vulnerability_count);
-CREATE INDEX idx_assets_next_maintenance ON assets(next_maintenance);
-CREATE INDEX idx_assets_warranty_expiry ON assets(warranty_expiry);
+CREATE INDEX IF NOT EXISTS idx_assets_ip_address ON assets(ip_address);
+CREATE INDEX IF NOT EXISTS idx_assets_mac_address ON assets(mac_address);
+CREATE INDEX IF NOT EXISTS idx_assets_hostname ON assets(hostname);
+CREATE INDEX IF NOT EXISTS idx_assets_asset_type ON assets(asset_type);
+CREATE INDEX IF NOT EXISTS idx_assets_purdue_level ON assets(purdue_level);
+CREATE INDEX IF NOT EXISTS idx_assets_criticality_level ON assets(criticality_level);
+CREATE INDEX IF NOT EXISTS idx_assets_is_active ON assets(is_active);
+CREATE INDEX IF NOT EXISTS idx_assets_is_online ON assets(is_online);
+CREATE INDEX IF NOT EXISTS idx_assets_last_seen ON assets(last_seen);
+CREATE INDEX IF NOT EXISTS idx_assets_created_at ON assets(created_at);
+CREATE INDEX IF NOT EXISTS idx_assets_updated_at ON assets(updated_at);
+CREATE INDEX IF NOT EXISTS idx_assets_manufacturer ON assets(manufacturer);
+CREATE INDEX IF NOT EXISTS idx_assets_location ON assets(location);
+CREATE INDEX IF NOT EXISTS idx_assets_department ON assets(department);
+CREATE INDEX IF NOT EXISTS idx_assets_owner ON assets(owner);
+CREATE INDEX IF NOT EXISTS idx_assets_risk_score ON assets(risk_score);
+CREATE INDEX IF NOT EXISTS idx_assets_vulnerability_count ON assets(vulnerability_count);
+CREATE INDEX IF NOT EXISTS idx_assets_next_maintenance ON assets(next_maintenance);
+CREATE INDEX IF NOT EXISTS idx_assets_warranty_expiry ON assets(warranty_expiry);
 
 -- Add indexes for anomalies table
 CREATE INDEX idx_anomalies_title ON anomalies(title);
@@ -421,10 +424,14 @@ CREATE INDEX idx_nis2_compliance_reports_type ON nis2_compliance_reports(report_
 CREATE INDEX idx_nis2_compliance_reports_generated_by ON nis2_compliance_reports(generated_by);
 CREATE INDEX idx_nis2_compliance_reports_status ON nis2_compliance_reports(status);
 
--- Add unique constraints
-ALTER TABLE assets ADD CONSTRAINT uk_assets_ip_address UNIQUE (ip_address);
-ALTER TABLE assets ADD CONSTRAINT uk_assets_mac_address UNIQUE (mac_address);
-ALTER TABLE assets ADD CONSTRAINT uk_assets_hostname UNIQUE (hostname);
+-- Unique constraints as idempotent unique indexes (assets table now persists
+-- across boots, so ALTER TABLE ADD CONSTRAINT - which has no IF NOT EXISTS in
+-- Postgres - would fail on the second run). A unique index enforces the same
+-- rule and matches the name of the constraint's backing index, so it is a no-op
+-- when the constraint already exists.
+CREATE UNIQUE INDEX IF NOT EXISTS uk_assets_ip_address ON assets(ip_address);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_assets_mac_address ON assets(mac_address);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_assets_hostname ON assets(hostname);
 
 -- =============================================================================
 -- Phase-3 DPI (Deep Packet Inspection) events
@@ -827,5 +834,41 @@ CREATE TABLE IF NOT EXISTS inventory_extraction_jobs (
     started_at     TIMESTAMP,
     finished_at    TIMESTAMP
 );
+
+-- Deployed decoys (one-click "self-configuring deception") - persisted so
+-- operator-deployed decoys survive a backend restart. Keyed by protocol.
+CREATE TABLE IF NOT EXISTS deployed_decoy (
+    protocol VARCHAR(64) PRIMARY KEY,
+    vendor   VARCHAR(255),
+    model    VARCHAR(255),
+    port     INTEGER
+);
+
+-- Honeytokens (decoy lures) planted in the real environment + their trips.
+CREATE TABLE IF NOT EXISTS honeytoken (
+    id              VARCHAR(64) PRIMARY KEY,
+    type            VARCHAR(32),
+    label           VARCHAR(255),
+    note            TEXT,
+    token_value     TEXT,
+    match_value     VARCHAR(255),
+    created_at      TIMESTAMP,
+    trips           INTEGER DEFAULT 0,
+    last_tripped_at TIMESTAMP,
+    last_source_ip  VARCHAR(64)
+);
+
+CREATE TABLE IF NOT EXISTS honeytoken_trip (
+    id          BIGSERIAL PRIMARY KEY,
+    token_id    VARCHAR(64),
+    token_label VARCHAR(255),
+    token_type  VARCHAR(32),
+    method      VARCHAR(32),
+    source_ip   VARCHAR(64),
+    user_agent  TEXT,
+    detail      TEXT,
+    ts          TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_honeytoken_trip_ts ON honeytoken_trip (ts DESC);
 
 -- Other tables (e.g., user_groups, etc.) follow...

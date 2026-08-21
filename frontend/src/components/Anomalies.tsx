@@ -77,13 +77,14 @@ interface AssetApiResponse {
   totalElements?: number;
 }
 
-type TimeRange = '24h' | '7d' | '30d' | '90d';
+type TimeRange = '24h' | '7d' | '30d' | '90d' | 'all';
 
 const TIME_RANGE_HOURS: Record<TimeRange, number> = {
   '24h': 24,
   '7d': 24 * 7,
   '30d': 24 * 30,
   '90d': 24 * 90,
+  'all': 24 * 365 * 100, // effectively unbounded (covers old pcap event times)
 };
 
 /** ISO-8601 local-date-time (no timezone) - matches Spring's `LocalDateTime` binding. */
@@ -95,6 +96,7 @@ function isoLocal(d: Date): string {
 }
 
 function rangeStart(range: TimeRange): Date {
+  if (range === 'all') return new Date(0); // epoch - include event times from old captures
   const now = new Date();
   const h = TIME_RANGE_HOURS[range];
   return new Date(now.getTime() - h * 3600 * 1000);
@@ -111,6 +113,7 @@ const Anomalies: React.FC = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [timeRange, setTimeRange] = useState<TimeRange>('24h');
+  const rangeLabel = timeRange === 'all' ? 'all time' : `last ${timeRange}`;
 
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [anomalyStats, setAnomalyStats] = useState<AnomalyStatistics | null>(null);
@@ -225,7 +228,7 @@ const Anomalies: React.FC = () => {
         setDpiReadCount(reads);
 
         // Build daily activity series from the windowed anomalies.
-        const buckets = Math.max(1, Math.round(TIME_RANGE_HOURS[timeRange] / 24));
+        const buckets = Math.max(1, Math.min(60, Math.round(TIME_RANGE_HOURS[timeRange] / 24)));
         const labels: string[] = [];
         const counts: number[] = new Array(buckets).fill(0);
         const startMs = since.getTime();
@@ -371,6 +374,23 @@ const Anomalies: React.FC = () => {
     } catch (err) {
       console.error('Error updating anomaly status:', err);
       setError('Failed to update anomaly status');
+    }
+  };
+
+  // Promote a raw anomaly into an owned investigation Case, then open that case.
+  const [promotingId, setPromotingId] = useState<string | null>(null);
+  const handlePromoteToCase = async (anomalyId: string) => {
+    setPromotingId(anomalyId);
+    try {
+      const created = await anomalyService.promoteToCase(anomalyId);
+      await refreshAfterMutation();
+      if (created?.id) navigate(`/cases?open=${created.id}`);
+      else navigate('/cases');
+    } catch (err) {
+      console.error('Error promoting anomaly to case:', err);
+      setError('Failed to promote anomaly to a case');
+    } finally {
+      setPromotingId(null);
     }
   };
 
@@ -642,7 +662,7 @@ const Anomalies: React.FC = () => {
         }
         actions={
           <div className="flex gap-1 p-1 bg-white/10 backdrop-blur-sm rounded-xl ring-1 ring-white/15">
-            {(['24h', '7d', '30d', '90d'] as TimeRange[]).map((range) => (
+            {(['24h', '7d', '30d', '90d', 'all'] as TimeRange[]).map((range) => (
               <button
                 key={range}
                 onClick={() => setTimeRange(range)}
@@ -685,7 +705,7 @@ const Anomalies: React.FC = () => {
             <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
             <div className="text-sm font-semibold text-emerald-900">LIVE DATA</div>
             <div className="text-xs text-emerald-800">
-              {anomalyStats?.total ?? 0} total anomalies · {totalAnomaliesInWindow} in the last {timeRange} · {assets.length} asset(s) · {dpiWriteCount + dpiReadCount} DPI events
+              {anomalyStats?.total ?? 0} total anomalies · {totalAnomaliesInWindow} in {rangeLabel} · {assets.length} asset(s) · {dpiWriteCount + dpiReadCount} DPI events
             </div>
           </div>
         )}
@@ -697,28 +717,28 @@ const Anomalies: React.FC = () => {
         <KpiCard
           label="Total Anomalies"
           value={anomalyStats?.total ?? 0}
-          hint={`${totalAnomaliesInWindow} in last ${timeRange}`}
+          hint={`${totalAnomaliesInWindow} in ${rangeLabel}`}
           color="violet"
           icon={<Icon.Activity className="w-5 h-5" />}
         />
         <KpiCard
           label="Critical"
           value={anomalyStats?.critical ?? 0}
-          hint={`${criticalInWindow} in last ${timeRange}`}
+          hint={`${criticalInWindow} in ${rangeLabel}`}
           color="rose"
           icon={<Icon.Alert className="w-5 h-5" />}
         />
         <KpiCard
           label="Active"
           value={anomalyStats?.active ?? activeInWindow}
-          hint={`${activeInWindow} in last ${timeRange}`}
+          hint={`${activeInWindow} in ${rangeLabel}`}
           color="fuchsia"
           icon={<Icon.Clock className="w-5 h-5" />}
         />
         <KpiCard
           label="Resolved"
           value={anomalyStats?.resolved ?? 0}
-          hint={`${resolvedInWindow} in last ${timeRange}`}
+          hint={`${resolvedInWindow} in ${rangeLabel}`}
           color="pink"
           icon={<Icon.CheckCircle className="w-5 h-5" />}
         />
@@ -730,7 +750,7 @@ const Anomalies: React.FC = () => {
         <div className="xl:col-span-2 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Panel
-              title={`Severity (last ${timeRange})`}
+              title={`Severity (${rangeLabel})`}
               subtitle="Open anomalies by risk tier"
               icon={<Icon.Alert className="w-5 h-5" />}
             >
@@ -831,7 +851,7 @@ const Anomalies: React.FC = () => {
 
             <Panel
               title="Anomaly Activity"
-              subtitle={`Detections trend (${timeRange})`}
+              subtitle={`Detections trend (${rangeLabel})`}
               icon={<Icon.TrendingUp className="w-5 h-5" />}
             >
               <div className="h-64">
@@ -890,7 +910,7 @@ const Anomalies: React.FC = () => {
         {/* Sidebar */}
         <div className="xl:col-span-1 space-y-4">
           <Panel
-            title={`DPI Activity (last ${timeRange})`}
+            title={`DPI Activity (${rangeLabel})`}
             subtitle="Deep-packet inspection telemetry"
             icon={<Icon.Bolt className="w-5 h-5" />}
           >
@@ -953,7 +973,7 @@ const Anomalies: React.FC = () => {
       {/* Recent Anomalies Table */}
       <Panel
         title="Recent Anomalies"
-        subtitle={`Showing ${Math.min(anomalies.length, 10)} of ${totalAnomaliesInWindow} in last ${timeRange}`}
+        subtitle={`Showing ${Math.min(anomalies.length, 10)} of ${totalAnomaliesInWindow} in ${rangeLabel}`}
         icon={<Icon.Search className="w-5 h-5" />}
       >
         <div className="overflow-x-auto overflow-y-auto max-h-96 -mx-2">
@@ -1042,6 +1062,21 @@ const Anomalies: React.FC = () => {
                           >
                             Resolve
                           </button>
+                        )}
+                        {(anomaly.status === 'DETECTED' || anomaly.status === 'ACKNOWLEDGED') && (
+                          <button
+                            onClick={() => handlePromoteToCase(anomaly.id)}
+                            disabled={promotingId === anomaly.id}
+                            title="Open an investigation Case from this anomaly"
+                            className="px-2.5 py-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50 ring-1 ring-indigo-200 rounded-md hover:bg-indigo-100 transition disabled:opacity-50"
+                          >
+                            {promotingId === anomaly.id ? 'Promoting...' : 'Promote to Case'}
+                          </button>
+                        )}
+                        {anomaly.status === 'ESCALATED' && (
+                          <span className="px-2.5 py-1 text-[11px] font-semibold text-slate-500">
+                            Escalated
+                          </span>
                         )}
                       </div>
                     </td>

@@ -647,7 +647,7 @@ const Settings: React.FC = () => {
                       Quick tunnels rotate every restart. Switch to a named tunnel for a stable URL in production.
                     </p>
                   </Card>
-                  <Card title="Forwarder health" description="Live ingest activity from the Conpot forwarder.">
+                  <Card title="Forwarder health" description="Live ingest activity from the internet-exposed decoy forwarder.">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       <Stat label="Status" value={tunnel?.ingestEnabled ? 'Enabled' : 'Disabled'} tone={tunnel?.ingestEnabled ? 'emerald' : 'rose'} />
                       <Stat label="Events / hour" value={(tunnel?.eventsLastHour ?? 0).toLocaleString()} />

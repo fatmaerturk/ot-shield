@@ -125,7 +125,7 @@ public class SourceCrossCheckService {
     /**
      * Run the cross-check. Returns an empty list when the corpus is
      * unanimous (or when fewer than two source-type classes are even
-     * represented in this retrieval — without that we can't have a
+     * represented in this retrieval - without that we can't have a
      * cross-source conflict by construction).
      */
     public List<ConsistencyWarning> check(Collection<Passage> passages) {
@@ -220,7 +220,7 @@ public class SourceCrossCheckService {
                 }
             }
 
-            // Derive a short human-readable claim: "port — default
+            // Derive a short human-readable claim: "port - default
             // modbus". Keywords are the intersection across every
             // observation in this bucket so the label captures what
             // they all agreed was the subject, nothing wider.
@@ -242,7 +242,7 @@ public class SourceCrossCheckService {
                             .orElse("");
             String claim = subject.isBlank()
                     ? kindLabel
-                    : kindLabel + " — " + subject;
+                    : kindLabel + " - " + subject;
 
             out.add(new ConsistencyWarning(claim, values, new ArrayList<>(citations)));
         }

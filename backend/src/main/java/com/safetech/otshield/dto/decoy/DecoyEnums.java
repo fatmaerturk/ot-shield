@@ -14,7 +14,12 @@ public final class DecoyEnums {
         S7,
         DNP3,
         ETHERNET_IP,
-        OPC_UA
+        OPC_UA,
+        IEC104,
+        BACNET,
+        SNMP,
+        FTP,
+        HTTP
     }
 
     /** Lifecycle status of a decoy instance. */

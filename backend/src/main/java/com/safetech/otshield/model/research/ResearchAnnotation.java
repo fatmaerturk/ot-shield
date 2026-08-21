@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 
 /**
  * Sticky-note / flag annotation a researcher attaches to something
- * they looked at — an assistant answer, a single citation, or a
+ * they looked at - an assistant answer, a single citation, or a
  * library document. Covers the HMGCC "researcher workflow"
  * requirement without forcing full PDF-highlight ergonomics.
  *
@@ -108,11 +108,11 @@ public class ResearchAnnotation {
     public enum Kind {
         /** Neutral note. Default. */
         NOTE,
-        /** Yellow highlighter — "read this again". */
+        /** Yellow highlighter - "read this again". */
         HIGHLIGHT,
-        /** Red flag — "this looks wrong / suspicious". */
+        /** Red flag - "this looks wrong / suspicious". */
         FLAG,
-        /** Green tick — "verified, trust this". */
+        /** Green tick - "verified, trust this". */
         VERIFIED
     }
 }

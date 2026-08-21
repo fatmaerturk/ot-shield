@@ -36,7 +36,7 @@ public class HoneypotController {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.safetech.otshield.service.TTPAnalysisService ttpAnalysisService;
 
-    /** Optional — used to mirror real Docker tripwire hits onto the matching
+    /** Optional - used to mirror real Docker tripwire hits onto the matching
      *  fake HMI card (ALARM + INTERACTION) so the deception UI shows live
      *  attacker activity alongside the simulated process drift. */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -91,6 +91,18 @@ public class HoneypotController {
         return ResponseEntity.ok(stats);
     }
 
+    /**
+     * First-party IP reputation from our own decoy telemetry (no external API,
+     * works offline). Used by the Alerts page to enrich attacker IPs with
+     * ground-truth: how often we've seen this IP, worst severity, protocols,
+     * techniques, geo and a derived threat score. Returns reputation=unknown +
+     * firstParty=false for IPs the decoy fabric has never observed.
+     */
+    @GetMapping("/reputation/{ip}")
+    public ResponseEntity<Map<String, Object>> getIpReputation(@PathVariable String ip) {
+        return ResponseEntity.ok(honeypotLogService.getIpReputation(ip));
+    }
+
     @GetMapping("/attacks")
     public ResponseEntity<List<Map<String, Object>>> getAttackAttempts() {
         List<Map<String, Object>> attacks = honeypotLogService.getAttackAttempts();
@@ -98,7 +110,7 @@ public class HoneypotController {
     }
 
     /**
-     * Attacker TTPs &amp; Behavioral Intelligence — derived analytics over the
+     * Attacker TTPs &amp; Behavioral Intelligence - derived analytics over the
      * honeypot_logs table. Returns a single payload that drives the
      * "Attacker TTPs &amp; Behavioral Intel" tab on the Attack Intelligence page:
      *  - per-IP attacker profiles + sophistication scoring
@@ -134,9 +146,9 @@ public class HoneypotController {
 
     /**
      * One-shot backfill: walk every existing honeypot_logs row and create an
-     * Alert for each one that qualifies (skips internal noise, skips LOW
-     * external rows, and skips rows that already have a matching Alert).
-     * Safe to call repeatedly — duplicate detection uses the honeypot:&lt;id&gt;
+     * Alert for each one that qualifies (skips internal noise and rows that
+     * already have a matching Alert; scans and LOW-severity rows now qualify).
+     * Safe to call repeatedly - duplicate detection uses the honeypot:&lt;id&gt;
      * tag stored on each fanned-out alert.
      */
     @PostMapping("/alerts/backfill")
@@ -249,7 +261,7 @@ public class HoneypotController {
     /**
      * Ingest endpoint for remote Conpot sidecars (e.g. the Python forwarder
      * running on the GCP VM). Accepts either a single raw log line or a JSON
-     * batch of log lines. Each line is parsed by ConpotLogIntegrationService —
+     * batch of log lines. Each line is parsed by ConpotLogIntegrationService -
      * source IP / protocol / credentials / etc. are extracted and persisted.
      *
      * Authentication: Bearer token in the Authorization header that must match
@@ -314,7 +326,7 @@ public class HoneypotController {
         for (String line : lines) {
             try {
                 if (isInternalDecoy) {
-                    // Tripwire HMI inside an OT subnet — every connection is a
+                    // Tripwire HMI inside an OT subnet - every connection is a
                     // CRITICAL incident. Bypass the heuristic parser and write
                     // a single high-confidence row tagged with the source/site.
                     persistInternalDecoyAlarm(line, hmiTypeHeader, hmiVendorHeader);
@@ -376,13 +388,13 @@ public class HoneypotController {
         if ("IEC 104".equals(protoLabel) || "IEC-104".equals(protoLabel)) protoLabel = "IEC104";
         row.setProtocol(protoLabel);
 
-        // Destination port — pulled from "on port NNN"
+        // Destination port - pulled from "on port NNN"
         java.util.regex.Matcher pm = TRIPWIRE_PORT.matcher(line);
         if (pm.find()) {
             try { row.setDestinationPort(Integer.parseInt(pm.group(1))); } catch (NumberFormatException ignored) {}
         }
 
-        // Site tag — either from header or the inline [SITE-TAG] prefix
+        // Site tag - either from header or the inline [SITE-TAG] prefix
         java.util.regex.Matcher sm = TRIPWIRE_SITE.matcher(line);
         if (sm.find()) row.setSiteTag(sm.group(1));
 
@@ -394,7 +406,7 @@ public class HoneypotController {
         row.setSeverity("HIGH");
         row.setAttackType("Internal Decoy Tripwire");
         row.setDescription(String.format(
-            "Lateral-movement probe hit %s tripwire HMI '%s' (%s) at site %s on port %s — %s",
+            "Lateral-movement probe hit %s tripwire HMI '%s' (%s) at site %s on port %s - %s",
             protoLabel, hmiType, vendor,
             row.getSiteTag() != null ? row.getSiteTag() : "OT-SUBNET",
             row.getDestinationPort() != null ? row.getDestinationPort().toString() : "?",

@@ -140,7 +140,7 @@ const Icon = {
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
-const fmtNum = (n: number | undefined | null, fallback = '—'): string => {
+const fmtNum = (n: number | undefined | null, fallback = '-'): string => {
   if (n === undefined || n === null || Number.isNaN(n)) return fallback;
   return n.toLocaleString();
 };
@@ -240,7 +240,7 @@ const ExecutiveDashboard: React.FC = () => {
 
   // MTTD/MTTR/Dwell: derived from honeypot session data when available; sensible defaults otherwise
   const mttd = useMemo(() => {
-    // Conpot detects on first packet — effectively < 1min. Show 1.
+    // Conpot detects on first packet - effectively < 1min. Show 1.
     return honeypotStats?.totalAttacks && honeypotStats.totalAttacks > 0 ? 1 : 0;
   }, [honeypotStats]);
   const mttr = useMemo(() => {
@@ -401,7 +401,7 @@ const ExecutiveDashboard: React.FC = () => {
       {
         name: 'GDPR',
         value: 100 - noiseReduction,
-        gap: noiseReduction > 30 ? 'High noise — review data flow' : 'Stable',
+        gap: noiseReduction > 30 ? 'High noise - review data flow' : 'Stable',
       },
     ];
   }, [alertStats, coverageByLevel, noiseReduction]);
@@ -560,7 +560,7 @@ const ExecutiveDashboard: React.FC = () => {
 
   // Gauge placeholders while loading
   const showLoadingValue = (val: any, suffix = '') => {
-    if (loading && (val === 0 || val === null || val === undefined)) return '—';
+    if (loading && (val === 0 || val === null || val === undefined)) return '-';
     return `${val}${suffix}`;
   };
 
@@ -643,7 +643,7 @@ const ExecutiveDashboard: React.FC = () => {
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
                     <span className="text-[10px] uppercase tracking-widest text-violet-200/80">Posture</span>
-                    <span className="text-4xl font-bold">{loading ? '—' : postureScore}</span>
+                    <span className="text-4xl font-bold">{loading ? '-' : postureScore}</span>
                     <span className="text-xs text-emerald-300 font-semibold mt-1">
                       {residualRiskLevel}
                     </span>
@@ -1043,7 +1043,7 @@ const ExecutiveDashboard: React.FC = () => {
                   ? 'Within board-approved tolerance (< 5)'
                   : residualRiskScore < 7
                   ? 'Approaching tolerance limit'
-                  : 'Above tolerance — action required'}
+                  : 'Above tolerance - action required'}
               </p>
             </div>
 

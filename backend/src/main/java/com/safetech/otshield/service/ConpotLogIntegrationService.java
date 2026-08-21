@@ -38,7 +38,7 @@ public class ConpotLogIntegrationService {
     private String runtime;
     private final Pattern connectionPattern = Pattern.compile("New (\\w+) connection from (\\d+\\.\\d+\\.\\d+\\.\\d+):(\\d+)\\. \\(([a-f0-9-]+)\\)");
     private final Pattern resetPattern = Pattern.compile("Connection reset by peer, remote: (\\d+\\.\\d+\\.\\d+\\.\\d+)\\. \\(([a-f0-9-]+)\\)");
-    // Credential patterns — Conpot's HTTP template logs basic-auth attempts and the SSH template logs username/password
+    // Credential patterns - Conpot's HTTP template logs basic-auth attempts and the SSH template logs username/password
     private final Pattern httpAuthPattern = Pattern.compile("Authorization:\\s*Basic\\s+([A-Za-z0-9+/=]+)", Pattern.CASE_INSENSITIVE);
     private final Pattern loginPattern = Pattern.compile("(?:login|user(?:name)?)[=:\\s]+['\"]?([\\w.@-]{1,64})['\"]?", Pattern.CASE_INSENSITIVE);
     private final Pattern passwordPattern = Pattern.compile("(?:pass(?:word|wd)?)[=:\\s]+['\"]?([^\\s'\"&]{1,64})['\"]?", Pattern.CASE_INSENSITIVE);
@@ -48,7 +48,7 @@ public class ConpotLogIntegrationService {
     @Scheduled(fixedRate = 5000) // Her 5 saniyede bir kontrol et
     public void processConpotLogs() {
         // In remote mode, logs arrive via the /api/honeypot/ingest endpoint
-        // (see HoneypotController) — there is no local disk file to watch.
+        // (see HoneypotController) - there is no local disk file to watch.
         if ("remote".equalsIgnoreCase(runtime)) {
             return;
         }
@@ -162,7 +162,7 @@ public class ConpotLogIntegrationService {
         // Conpot's FTP/Telnet handlers log raw request bytes via Python's
         // bytes repr (e.g. b'admin\r\n'), so the captured credential ends up
         // with the literal four-character sequence "\r\n" baked into the
-        // value — not an actual CR/LF that .trim() would strip. Sanitise the
+        // value - not an actual CR/LF that .trim() would strip. Sanitise the
         // captured values before persisting so the Top Credentials chart shows
         // "admin" instead of "admin\r\n".
         username = sanitizeCredential(username);
@@ -171,7 +171,7 @@ public class ConpotLogIntegrationService {
         Matcher uaM = userAgentPattern.matcher(line);
         if (uaM.find()) userAgent = uaM.group(1).trim();
 
-        // Modbus — match many possible Conpot output shapes:
+        // Modbus - match many possible Conpot output shapes:
         //   "Modbus traffic from 1.2.3.4: {'function_code': 3, ...}"
         //   "Modbus request from 1.2.3.4: ..."
         //   "Modbus client provided data ... but invalid"
@@ -187,7 +187,7 @@ public class ConpotLogIntegrationService {
                     if (attackType.equals("Modbus Request")) attackType = "Modbus Exception";
                 }
                 // Extract the function code from any common form so the dashboard's
-                // FC chart picks it up. Conpot dumps "'function_code': N" — we
+                // FC chart picks it up. Conpot dumps "'function_code': N" - we
                 // canonicalise it to "function code N" for downstream parsers.
                 Integer fc = extractModbusFunctionCode(line);
                 String desc = "Modbus traffic from " + sourceIp;
@@ -201,7 +201,7 @@ public class ConpotLogIntegrationService {
             return;
         }
 
-        // S7Comm — same broad keyword match
+        // S7Comm - same broad keyword match
         if (line.contains("S7") || line.contains("s7comm") || line.contains("S7Comm")) {
             String sourceIp = extractIpFromLine(line);
             if (sourceIp != null) {
@@ -210,7 +210,7 @@ public class ConpotLogIntegrationService {
             return;
         }
 
-        // HTTP — extract method + path, set description so the dashboard
+        // HTTP - extract method + path, set description so the dashboard
         // can render method/path breakdown.
         if (line.contains("HTTP") || line.contains("http")
             || line.contains("GET ") || line.contains("POST ")
@@ -253,7 +253,7 @@ public class ConpotLogIntegrationService {
             return;
         }
 
-        // IEC 60870-5-104 — common in power grid SCADA. Conpot's iec104
+        // IEC 60870-5-104 - common in power grid SCADA. Conpot's iec104
         // template emits "IEC104 ..." or "iec104 ..." style log lines.
         if (line.toLowerCase().contains("iec104") || line.toLowerCase().contains("iec 104")
             || line.contains("STARTDT") || line.contains("STOPDT") || line.contains("TESTFR")
@@ -282,7 +282,7 @@ public class ConpotLogIntegrationService {
             return;
         }
 
-        // FTP — Conpot's FTP module emits lines like:
+        // FTP - Conpot's FTP module emits lines like:
         //   "New ftp session from 1.2.3.4 (uuid)"
         //   "FTP traffic to ('1.2.3.4', 12345): {'request': b'USER admin\n'}"
         //   "FTP traffic to ('1.2.3.4', 12345): {'response': b'331 Now specify the Password.\r\n'}"
@@ -309,7 +309,7 @@ public class ConpotLogIntegrationService {
             return;
         }
 
-        // Fallback — if we still captured credentials but no protocol keyword matched
+        // Fallback - if we still captured credentials but no protocol keyword matched
         if (username != null || password != null) {
             String sourceIp = extractIpFromLine(line);
             if (sourceIp != null) {
@@ -523,7 +523,7 @@ public class ConpotLogIntegrationService {
     
     /**
      * Strip the literal escape sequences (\r, \n, \t) that Conpot leaks into
-     * its log output via Python's bytes repr — and any actual control chars
+     * its log output via Python's bytes repr - and any actual control chars
      * that happen to slip through. Trims whitespace and returns null when the
      * remainder is empty so the dashboard's "Top Credentials" chart doesn't
      * grow blank rows. Cap at 64 chars to match the regex capture limit.

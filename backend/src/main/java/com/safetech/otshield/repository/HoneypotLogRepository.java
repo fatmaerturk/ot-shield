@@ -10,6 +10,10 @@ import java.util.List;
 public interface HoneypotLogRepository extends JpaRepository<HoneypotLog, Long> {
     
     List<HoneypotLog> findAllByOrderByTimestampDesc();
+
+    /** Bounded most-recent fetch for snapshot computations (e.g. NIS2 posture)
+     *  so we don't hydrate the entire honeypot_logs table on every request. */
+    List<HoneypotLog> findTop8000ByOrderByTimestampDesc();
     
     List<HoneypotLog> findBySourceIpOrderByTimestampDesc(String sourceIp);
     

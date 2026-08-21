@@ -205,9 +205,11 @@ function handleFrame(frame: string, opts: AssistantChatOptions) {
     if (line.startsWith('event:')) {
       eventName = line.slice(6).trim();
     } else if (line.startsWith('data:')) {
-      // SSE spec: strip at most one leading space after the colon.
-      const payload = line.slice(5);
-      dataParts.push(payload.startsWith(' ') ? payload.slice(1) : payload);
+      // NOTE: Spring's SseEmitter writes `data:` + content with NO separator
+      // space, so the SSE-spec "strip one leading space" would eat a token's
+      // own leading space (Ollama word-pieces are ' attacker', ' technique', …)
+      // and glue words together. Keep the payload verbatim.
+      dataParts.push(line.slice(5));
     }
   }
   if (dataParts.length === 0) return;

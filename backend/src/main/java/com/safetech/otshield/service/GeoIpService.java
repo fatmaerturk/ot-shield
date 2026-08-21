@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * and place it at: backend/geoip/GeoLite2-City.mmdb
  *
  * If the file is missing, every lookup returns UNKNOWN silently and the
- * backend keeps working — geolocation just stays empty.
+ * backend keeps working - geolocation just stays empty.
  */
 @Service
 public class GeoIpService {
@@ -64,7 +64,7 @@ public class GeoIpService {
 
     @PostConstruct
     public void init() {
-        // Resolve path — try both absolute and a few common working dirs
+        // Resolve path - try both absolute and a few common working dirs
         File f = new File(databasePath);
         if (!f.exists()) {
             // If backend runs from backend/ dir, the 'backend/' prefix duplicates
@@ -106,7 +106,7 @@ public class GeoIpService {
         if (ip == null || ip.isBlank()) return UNKNOWN;
 
         // Private / loopback ranges don't resolve to real coordinates. Give them a
-        // stable pseudo-location near the decoy so the map still shows them — this
+        // stable pseudo-location near the decoy so the map still shows them - this
         // is essential for Conpot simulation mode where all source IPs are RFC1918.
         if (isPrivateOrLoopback(ip)) {
             GeoInfo cached = cache.get(ip);
@@ -139,7 +139,7 @@ public class GeoIpService {
     /**
      * Generate a label for a private/loopback/TEST-NET IP. These addresses
      * have no real-world coordinates, so we tag them with their network
-     * function so the dashboard makes it obvious *why* there is no country —
+     * function so the dashboard makes it obvious *why* there is no country -
      * instead of misleadingly attributing them to some random world city.
      *
      *   127/8                       → "Loopback (local host)"
@@ -214,7 +214,7 @@ public class GeoIpService {
      *   - Loopback (127/8, ::1)
      *   - IPv6 link-local / ULA (fe80::/10, fc00::/7)
      *   - RFC 5737 documentation / TEST-NET ranges (192.0.2/24, 198.51.100/24, 203.0.113/24)
-     *     — these are what Conpot's simulation mode generates, so we treat them
+     *     - these are what Conpot's simulation mode generates, so we treat them
      *     as "simulated internal" rather than "unknown".
      */
     private boolean isPrivateOrLoopback(String ip) {
@@ -225,7 +225,7 @@ public class GeoIpService {
                 if (second >= 16 && second <= 31) return true;
             } catch (Exception ignored) {}
         }
-        // RFC 5737 TEST-NET ranges — used by Conpot simulation
+        // RFC 5737 TEST-NET ranges - used by Conpot simulation
         if (ip.startsWith("192.0.2.")) return true;
         if (ip.startsWith("198.51.100.")) return true;
         if (ip.startsWith("203.0.113.")) return true;

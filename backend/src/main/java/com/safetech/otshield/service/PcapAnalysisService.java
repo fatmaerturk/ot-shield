@@ -65,39 +65,42 @@ public class PcapAnalysisService {
     private final Set<String> detectedIpAddresses = new HashSet<>();
     private final Set<String> detectedMacAddresses = new HashSet<>();
     private final Set<String> detectedHostnames = new HashSet<>();
+    // Per-run map of device IP -> the ICS protocol it speaks (not the transport).
+    private final Map<String, String> runIpProtocol = new HashMap<>();
+    // Per-run map of device IP -> [vendor, model] read from a device-identification
+    // exchange (e.g. MODBUS FC43), so the asset gets the real identity regardless
+    // of which packet first triggered its discovery.
+    private final Map<String, String[]> runIpDeviceId = new HashMap<>();
 
     // Protocol-to-manufacturer and model mappings for deep packet inspection
     private static final Map<String, String> PROTOCOL_MANUFACTURER_MAP = new HashMap<>();
     private static final Map<String, String> PROTOCOL_MODEL_MAP = new HashMap<>();
     static {
-        PROTOCOL_MANUFACTURER_MAP.put("MODBUS", "Siemens");
-        PROTOCOL_MODEL_MAP.put("MODBUS", "SIMATIC S7-1200");
-        PROTOCOL_MANUFACTURER_MAP.put("DNP3", "Schneider Electric");
-        PROTOCOL_MODEL_MAP.put("DNP3", "Modicon M340");
-        PROTOCOL_MANUFACTURER_MAP.put("OPC UA", "Siemens");
-        PROTOCOL_MODEL_MAP.put("OPC UA", "SIMATIC S7-1500");
-        PROTOCOL_MANUFACTURER_MAP.put("HTTP", "Apache Software Foundation");
-        PROTOCOL_MODEL_MAP.put("HTTP", "HTTP Server");
-        PROTOCOL_MANUFACTURER_MAP.put("HTTPS", "Nginx");
-        PROTOCOL_MODEL_MAP.put("HTTPS", "Nginx");
-        PROTOCOL_MANUFACTURER_MAP.put("ICMP", "Cisco");
-        PROTOCOL_MODEL_MAP.put("ICMP", "Router");
-        PROTOCOL_MANUFACTURER_MAP.put("TCP", "Generic Vendor");
+        // Honest fallbacks only. A protocol does NOT reveal the vendor or a
+        // specific model (a MODBUS device is not necessarily a Siemens S7-1200),
+        // so we never fabricate one - the real vendor comes from the MAC OUI and
+        // the real model from a device-identification exchange (MODBUS FC43,
+        // CDP/LLDP, HTTP banner) when the capture contains it. These maps only
+        // provide a generic, truthful protocol label when nothing better exists.
+        String UNKNOWN = "Unknown";
+        for (String p : new String[]{"MODBUS", "DNP3", "OPC UA", "HTTP", "HTTPS", "ICMP",
+                "TCP", "UDP", "IEC104", "SNMP", "BACNET", "PROFINET", "ETHERNET/IP", "S7COMM"}) {
+            PROTOCOL_MANUFACTURER_MAP.put(p, UNKNOWN);
+        }
+        PROTOCOL_MODEL_MAP.put("MODBUS", "MODBUS device");
+        PROTOCOL_MODEL_MAP.put("S7COMM", "S7 device");
+        PROTOCOL_MODEL_MAP.put("DNP3", "DNP3 device");
+        PROTOCOL_MODEL_MAP.put("OPC UA", "OPC UA device");
+        PROTOCOL_MODEL_MAP.put("HTTP", "HTTP service");
+        PROTOCOL_MODEL_MAP.put("HTTPS", "TLS service");
+        PROTOCOL_MODEL_MAP.put("ICMP", "IP host");
         PROTOCOL_MODEL_MAP.put("TCP", "Generic Device");
-        PROTOCOL_MANUFACTURER_MAP.put("UDP", "Generic Vendor");
         PROTOCOL_MODEL_MAP.put("UDP", "Generic Device");
-        
-        // Additional industrial protocols
-        PROTOCOL_MANUFACTURER_MAP.put("IEC104", "Siemens");
-        PROTOCOL_MODEL_MAP.put("IEC104", "IEC 60870-5-104 Device");
-        PROTOCOL_MANUFACTURER_MAP.put("SNMP", "Cisco");
-        PROTOCOL_MODEL_MAP.put("SNMP", "Network Device");
-        PROTOCOL_MANUFACTURER_MAP.put("BACNET", "Honeywell");
-        PROTOCOL_MODEL_MAP.put("BACNET", "Building Automation Device");
-        PROTOCOL_MANUFACTURER_MAP.put("PROFINET", "Siemens");
-        PROTOCOL_MODEL_MAP.put("PROFINET", "PROFINET Device");
-        PROTOCOL_MANUFACTURER_MAP.put("ETHERNET/IP", "Rockwell");
-        PROTOCOL_MODEL_MAP.put("ETHERNET/IP", "EtherNet/IP Device");
+        PROTOCOL_MODEL_MAP.put("IEC104", "IEC 60870-5-104 device");
+        PROTOCOL_MODEL_MAP.put("SNMP", "SNMP device");
+        PROTOCOL_MODEL_MAP.put("BACNET", "BACnet device");
+        PROTOCOL_MODEL_MAP.put("PROFINET", "PROFINET device");
+        PROTOCOL_MODEL_MAP.put("ETHERNET/IP", "EtherNet/IP device");
     }
 
     // CIP Vendor ID to Name mapping (example)
@@ -211,14 +214,13 @@ public class PcapAnalysisService {
                 handle.loop(-1, listener);
                 handle.close();
             } catch (UnsatisfiedLinkError e) {
-                logger.warn("PCAP4J native library not available, falling back to simulated data: {}", e.getMessage());
-                // Fall back to simulated data when native library is not available
-                int fallbackCount = Math.min(100, (int)(file.length() / 100)); // Estimate packet count based on file size
-                for (int i = 0; i < fallbackCount; i++) {
-                    packets.add(createRandomPacketInfo(i));
-                }
-                logger.info("Generated {} simulated packets due to missing native library", fallbackCount);
-                return packets;
+                // Do NOT fabricate packets - returning simulated traffic as if it
+                // were the analyst's real capture is misleading. Surface the
+                // missing dependency instead and return an empty result.
+                logger.error("PCAP native library (libpcap/Npcap) not available - cannot parse '{}'. "
+                    + "Install libpcap (Linux) or Npcap (Windows) to enable PCAP analysis. "
+                    + "Returning no packets rather than simulated data.", filePath, e);
+                return packets; // empty
             } catch (PcapNativeException | NotOpenException e) {
                 logger.error("Error during PCAP parsing: {}", e.getMessage());
                 e.printStackTrace();
@@ -234,13 +236,11 @@ public class PcapAnalysisService {
             e.printStackTrace();
         }
         
-        // If no real packets were parsed from the PCAP, fall back to simulated data
+        // If no supported packets were parsed, return empty - never fabricate
+        // simulated packets, which would mislead the analyst into treating fake
+        // traffic as their real capture.
         if (packets.isEmpty()) {
-            int fallbackCount = 50;
-            logger.info("No real packets parsed for file {}. Falling back to {} simulated packets.", filePath, fallbackCount);
-            for (int i = 0; i < fallbackCount; i++) {
-                packets.add(createRandomPacketInfo(i));
-            }
+            logger.info("No supported packets parsed from file {} (unsupported link type, empty, or fully filtered capture).", filePath);
         }
         logger.info("Parsed {} packets from file {}", packets.size(), filePath);
 
@@ -358,6 +358,36 @@ public class PcapAnalysisService {
     private static String truncate(String s, int max) {
         if (s == null) return null;
         return s.length() <= max ? s : s.substring(0, max);
+    }
+
+    /** Purdue model level for a well-known ICS service port, or -1 if not ICS. */
+    private static int purdueLevelForPort(int port) {
+        switch (port) {
+            case 502:    // Modbus TCP
+            case 102:    // S7comm (ISO-TSAP)
+            case 20000:  // DNP3
+            case 44818:  // EtherNet/IP
+            case 2404:   // IEC 60870-5-104
+            case 34962:  // PROFINET RT
+            case 34964:  // PROFINET context manager
+                return 1; // control
+            case 4840:   // OPC UA
+            case 49320:  // KEPServerEX OPC UA
+            case 47808:  // BACnet/IP
+                return 2; // supervisory
+            default:
+                return -1; // not a recognized ICS service port
+        }
+    }
+
+    private static String purdueLabel(int lvl) {
+        switch (lvl) {
+            case 0:  return "L0 (Process)";
+            case 1:  return "L1 (Control)";
+            case 2:  return "L2 (Supervisory)";
+            case 3:  return "L3 (Operations)";
+            default: return "L4/5 (Enterprise)";
+        }
     }
 
     private PacketInfo createRandomPacketInfo(int index) {
@@ -860,10 +890,24 @@ public class PcapAnalysisService {
                 windowSize
         )); // More detailed summary
         
-        // Set placeholders or implement logic for Purdue levels/Comm Type/Manufacturer/Model
-        packetInfo.setSourceLevel("Live"); // Placeholder
-        packetInfo.setDestinationLevel("Live"); // Placeholder
-        packetInfo.setCommunicationType("Live Capture"); // Placeholder
+        // Infer Purdue model levels from the ICS service port. The endpoint that
+        // hosts a well-known ICS port is the field/control device (lower Purdue
+        // level); its peer is the requesting client one level up. Traffic with no
+        // ICS port is treated as IT/enterprise (L4/5).
+        int srcLvl = purdueLevelForPort(srcPort);
+        int dstLvl = purdueLevelForPort(dstPort);
+        if (dstLvl >= 0) {
+            packetInfo.setDestinationLevel(purdueLabel(dstLvl));
+            packetInfo.setSourceLevel(purdueLabel(srcLvl >= 0 ? srcLvl : dstLvl + 1));
+        } else if (srcLvl >= 0) {
+            packetInfo.setSourceLevel(purdueLabel(srcLvl));
+            packetInfo.setDestinationLevel(purdueLabel(srcLvl + 1));
+        } else {
+            packetInfo.setSourceLevel(purdueLabel(4));
+            packetInfo.setDestinationLevel(purdueLabel(4));
+        }
+        boolean isIcsFlow = srcLvl >= 0 || dstLvl >= 0;
+        packetInfo.setCommunicationType((isIcsFlow ? "OT/ICS" : "IT/Enterprise") + " (" + protocol + ")");
         
         // Determine manufacturer and model information
         EthernetPacket eth = packet.get(EthernetPacket.class);
@@ -949,6 +993,28 @@ public class PcapAnalysisService {
                         String modbusModel = unitId != null ? "Modbus Unit " + unitId : "Modbus Device";
                         if (srcPort == 502) srcModel = modbusModel;
                         if (dstPort == 502) dstModel = modbusModel;
+                        // Read Device Identification (FC 43 / MEI 0x0E) - if this
+                        // frame carries the device identity, use the REAL vendor +
+                        // model straight from the device (overrides the unit label
+                        // and the OUI vendor guess).
+                        String[] vm = parseModbusDeviceId(raw);
+                        if (vm != null) {
+                            if (srcPort == 502) {
+                                if (vm[1] != null) srcModel = vm[1];
+                                if (vm[0] != null) packetInfo.setSourceManufacturer(vm[0]);
+                            } else {
+                                if (vm[1] != null) dstModel = vm[1];
+                                if (vm[0] != null) packetInfo.setDestinationManufacturer(vm[0]);
+                            }
+                            // A device-id response is sent BY the device (its src
+                            // port is 502). Stamp the identity onto the packet so
+                            // asset discovery can attach it to the right IP even if
+                            // that IP was first seen in an earlier (request) packet.
+                            if (srcPort == 502 && packetInfo.getDpiFields() != null) {
+                                if (vm[0] != null) packetInfo.getDpiFields().put("device_vendor", vm[0]);
+                                if (vm[1] != null) packetInfo.getDpiFields().put("device_model", vm[1]);
+                            }
+                        }
                     } else if (raw != null && raw.length >= 7) {
                         // Fallback: keep legacy Unit-ID-only behaviour so we
                         // never regress display when MBAP header is malformed.
@@ -1157,9 +1223,37 @@ public class PcapAnalysisService {
      */
     public void detectAndSaveAssets(List<PacketInfo> packets) {
         logger.info("Starting asset detection from {} packets", packets.size());
-        
+
+        // Reset the per-run "already seen this IP" tracking. Without this the set
+        // accumulates across uploads in the same JVM, so every capture after the
+        // first would skip all its devices as "already detected". Cross-upload
+        // de-duplication is handled by the DB check (assetExistsByIpAddress).
+        clearDetectedAssetsTracking();
+
+        // Pre-pass: work out the ICS protocol each device actually speaks. A
+        // device's packets include TCP handshakes, so the first packet seen for
+        // an IP is often "TCP"; we want the industrial protocol (MODBUS, IEC104,
+        // ...) so deception coverage can map the discovered asset.
+        runIpProtocol.clear();
+        for (PacketInfo p : packets) {
+            if (!isIcsProtocol(p.getProtocol())) continue;
+            if (p.getSourceIp() != null) runIpProtocol.putIfAbsent(p.getSourceIp(), p.getProtocol());
+            if (p.getDestinationIp() != null) runIpProtocol.putIfAbsent(p.getDestinationIp(), p.getProtocol());
+        }
+
+        // Pre-pass 2: attach any device-identity (vendor/model) read from a
+        // device-id exchange to the responding device's IP, so the asset carries
+        // the real identity no matter which packet first triggered discovery.
+        runIpDeviceId.clear();
+        for (PacketInfo p : packets) {
+            if (p.getDpiFields() == null || p.getSourceIp() == null) continue;
+            String dv = p.getDpiFields().get("device_vendor");
+            String dm = p.getDpiFields().get("device_model");
+            if (dv != null || dm != null) runIpDeviceId.putIfAbsent(p.getSourceIp(), new String[]{dv, dm});
+        }
+
         List<AssetDTO> newAssets = new ArrayList<>();
-        
+
         for (PacketInfo packet : packets) {
             // Detect source asset
             detectAssetFromPacket(packet, packet.getSourceIp(), packet.getSourceManufacturer(), 
@@ -1225,11 +1319,35 @@ public class PcapAnalysisService {
                                              String level, PacketInfo packet) {
         
         AssetDTO asset = new AssetDTO();
-        
+
+        // Real device identity from a device-id exchange (e.g. MODBUS FC43) wins
+        // over the OUI vendor guess and the per-packet unit label - and applies
+        // even if this IP was first seen in a packet that did not carry it.
+        String[] devId = runIpDeviceId.get(ipAddress);
+        if (devId != null) {
+            if (devId[0] != null) manufacturer = devId[0];
+            if (devId[1] != null) model = devId[1];
+        }
+
+        // If we still have no real model, use an honest label based on the ICS
+        // protocol the device actually speaks ("MODBUS device") rather than a
+        // bare, transport-derived "Generic Device".
+        String icsProto = runIpProtocol.getOrDefault(ipAddress, packet.getProtocol());
+        if (model == null || model.isEmpty() || "Unknown".equalsIgnoreCase(model)
+                || "Generic Device".equalsIgnoreCase(model)) {
+            model = PROTOCOL_MODEL_MAP.getOrDefault(icsProto == null ? "" : icsProto.toUpperCase(), model);
+        }
+
         // Basic information
         asset.setIpAddress(ipAddress);
         asset.setName(generateAssetName(ipAddress, manufacturer, model));
         asset.setDescription(generateAssetDescription(ipAddress, manufacturer, model, level));
+        // Record the ICS protocol observed on the wire so deception coverage can
+        // map this discovered device even when its OUI vendor (a NIC maker like
+        // Intel/VMware) says nothing about the protocol it speaks. Prefer the
+        // industrial protocol resolved in the pre-pass over the triggering
+        // packet's transport (often just "TCP").
+        asset.setProtocol(runIpProtocol.getOrDefault(ipAddress, packet.getProtocol()));
         
         // Asset type and category based on manufacturer and model
         Asset.AssetType assetType = determineAssetType(manufacturer, model, packet.getProtocol());
@@ -1728,5 +1846,59 @@ public class PcapAnalysisService {
         detectedMacAddresses.clear();
         detectedHostnames.clear();
         logger.info("Cleared detected assets tracking");
+    }
+
+    /**
+     * Parse a MODBUS Read Device Identification response (Function 43 / MEI type
+     * 0x0E) out of a MODBUS/TCP application payload and return
+     * [vendorName, model] (either may be null). Returns null when the payload is
+     * not such a response. Object ids: 0x00 VendorName, 0x01 ProductCode,
+     * 0x02 MajorMinorRevision, 0x04 ProductName, 0x05 ModelName. This is the real
+     * device identity, straight from the device - no guessing.
+     */
+    private static String[] parseModbusDeviceId(byte[] p) {
+        try {
+            // MBAP(7) + FC(1) + MEI(1) + ReadDeviceIdCode(1) + Conformity(1)
+            // + MoreFollows(1) + NextObjectId(1) + NumberOfObjects(1) = 15 min.
+            if (p == null || p.length < 15) return null;
+            if ((p[7] & 0xFF) != 0x2B || (p[8] & 0xFF) != 0x0E) return null;
+            int numObjects = p[13] & 0xFF;
+            if (numObjects <= 0) return null; // a request carries no objects
+            Map<Integer, String> objs = new HashMap<>();
+            int idx = 14;
+            for (int n = 0; n < numObjects && idx + 2 <= p.length; n++) {
+                int objId = p[idx] & 0xFF;
+                int len = p[idx + 1] & 0xFF;
+                idx += 2;
+                if (idx + len > p.length) break;
+                objs.put(objId, new String(p, idx, len, StandardCharsets.US_ASCII).trim());
+                idx += len;
+            }
+            String vendor = objs.get(0x00);
+            String model = objs.containsKey(0x05) ? objs.get(0x05)
+                         : objs.containsKey(0x04) ? objs.get(0x04)
+                         : objs.get(0x01);
+            vendor = (vendor == null || vendor.isEmpty()) ? null : vendor;
+            model = (model == null || model.isEmpty()) ? null : model;
+            if (vendor == null && model == null) return null;
+            return new String[]{ vendor, model };
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** True if the string names an industrial protocol (not a transport like TCP/UDP). */
+    private static boolean isIcsProtocol(String p) {
+        if (p == null) return false;
+        switch (p.toUpperCase()) {
+            case "MODBUS": case "S7": case "S7COMM": case "DNP3": case "ENIP":
+            case "ETHERNET_IP": case "ETHERNETIP": case "ETHERNET/IP":
+            case "IEC104": case "IEC-104": case "IEC 104":
+            case "BACNET": case "OPC_UA": case "OPCUA": case "OPC UA":
+            case "PROFINET": case "CIP": case "MMS":
+                return true;
+            default:
+                return false;
+        }
     }
 } 

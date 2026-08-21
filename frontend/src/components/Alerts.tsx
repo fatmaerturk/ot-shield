@@ -896,7 +896,37 @@ const Alerts: React.FC = () => {
   const enrichIPAddress = async (ip: string): Promise<any> => {
     try {
       console.log(`Starting enrichment for IP: ${ip}`);
-      
+
+      // First-party reputation from our OWN decoy telemetry (real, offline, no
+      // external API). If our honeypot fabric has actually observed this IP, that
+      // ground-truth wins over third-party feeds and dev mocks.
+      const isPrivateIp = ip.startsWith('192.168.') || ip.startsWith('10.') ||
+        (ip.startsWith('172.') && parseInt(ip.split('.')[1]) >= 16 && parseInt(ip.split('.')[1]) <= 31) ||
+        ip === '127.0.0.1' || ip === '::1';
+      if (!isPrivateIp) {
+        try {
+          const repRes = await api.get(`/api/honeypot/reputation/${ip}`);
+          const rep: any = repRes.data;
+          if (rep && rep.firstParty) {
+            const techniques = (rep.techniques && rep.techniques.length ? rep.techniques : rep.protocols) || ['unknown'];
+            return {
+              ipReputation: rep.reputation || 'suspicious',
+              threatScore: rep.threatScore || 0,
+              country: rep.country || 'Unknown',
+              city: rep.city || 'Unknown',
+              isp: rep.geoLocation || getNetworkInfo(ip),
+              lastSeen: rep.lastSeen || new Date().toISOString(),
+              threatTypes: techniques,
+              confidence: Math.min(99, 60 + (rep.seen || 0) * 3),
+              sources: rep.sources || ['OTShield Decoy Fabric'],
+              rawData: { local: rep }
+            };
+          }
+        } catch (e) {
+          // No first-party history reachable - fall through to external enrichment.
+        }
+      }
+
       // Try to get data from multiple threat intelligence sources
       const enrichmentPromises = [
         // VirusTotal API (if available)

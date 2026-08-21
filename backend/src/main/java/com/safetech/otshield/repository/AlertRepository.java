@@ -49,6 +49,11 @@ public interface AlertRepository extends JpaRepository<Alert, String> {
     List<Alert> findByCreatedAtBetween(LocalDateTime startDate, LocalDateTime endDate);
     List<Alert> findByCreatedAtAfter(LocalDateTime date);
     List<Alert> findByCreatedAtBefore(LocalDateTime date);
+
+    // Bounded most-recent fetch - avoids loading the entire (potentially tens of
+    // thousands) alert table with its EAGER tags collection (N+1) for snapshot
+    // computations like the NIS2 posture.
+    List<Alert> findTop2000ByOrderByCreatedAtDesc();
     
     // Assignment queries
     List<Alert> findByAssignedTo(String assignedTo);
@@ -77,6 +82,11 @@ public interface AlertRepository extends JpaRepository<Alert, String> {
     
     @Query("SELECT a FROM Alert a WHERE a.sourceIp = :ip OR a.destinationIp = :ip")
     List<Alert> findByIpAddress(@Param("ip") String ip);
+
+    // Alerts attacking a given set of protocol strings, newest first. Used to link
+    // deception alerts to the real assets that speak that protocol.
+    @Query("SELECT a FROM Alert a WHERE UPPER(a.protocol) IN :protocols ORDER BY a.createdAt DESC")
+    List<Alert> findByProtocolIn(@Param("protocols") List<String> protocols, org.springframework.data.domain.Pageable pageable);
     
     // Count queries
     long countByStatus(AlertStatus status);

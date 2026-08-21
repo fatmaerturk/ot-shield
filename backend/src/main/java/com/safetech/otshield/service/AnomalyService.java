@@ -1,8 +1,13 @@
 package com.safetech.otshield.service;
 
 import com.safetech.otshield.dto.AnomalyDTO;
+import com.safetech.otshield.dto.cases.CaseDTO;
+import com.safetech.otshield.dto.cases.CreateCaseRequest;
+import com.safetech.otshield.mapper.AlertSeverity;
 import com.safetech.otshield.mapper.AnomalyMapper;
 import com.safetech.otshield.model.Anomaly;
+import com.safetech.otshield.model.CaseCategory;
+import com.safetech.otshield.model.CasePriority;
 import com.safetech.otshield.repository.AnomalyRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,9 +21,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.HashMap;
 
@@ -29,6 +38,7 @@ import java.util.HashMap;
 public class AnomalyService {
     private final AnomalyRepository anomalyRepository;
     private final AnomalyMapper anomalyMapper;
+    private final CaseService caseService;
 
     // CRUD Operations
     public AnomalyDTO createAnomaly(AnomalyDTO anomalyDto) {
@@ -129,9 +139,148 @@ public class AnomalyService {
         
         Anomaly savedAnomaly = anomalyRepository.save(anomalyEntity);
         log.info("Anomaly escalated successfully: {}", id);
-        
+
         return anomalyMapper.toDto(savedAnomaly);
     }
+
+    // ------------------------------------------------------------------
+    // Promote an anomaly into an investigation Case (SOC escalation flow)
+    // ------------------------------------------------------------------
+
+    /**
+     * Turns a raw anomaly (machine detection) into an owned investigation Case
+     * (human workflow). Idempotent: a second call returns the case already
+     * created for this anomaly instead of opening a duplicate. The anomaly is
+     * marked ESCALATED and stamped with a {@code case:<number>} indicator so the
+     * two records stay linked.
+     */
+    @Transactional
+    public CaseDTO promoteToCase(String anomalyId, String actor) {
+        Anomaly a = anomalyRepository.findById(anomalyId)
+                .orElseThrow(() -> new RuntimeException("Anomaly not found with ID: " + anomalyId));
+
+        // Idempotency - if we already opened a case for this anomaly, return it.
+        String existing = existingCaseNumber(a);
+        if (existing != null) {
+            Optional<CaseDTO> found = caseService.getByCaseNumber(existing);
+            if (found.isPresent()) {
+                log.info("Anomaly {} already promoted to case {}", anomalyId, existing);
+                return found.get();
+            }
+        }
+
+        Set<String> tags = new LinkedHashSet<>();
+        tags.add("promoted-from-anomaly");
+        tags.add("anomaly:" + a.getId());
+        if (a.getSourceIp() != null) tags.add("src:" + a.getSourceIp());
+        if (a.getMitreId() != null) tags.add("mitre:" + a.getMitreId());
+
+        CreateCaseRequest req = CreateCaseRequest.builder()
+                .title(a.getTitle() != null ? a.getTitle() : "Anomaly investigation")
+                .description(buildCaseDescription(a))
+                .priority(mapPriority(a.getSeverity()))
+                .severity(mapSeverity(a.getSeverity()))
+                .category(mapCategory(a))
+                .reporterName(actor != null && !actor.isBlank() ? actor : "anomaly-engine")
+                .tags(new HashSet<>(tags))
+                .build();
+
+        CaseDTO created = caseService.create(req);
+
+        // Link back + mark escalated so the anomaly reflects that it is now owned.
+        a.setStatus(Anomaly.AnomalyStatus.ESCALATED);
+        a.setIsEscalated(true);
+        if (a.getEscalatedAt() == null) a.setEscalatedAt(LocalDateTime.now());
+        List<String> inds = a.getIndicators() != null ? new ArrayList<>(a.getIndicators()) : new ArrayList<>();
+        inds.add("case:" + created.getCaseNumber());
+        a.setIndicators(inds);
+        setAuditFields(a, false);
+        anomalyRepository.save(a);
+
+        log.info("Anomaly {} promoted to case {}", anomalyId, created.getCaseNumber());
+        return created;
+    }
+
+    private static String existingCaseNumber(Anomaly a) {
+        if (a.getIndicators() == null) return null;
+        return a.getIndicators().stream()
+                .filter(i -> i != null && i.startsWith("case:"))
+                .map(i -> i.substring("case:".length()))
+                .findFirst().orElse(null);
+    }
+
+    private static CasePriority mapPriority(Anomaly.AnomalySeverity s) {
+        if (s == null) return CasePriority.MEDIUM;
+        switch (s) {
+            case CRITICAL: return CasePriority.CRITICAL;
+            case HIGH:     return CasePriority.HIGH;
+            case MEDIUM:   return CasePriority.MEDIUM;
+            default:       return CasePriority.LOW; // LOW / INFO
+        }
+    }
+
+    private static AlertSeverity mapSeverity(Anomaly.AnomalySeverity s) {
+        if (s == null) return AlertSeverity.MEDIUM;
+        switch (s) {
+            case CRITICAL: return AlertSeverity.CRITICAL;
+            case HIGH:     return AlertSeverity.HIGH;
+            case MEDIUM:   return AlertSeverity.MEDIUM;
+            case LOW:      return AlertSeverity.LOW;
+            default:       return AlertSeverity.INFO;
+        }
+    }
+
+    /** Best-effort category from the MITRE technique / anomaly type. */
+    private static CaseCategory mapCategory(Anomaly a) {
+        String mitre = a.getMitreId() != null ? a.getMitreId().toUpperCase() : "";
+        switch (mitre) {
+            case "T0846": return CaseCategory.RECON;            // Remote System Discovery
+            case "T0883": return CaseCategory.UNAUTHORIZED_ACCESS; // Internet Accessible Device
+            case "T0836": // Modify Parameter
+            case "T0855": return CaseCategory.OT_DISRUPTION;    // Unauthorized Command Message
+            default: break;
+        }
+        if (a.getAnomalyType() == null) return CaseCategory.ANOMALY;
+        switch (a.getAnomalyType()) {
+            case ACCESS_PATTERN:        return CaseCategory.UNAUTHORIZED_ACCESS;
+            case COMMUNICATION_PATTERN: return CaseCategory.RECON;
+            case PROTOCOL_VIOLATION:
+            case VOLUME_ANOMALY:        return CaseCategory.OT_DISRUPTION;
+            default:                    return CaseCategory.ANOMALY;
+        }
+    }
+
+    private static String buildCaseDescription(Anomaly a) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Promoted from anomaly ").append(a.getId()).append(".\n\n");
+        if (a.getDescription() != null && !a.getDescription().isBlank()) {
+            sb.append(a.getDescription()).append("\n\n");
+        }
+        sb.append("Source: ").append(nz(a.getSourceIp()));
+        if (a.getSourcePort() != null) sb.append(':').append(a.getSourcePort());
+        sb.append("  ->  ").append(nz(a.getDestinationIp()));
+        if (a.getDestinationPort() != null) sb.append(':').append(a.getDestinationPort());
+        if (a.getProtocol() != null) sb.append("  (").append(a.getProtocol()).append(')');
+        sb.append('\n');
+        if (a.getMitreId() != null) {
+            sb.append("MITRE ATT&CK for ICS: ").append(a.getMitreId());
+            if (a.getMitreTechnique() != null) sb.append(" - ").append(a.getMitreTechnique());
+            sb.append('\n');
+        }
+        if (a.getConfidenceScore() != null) sb.append("Confidence: ").append(a.getConfidenceScore()).append('\n');
+        if (a.getRiskScore() != null) sb.append("Risk score: ").append(a.getRiskScore()).append('\n');
+        if (a.getEvidence() != null && !a.getEvidence().isBlank()) {
+            sb.append("\nEvidence:\n").append(a.getEvidence()).append('\n');
+        }
+        if (a.getMitigationSteps() != null && !a.getMitigationSteps().isBlank()) {
+            sb.append("\nSuggested containment:\n").append(a.getMitigationSteps()).append('\n');
+        }
+        sb.append("\nDetected at: ").append(a.getDetectedAt())
+          .append("  (by ").append(nz(a.getCreatedBy())).append(')');
+        return sb.toString();
+    }
+
+    private static String nz(String s) { return s == null ? "unknown" : s; }
 
     public AnomalyDTO resolveAnomaly(String id, String resolutionNotes) {
         log.info("Resolving anomaly with ID: {}", id);
@@ -365,9 +514,12 @@ public class AnomalyService {
         String currentUser = authentication != null ? authentication.getName() : "system";
         
         if (isNew) {
-            anomaly.setCreatedBy(currentUser);
-            anomaly.setCreatedAt(LocalDateTime.now());
-            anomaly.setDetectedAt(LocalDateTime.now());
+            // Preserve caller-supplied provenance (the DPI rule engine sets
+            // createdBy="dpi-engine" and detectedAt to the packet's real event
+            // time; the twin sets createdBy="decoy-twin"). Only default when absent.
+            if (anomaly.getCreatedBy() == null) anomaly.setCreatedBy(currentUser);
+            if (anomaly.getCreatedAt() == null) anomaly.setCreatedAt(LocalDateTime.now());
+            if (anomaly.getDetectedAt() == null) anomaly.setDetectedAt(LocalDateTime.now());
         } else {
             anomaly.setUpdatedBy(currentUser);
             anomaly.setUpdatedAt(LocalDateTime.now());

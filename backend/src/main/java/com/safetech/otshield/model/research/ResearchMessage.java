@@ -88,7 +88,7 @@ public class ResearchMessage {
 
     /**
      * JSON array of consistency warnings produced by
-     * {@code SourceCrossCheckService} — each entry flags a claim
+     * {@code SourceCrossCheckService} - each entry flags a claim
      * (port, password, CVE, etc.) where passages from different
      * source types gave conflicting values. Null / empty means
      * nothing was flagged; we still persist an empty array if the

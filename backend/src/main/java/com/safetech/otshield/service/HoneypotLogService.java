@@ -28,11 +28,11 @@ public class HoneypotLogService {
 
     /** Fans out persisted honeypot hits over SSE so the Attack Intelligence
      *  map animates one arc per real event. Optional to keep the save path
-     *  decoupled from broadcast — a missing publisher is non-fatal. */
+     *  decoupled from broadcast - a missing publisher is non-fatal. */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private HoneypotEventPublisher eventPublisher;
 
-    /** Optional — when present, every saved honeypot log produces a matching
+    /** Optional - when present, every saved honeypot log produces a matching
      *  Alert row (subject to the severity floor in fanOutToAlert) so the
      *  Alerts page lights up alongside the Conpot Monitor. Wired as
      *  required=false so the honeypot pipeline keeps working even if the
@@ -65,7 +65,7 @@ public class HoneypotLogService {
     // These get hidden from public stats by isInternalNoise(). The ONE
     // exception is rows tagged decoySource = "internal-decoy": those are
     // tripwire hits and the attacker IP is the real lateral-movement signal,
-    // even if it falls inside an RFC1918 range — so we keep them.
+    // even if it falls inside an RFC1918 range - so we keep them.
 
     /**
      * True when this log row is local infrastructure noise that should be
@@ -115,7 +115,7 @@ public class HoneypotLogService {
         if (raw == null) return null;
         // Remove all ASCII control characters (\r, \n, \t, \0, etc.)
         String cleaned = raw.replaceAll("\\p{Cntrl}", "").trim();
-        // Some FTP / SSH templates wrap values in quotes — strip a single
+        // Some FTP / SSH templates wrap values in quotes - strip a single
         // matched pair of surrounding quotes.
         if (cleaned.length() >= 2) {
             char first = cleaned.charAt(0);
@@ -163,7 +163,7 @@ public class HoneypotLogService {
 
     /**
      * Rich statistics endpoint consumed by the Attack Intelligence frontend.
-     * Every field here is computed from the honeypot_logs table — no mock data.
+     * Every field here is computed from the honeypot_logs table - no mock data.
      *
      * Internal-noise rows (Docker bridge / RFC1918 / loopback) are stripped
      * up-front so things like "top source IPs" and "country breakdown" reflect
@@ -219,7 +219,7 @@ public class HoneypotLogService {
             .collect(Collectors.groupingBy(l -> l.getCity() + ", " + (l.getCountry() != null ? l.getCountry() : ""), Collectors.counting()));
         stats.put("cityBreakdown", sortDescAndLimit(cityCounts, 10));
 
-        // Credential intelligence — strip trailing CR/LF and other control
+        // Credential intelligence - strip trailing CR/LF and other control
         // characters that come in from raw protocol log lines (FTP commands
         // end with "\r\n", and some honeypot templates leave them in place).
         // Without this normalization the dashboard renders e.g. "admin\r\n"
@@ -279,7 +279,7 @@ public class HoneypotLogService {
 
         // External (perimeter Conpot) vs internal-decoy (tripwire HMI) split.
         // Internal-decoy events are inherently CRITICAL because no legitimate
-        // user has any reason to talk to a tripwire — they signal lateral
+        // user has any reason to talk to a tripwire - they signal lateral
         // movement, not internet noise.
         long internalDecoyCount = allLogs.stream()
             .filter(l -> "internal-decoy".equalsIgnoreCase(l.getDecoySource()))
@@ -324,6 +324,92 @@ public class HoneypotLogService {
 
     public void clearLogs() {
         honeypotLogRepository.deleteAll();
+    }
+
+    /**
+     * First-party IP reputation derived from our own honeypot/decoy telemetry -
+     * no external API, works fully offline. If this IP has ever interacted with
+     * the decoy fabric we know it is at minimum a scanner and at worst an active
+     * ICS attacker, which is stronger local ground-truth than a third-party feed.
+     *
+     * Returns: {ip, seen, firstParty, reputation (malicious|suspicious|unknown),
+     * threatScore 0-100, worstSeverity, protocols[], techniques[], country, city,
+     * geoLocation, firstSeen, lastSeen, sources[]}.
+     */
+    public Map<String, Object> getIpReputation(String ip) {
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("ip", ip);
+        if (ip == null || ip.isBlank()) {
+            r.put("seen", 0); r.put("firstParty", false);
+            r.put("reputation", "unknown"); r.put("threatScore", 0);
+            return r;
+        }
+
+        List<HoneypotLog> hits = honeypotLogRepository.findAll().stream()
+            .filter(l -> ip.equals(l.getSourceIp()))
+            .collect(Collectors.toList());
+
+        if (hits.isEmpty()) {
+            // Never observed by our decoys - no first-party opinion.
+            r.put("seen", 0); r.put("firstParty", false);
+            r.put("reputation", "unknown"); r.put("threatScore", 0);
+            r.put("sources", java.util.List.of("OTShield Decoy Fabric"));
+            return r;
+        }
+
+        int worst = hits.stream().mapToInt(l -> severityRank(l.getSeverity())).max().orElse(1);
+        java.util.Set<String> protocols = new java.util.LinkedHashSet<>();
+        java.util.Set<String> techniques = new java.util.LinkedHashSet<>();
+        LocalDateTime first = null, last = null;
+        String country = null, city = null, geo = null;
+        for (HoneypotLog l : hits) {
+            if (l.getProtocol() != null && !l.getProtocol().isBlank()) protocols.add(l.getProtocol().toUpperCase());
+            if (l.getAttackType() != null && !l.getAttackType().isBlank()) techniques.add(l.getAttackType());
+            LocalDateTime ts = l.getTimestamp();
+            if (ts != null) {
+                if (first == null || ts.isBefore(first)) first = ts;
+                if (last == null || ts.isAfter(last)) last = ts;
+            }
+            if (country == null && l.getCountry() != null && !l.getCountry().isBlank()) country = l.getCountry();
+            if (city == null && l.getCity() != null && !l.getCity().isBlank()) city = l.getCity();
+            if (geo == null && l.getGeoLocation() != null && !l.getGeoLocation().isBlank()) geo = l.getGeoLocation();
+        }
+
+        // Threat score (0-100): volume + worst severity + protocol diversity.
+        int score = Math.min(100,
+            hits.size() * 4                    // repeat offenders score higher
+            + (worst - 1) * 18                 // LOW=0 .. CRITICAL=54
+            + (protocols.size() - 1) * 10);    // multi-protocol pivot is a strong signal
+        if (score < 5) score = 5;              // any observed hit is non-zero
+
+        // Reputation label from severity / persistence / breadth.
+        String reputation;
+        if (worst >= 3 || protocols.size() >= 2 || hits.size() >= 10) reputation = "malicious";
+        else reputation = "suspicious";
+
+        r.put("seen", hits.size());
+        r.put("firstParty", true);
+        r.put("reputation", reputation);
+        r.put("threatScore", score);
+        r.put("worstSeverity", severityLabel(worst));
+        r.put("protocols", new java.util.ArrayList<>(protocols));
+        r.put("techniques", new java.util.ArrayList<>(techniques));
+        r.put("country", country);
+        r.put("city", city);
+        r.put("geoLocation", geo);
+        r.put("firstSeen", first == null ? null : first.toString());
+        r.put("lastSeen", last == null ? null : last.toString());
+        r.put("sources", java.util.List.of("OTShield Decoy Fabric"));
+        return r;
+    }
+
+    private static String severityLabel(int rank) {
+        switch (rank) {
+            case 4:  return "CRITICAL";
+            case 3:  return "HIGH";
+            case 2:  return "MEDIUM";
+            default: return "LOW";
+        }
     }
 
     // =========================================================================
@@ -373,10 +459,10 @@ public class HoneypotLogService {
     }
 
     /**
-     * Convert a HoneypotLog row into an Alert and persist it. Skips:
-     *   * internal-noise rows (RFC1918 / Docker bridge / loopback)
-     *   * LOW severity rows that aren't from internal-decoys (would otherwise
-     *     drown the Alerts page in random internet scan noise)
+     * Convert a HoneypotLog row into an Alert and persist it. Skips only
+     * internal-noise rows (RFC1918 / Docker bridge / loopback); every external
+     * honeypot interaction - scans and LOW-severity probes included - becomes
+     * an Alert so the Alerts page reflects all scan activity.
      */
     private void fanOutToAlert(HoneypotLog hp) {
         buildAlertFor(hp, /*skipDuplicateCheck=*/true);
@@ -397,10 +483,13 @@ public class HoneypotLogService {
         String sev = hp.getSeverity() == null ? "MEDIUM" : hp.getSeverity().toUpperCase();
         boolean isInternalDecoy = "internal-decoy".equalsIgnoreCase(hp.getDecoySource());
 
-        // Severity floor: keep MEDIUM+ from external Conpot, but ALWAYS pass
-        // tripwire (internal-decoy) hits since those are CRITICAL by definition
-        // (lateral movement — there's no legitimate reason to talk to a tripwire).
-        if (!isInternalDecoy && "LOW".equals(sev)) return false;
+        // No severity floor for external honeypot rows: every interaction -
+        // including LOW-severity scans / port probes / connection attempts -
+        // fans out to the Alerts page so SOC analysts see ALL scan activity.
+        // Internal infrastructure noise (RFC1918 / Docker bridge / loopback)
+        // is already filtered above by isInternalNoise(). Tripwire
+        // (internal-decoy) hits are mapped to CRITICAL by mapSeverity() since
+        // any tripwire touch is a high-confidence lateral-movement incident.
 
         // Idempotency: tag every honeypot-sourced alert with honeypot:<id>.
         // Backfill checks this tag so a row that already has an alert is
@@ -411,7 +500,7 @@ public class HoneypotLogService {
                 List<com.safetech.otshield.model.Alert> existing = alertRepository.findByTag(correlationTag);
                 if (existing != null && !existing.isEmpty()) return false;
             } catch (Exception e) {
-                // If the tag table isn't ready yet, fall through and write —
+                // If the tag table isn't ready yet, fall through and write -
                 // it's better to risk a duplicate than to lose history.
                 log.debug("findByTag failed (continuing): {}", e.getMessage());
             }
@@ -443,9 +532,10 @@ public class HoneypotLogService {
             hp.getProtocol() != null ? "proto:" + hp.getProtocol().toLowerCase() : "proto:unknown"
         )));
 
-        // Backfill path: copy the original honeypot timestamp so the Alert
-        // appears in the right slot on the timeline instead of "just now".
-        if (!skipDuplicateCheck && hp.getTimestamp() != null) {
+        // Align the Alert's timeline position with the honeypot row's timestamp
+        // (for live saves this is ~now; for backfilled rows it's the row's
+        // recorded time) so alerts land in the right slot instead of "just now".
+        if (hp.getTimestamp() != null) {
             a.setCreatedAt(hp.getTimestamp());
             a.setUpdatedAt(hp.getTimestamp());
         }
@@ -463,7 +553,7 @@ public class HoneypotLogService {
 
     /**
      * Walk every existing honeypot_logs row and create an Alert for each one
-     * that qualifies (skips noise + LOW external + rows that already have an
+     * that qualifies (skips internal-noise rows and rows that already have an
      * Alert tagged honeypot:&lt;id&gt;). Safe to re-run.
      *
      * Returns a small status map: { scanned, created, skipped }.
@@ -475,14 +565,40 @@ public class HoneypotLogService {
             result.put("error", "AlertRepository not available");
             return result;
         }
+        // Preload the honeypot:<id> correlation tag of every existing alert in
+        // ONE pass so the per-row duplicate check is an in-memory Set lookup
+        // instead of a findByTag() DB query per honeypot row. Without this the
+        // backfill is O(n^2) and times out on large tables (tens of thousands
+        // of rows); with it, it's a single linear scan.
+        java.util.Set<String> existingHoneypotTags = new java.util.HashSet<>();
+        try {
+            for (com.safetech.otshield.model.Alert a : alertRepository.findAll()) {
+                if (a.getTags() == null) continue;
+                for (String t : a.getTags()) {
+                    if (t != null && t.startsWith("honeypot:")) existingHoneypotTags.add(t);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Backfill: could not preload existing alert tags ({}), falling back to per-row dedup", e.getMessage());
+            existingHoneypotTags = null;
+        }
+
         List<HoneypotLog> all = honeypotLogRepository.findAll();
         int scanned = all.size();
         int created = 0;
         int skipped = 0;
         for (HoneypotLog hp : all) {
             try {
-                if (buildAlertFor(hp, /*skipDuplicateCheck=*/false)) created++;
-                else skipped++;
+                if (existingHoneypotTags != null) {
+                    // Fast path: in-memory dedup, no per-row DB query.
+                    if (existingHoneypotTags.contains("honeypot:" + hp.getId())) { skipped++; continue; }
+                    if (buildAlertFor(hp, /*skipDuplicateCheck=*/true)) created++;
+                    else skipped++;
+                } else {
+                    // Fallback: original per-row findByTag dedup.
+                    if (buildAlertFor(hp, /*skipDuplicateCheck=*/false)) created++;
+                    else skipped++;
+                }
             } catch (Exception e) {
                 skipped++;
                 log.warn("Backfill skipped honeypot id={} due to error: {}", hp.getId(), e.getMessage());
@@ -499,7 +615,7 @@ public class HoneypotLogService {
     /**
      * Walk every honeypot_logs row and strip the literal "\r\n" / "\n" / "\t"
      * sequences that Conpot's Python bytes repr leaked into usernameAttempt
-     * and passwordAttempt before the parser sanitiser was added. Idempotent —
+     * and passwordAttempt before the parser sanitiser was added. Idempotent -
      * already-clean rows are skipped, so safe to re-run after a future schema
      * change. Returns { scanned, updated }.
      */

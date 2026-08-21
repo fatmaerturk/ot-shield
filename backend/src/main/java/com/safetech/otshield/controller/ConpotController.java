@@ -31,9 +31,9 @@ public class ConpotController {
             response.put("success", success);
             String message;
             if (success) {
-                message = "Conpot started successfully";
+                message = "Internet-exposed decoy started successfully";
             } else {
-                message = conpotService.getLastStartError() != null ? conpotService.getLastStartError() : "Failed to start Conpot";
+                message = conpotService.getLastStartError() != null ? conpotService.getLastStartError() : "Failed to start internet-exposed decoy";
             }
             response.put("message", message);
             response.put("isRunning", conpotService.isRunning());
@@ -42,7 +42,7 @@ public class ConpotController {
         } catch (Exception e) {
             logger.error("Error starting Conpot", e);
             response.put("success", false);
-            response.put("message", "Error starting Conpot: " + e.getMessage());
+            response.put("message", "Error starting internet-exposed decoy: " + e.getMessage());
             return ResponseEntity.internalServerError().body(response);
         }
     }
@@ -55,14 +55,14 @@ public class ConpotController {
         try {
             boolean success = conpotService.stopConpot();
             response.put("success", success);
-            response.put("message", success ? "Conpot stopped successfully" : "Failed to stop Conpot");
+            response.put("message", success ? "Internet-exposed decoy stopped successfully" : "Failed to stop internet-exposed decoy");
             response.put("isRunning", conpotService.isRunning());
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             logger.error("Error stopping Conpot", e);
             response.put("success", false);
-            response.put("message", "Error stopping Conpot: " + e.getMessage());
+            response.put("message", "Error stopping internet-exposed decoy: " + e.getMessage());
             return ResponseEntity.internalServerError().body(response);
         }
     }
@@ -113,7 +113,7 @@ public class ConpotController {
     public ResponseEntity<Map<String, Object>> healthCheck() {
         Map<String, Object> response = new HashMap<>();
         response.put("status", "healthy");
-        response.put("service", "Conpot");
+        response.put("service", "Internet-exposed decoy");
         response.put("isRunning", conpotService.isRunning());
         return ResponseEntity.ok(response);
     }

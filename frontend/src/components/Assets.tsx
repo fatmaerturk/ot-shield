@@ -14,6 +14,8 @@ import assetService, {
   AssetType,
 } from '../services/assetService';
 import { alertService } from '../services/alertService';
+import AssetDeceptionCoverage from './asset/AssetDeceptionCoverage';
+import AssetIcon from './asset/AssetIcon';
 import anomalyService, { Anomaly } from '../services/anomalyService';
 import dpiService, {
   DpiEvent,
@@ -65,6 +67,7 @@ const VULN_TIER_RANK: Record<VulnSeverityTier, number> = {
 
 const TABS = [
   'Device Information',
+  'Deception',
   'Risk',
   'Vulnerabilities',
   'Alerts & Insights',
@@ -519,8 +522,8 @@ const Assets: React.FC = () => {
               console.warn('anomalies lookup failed', err);
               return [] as Anomaly[];
             }),
-          ip
-            ? alertService.getAlertsByIpAddress(ip).catch(err => {
+          selectedId
+            ? alertService.getAlertsForAsset(selectedId).catch(err => {
                 console.warn('alerts lookup failed', err);
                 return [] as Alert[];
               })
@@ -1067,7 +1070,7 @@ const Assets: React.FC = () => {
                 {isDeleting === a.id ? '…' : '✕'}
               </button>
               <div className="flex items-start">
-                <img src={deviceIconFor(a)} alt="Device" className="w-12 h-12 mr-3" />
+                <AssetIcon asset={a} className="w-12 h-12 mr-3" />
                 <div className="flex-1 min-w-0">
                   <h3 className="font-medium truncate">{a.name}</h3>
                   <div className="flex items-center text-sm text-gray-600">
@@ -1123,8 +1126,8 @@ const Assets: React.FC = () => {
     return (
       <div>
         <div className="device-info-header mt-4 flex border-b pb-6">
-          <div className="device-image w-48 p-4">
-            <img src={deviceIconFor(view)} alt="Device" className="w-full" />
+          <div className="device-image w-48 p-4 flex items-center justify-center">
+            <AssetIcon asset={view} className="w-28 h-28" />
           </div>
           <div className="device-details flex-1 grid grid-cols-2 gap-4 p-4">
             <EditableField
@@ -1704,6 +1707,15 @@ const Assets: React.FC = () => {
             </span>
           </div>
         </div>
+
+        {insights.alerts.length > 0 && (
+          <div className="mb-4 text-[11px] text-slate-500 leading-snug bg-slate-50 ring-1 ring-slate-200 rounded-lg px-3 py-2">
+            Alerts here are attacks on this asset's <span className="font-medium">protocol</span>, captured on the decoy
+            fabric - they hit the internet-exposed decoy, not this internal device directly. The same protocol-level
+            alerts appear on every asset speaking that protocol. Anomalies, in contrast, are this asset's own observed
+            traffic.
+          </div>
+        )}
 
         {items.length === 0 ? (
           <div className="border rounded-lg p-8 text-center text-gray-500">
@@ -4130,6 +4142,8 @@ const Assets: React.FC = () => {
     switch (activeTab) {
       case 'Device Information':
         return renderDeviceInformation();
+      case 'Deception':
+        return <AssetDeceptionCoverage assetId={selected.id} assetName={selected.name} />;
       case 'Risk':
         return renderRisk();
       case 'Vulnerabilities':

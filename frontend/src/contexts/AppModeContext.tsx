@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 /**
- * App-wide "mode" switch introduced in Option C #4 — the HMGCC brief
+ * App-wide "mode" switch introduced in Option C #4 - the HMGCC brief
  * asks for a tear-down assistant rather than a SOC platform, so the
  * default experience has to be the Research Studio, not the alerts /
  * decoy dashboards. Users who want the full OTShield product can flip

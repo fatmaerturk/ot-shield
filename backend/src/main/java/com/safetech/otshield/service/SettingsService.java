@@ -32,7 +32,7 @@ public class SettingsService {
     @Value("${honeypot.ingest.token:}")
     private String configuredIngestToken;
 
-    /** Mutable runtime settings — persisted in memory only. */
+    /** Mutable runtime settings - persisted in memory only. */
     private final Map<String, Object> runtimeSettings = new ConcurrentHashMap<>();
 
     public SettingsService(AuditLogRepository auditRepo,

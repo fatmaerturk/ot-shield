@@ -130,6 +130,12 @@ export const anomalyService = {
     return response.data;
   },
 
+  // Promote anomaly to an investigation Case; returns the created (or existing) case
+  promoteToCase: async (id: string) => {
+    const response = await api.post(`/api/anomalies/${id}/promote`);
+    return response.data;
+  },
+
   // Resolve anomaly
   resolveAnomaly: async (id: string, resolutionNotes: string) => {
     const response = await api.post(`/api/anomalies/${id}/resolve`, null, {

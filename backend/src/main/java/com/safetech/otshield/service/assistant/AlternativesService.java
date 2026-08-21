@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Generates "alternative theories" for a given assistant answer — the
+ * Generates "alternative theories" for a given assistant answer - the
  * second leg of the HMGCC "alternative theories" requirement. Given the
  * same question and retrieved passages, we ask the model to play devil's
  * advocate and produce 2–3 short contrarian hypotheses, each with a
@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * list as JSON on the parent message. The UI renders them as collapsible
  * cards; there's no token-by-token display.
  *
- * <p>Runs synchronously on the caller's servlet thread — generation is
+ * <p>Runs synchronously on the caller's servlet thread - generation is
  * short (~150 tokens total for 3 alternatives) and capped at 45 seconds.
  * If it times out we return whatever we managed to parse, or an empty
  * list on total failure; the parent answer is never touched.
@@ -150,7 +150,7 @@ public class AlternativesService {
     }
 
     // ------------------------------------------------------------------
-    // Retrieval (same as AssistantService — duplicated here rather than
+    // Retrieval (same as AssistantService - duplicated here rather than
     // coupled so a future refactor to a shared helper is a single move).
     // ------------------------------------------------------------------
 
@@ -206,7 +206,7 @@ public class AlternativesService {
     }
 
     // ------------------------------------------------------------------
-    // Parser — intentionally lenient: we'd rather over-accept mis-shaped
+    // Parser - intentionally lenient: we'd rather over-accept mis-shaped
     // output than silently drop a valid hypothesis.
     // ------------------------------------------------------------------
 

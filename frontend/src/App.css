@@ -175,7 +175,7 @@
   100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
 }
 
-/* Decoy (target) marker — bigger, brighter, layered pulse in brand colours */
+/* Decoy (target) marker - bigger, brighter, layered pulse in brand colours */
 .decoy-pulse .decoy-core {
   display: block;
   position: absolute;
@@ -217,7 +217,7 @@
   50%      { transform: translate(-50%, -50%) scale(1.15); filter: brightness(1.2); }
 }
 
-/* Attack arc — dashed animated line */
+/* Attack arc - dashed animated line */
 .attack-line {
   stroke-dasharray: 4 10;
   stroke-linecap: round;
@@ -236,7 +236,7 @@
   filter: drop-shadow(0 0 4px currentColor) blur(0.5px);
 }
 
-/* Impact flash — brief radial burst when projectile reaches decoy */
+/* Impact flash - brief radial burst when projectile reaches decoy */
 .impact-flash {
   position: absolute;
   top: 50%; left: 50%;
@@ -253,7 +253,7 @@
   100% { transform: scale(2.2); opacity: 0; }
 }
 
-/* Severity-based attacker pulse size — HIGH is bigger and hotter */
+/* Severity-based attacker pulse size - HIGH is bigger and hotter */
 .attacker-pulse[data-sev="HIGH"] .pulse-dot,
 .attacker-pulse[data-sev="CRITICAL"] .pulse-dot { width: 14px; height: 14px; }
 .attacker-pulse[data-sev="HIGH"] .pulse-ring,

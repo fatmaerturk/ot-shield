@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * REST surface for researcher annotations — sticky notes, highlights,
+ * REST surface for researcher annotations - sticky notes, highlights,
  * and flags that researchers attach to messages, documents, or
  * citations during a tear-down. Sits under {@code /api/research/**}
  * which is already permit-all, same as findings and threads.
@@ -30,8 +30,8 @@ public class AnnotationController {
     /**
      * List annotations. Accepts either:
      * <ul>
-     *   <li>{@code ?targetKind=MESSAGE&targetId=abc} — just that target</li>
-     *   <li>{@code ?bundleId=...} — everything in one bundle</li>
+     *   <li>{@code ?targetKind=MESSAGE&targetId=abc} - just that target</li>
+     *   <li>{@code ?bundleId=...} - everything in one bundle</li>
      * </ul>
      * If both are supplied targetKind / targetId wins.
      */

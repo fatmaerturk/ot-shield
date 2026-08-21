@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   caseService, CaseDTO, CaseStats, CaseStatus, CasePriority,
@@ -28,6 +29,18 @@ const Cases: React.FC = () => {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
+
+  // Deep-link: /cases?open=<caseId> (e.g. after promoting an anomaly) opens that case.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const open = searchParams.get('open');
+    if (open) {
+      setSelectedId(open);
+      searchParams.delete('open');
+      setSearchParams(searchParams, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const refresh = useCallback(async () => {
     try {

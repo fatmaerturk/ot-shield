@@ -48,6 +48,10 @@ public class Asset {
     @Enumerated(EnumType.STRING)
     private PurdueLevel purdueLevel;
 
+    /** ICS protocol this asset speaks, observed from traffic (e.g. MODBUS). */
+    @Column(name = "protocol")
+    private String protocol;
+
     @Column(name = "manufacturer")
     private String manufacturer;
 

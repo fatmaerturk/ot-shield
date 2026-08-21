@@ -16,6 +16,9 @@ import Conpot from './components/Conpot';
 import NIS2Compliance from './components/NIS2Compliance';
 import NetworkTopology from './components/NetworkTopology';
 import Decoy from './components/Decoy';
+import Honeytoken from './components/Honeytoken';
+import Engage from './components/Engage';
+import DeceptionMetrics from './components/DeceptionMetrics';
 import ThreatIntelAttackers from './components/ThreatIntelAttackers';
 import Cases from './components/Cases';
 import ResearchStudio from './components/ResearchStudio';
@@ -80,6 +83,9 @@ const App: React.FC = () => {
           <Route path="/compliance/nis2" element={<PrivateRoute><NIS2Compliance /></PrivateRoute>} />
           <Route path="/network-topology" element={<PrivateRoute><NetworkTopology /></PrivateRoute>} />
           <Route path="/decoy" element={<PrivateRoute><Decoy /></PrivateRoute>} />
+          <Route path="/honeytokens" element={<PrivateRoute><Honeytoken /></PrivateRoute>} />
+          <Route path="/engage" element={<PrivateRoute><Engage /></PrivateRoute>} />
+          <Route path="/deception-metrics" element={<PrivateRoute><DeceptionMetrics /></PrivateRoute>} />
           <Route path="/threat-intel/attackers" element={<PrivateRoute><ThreatIntelAttackers /></PrivateRoute>} />
           <Route path="/cases" element={<PrivateRoute><Cases /></PrivateRoute>} />
           <Route path="/research/library" element={<PrivateRoute><ResearchRoute /></PrivateRoute>} />

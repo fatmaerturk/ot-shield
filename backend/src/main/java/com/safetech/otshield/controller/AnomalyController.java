@@ -1,6 +1,7 @@
 package com.safetech.otshield.controller;
 
 import com.safetech.otshield.dto.AnomalyDTO;
+import com.safetech.otshield.dto.cases.CaseDTO;
 import com.safetech.otshield.model.Anomaly;
 import com.safetech.otshield.service.AnomalyService;
 import lombok.RequiredArgsConstructor;
@@ -87,6 +88,22 @@ public class AnomalyController {
             return ResponseEntity.ok(acknowledgedAnomaly);
         } catch (RuntimeException e) {
             log.error("Error acknowledging anomaly: {}", e.getMessage());
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    /** Promote a raw anomaly into an owned investigation Case (SOC escalation). */
+    @PostMapping("/{id}/promote")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('ANALYST')")
+    public ResponseEntity<CaseDTO> promoteToCase(
+            @PathVariable String id,
+            @RequestHeader(value = "X-Actor-Name", required = false, defaultValue = "analyst") String actor) {
+        log.info("Promoting anomaly {} to case", id);
+        try {
+            CaseDTO created = anomalyService.promoteToCase(id, actor);
+            return ResponseEntity.status(HttpStatus.CREATED).body(created);
+        } catch (RuntimeException e) {
+            log.error("Error promoting anomaly {} to case: {}", id, e.getMessage());
             return ResponseEntity.notFound().build();
         }
     }

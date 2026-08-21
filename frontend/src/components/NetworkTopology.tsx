@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Network, DataSet } from 'vis-network/standalone/esm/vis-network';
 import Layout from './Layout';
@@ -16,6 +16,7 @@ import topologyService, {
 } from '../services/topologyService';
 import { Anomaly } from '../services/anomalyService';
 import dpiService, { DpiEvent, FunctionCodeStat } from '../services/dpiService';
+import { decoyService } from '../services/decoyService';
 import {
   AssetIconKey,
   detectAssetIconKey,
@@ -149,6 +150,38 @@ const NetworkTopology: React.FC<NetworkTopologyProps> = ({ embedded = false }) =
   const [showUnknownOnly, setShowUnknownOnly] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<ViewMode>('purdue');
+  // Deception coverage keyed by device IP - drives the green/red ring overlay.
+  const [coverageByIp, setCoverageByIp] = useState<Map<string, NodeDeception>>(new Map());
+  const [cloningIp, setCloningIp] = useState<string | null>(null);
+  const [twinStartedIp, setTwinStartedIp] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    decoyService.getAssetCoverage().then((all) => {
+      if (cancelled) return;
+      const m = new Map<string, NodeDeception>();
+      all.forEach((c) => {
+        if (c.ipAddress) m.set(c.ipAddress, {
+          applicable: c.applicable, mirrored: c.mirrored, probed: !!c.probed, assetId: c.assetId,
+        });
+      });
+      setCoverageByIp(m);
+    }).catch(() => { /* deception overlay optional */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Clone a device from the map: stand up its decoy twin (localhost only).
+  const cloneDevice = async (ip: string, assetId?: string) => {
+    if (!assetId) return;
+    setCloningIp(ip);
+    try {
+      const spec = await decoyService.startTwin(assetId);
+      setTwinStartedIp((s) => ({ ...s, [ip]: `${spec.listenHost}:${spec.listenPort}` }));
+    } catch { /* ignore */ } finally {
+      setCloningIp(null);
+    }
+  };
+
   const [scenarioOpen, setScenarioOpen] = useState<boolean>(true);
   /**
    * Explicit "Show demo scenario" toggle. Defaults to false so a fresh
@@ -272,6 +305,50 @@ const NetworkTopology: React.FC<NetworkTopologyProps> = ({ embedded = false }) =
     return { ...graph, nodes, edges };
   }, [graph, severityFilter, levelFilter, protocolFilter, showUnknownOnly]);
 
+  // ---- Lateral-movement animation: a hit on a decoy twin lights up the REAL
+  //      asset it protects, so attribution reads spatially on the map. ----
+  const nodeByIp = useMemo(() => {
+    const m = new Map<string, TopologyNode>();
+    filteredGraph?.nodes.forEach((n) => { if (n.ip) m.set(n.ip, n); });
+    return m;
+  }, [filteredGraph]);
+  const lastAnimTsRef = useRef<string>('');
+
+  const pulseAsset = useCallback((ip: string, write: boolean) => {
+    const node = nodeByIp.get(ip);
+    const ds = nodesDsRef.current;
+    if (!node || !ds) return;
+    ds.update({ id: node.id, borderWidth: 10, size: 36,
+      color: { border: write ? '#DC2626' : '#F59E0B', background: '#FFFFFF' } });
+    window.setTimeout(() => {
+      try { ds.update(buildVisNode(node, viewMode, coverageByIp.get(ip))); } catch { /* node gone */ }
+    }, 1600);
+  }, [nodeByIp, viewMode, coverageByIp]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const rows = await decoyService.twinInteractions();
+        if (cancelled || rows.length === 0) return;
+        if (!lastAnimTsRef.current) { // prime on first poll - don't replay history
+          if (rows[0].ts) lastAnimTsRef.current = rows[0].ts;
+          return;
+        }
+        const fresh: typeof rows = [];
+        for (const r of rows) { // rows are newest-first
+          if (r.ts && r.ts > lastAnimTsRef.current) fresh.push(r); else break;
+        }
+        if (fresh.length && fresh[0].ts) lastAnimTsRef.current = fresh[0].ts;
+        fresh.reverse().forEach((r, i) => {
+          if (r.threatensIp) window.setTimeout(() => pulseAsset(r.threatensIp as string, r.write), i * 250);
+        });
+      } catch { /* twin idle */ }
+    };
+    const id = window.setInterval(tick, 2500);
+    return () => { cancelled = true; window.clearInterval(id); };
+  }, [pulseAsset]);
+
   // --- Available protocol list ---------------------------------------------
   const protocolOptions = useMemo<string[]>(() => {
     if (!graph) return [];
@@ -298,7 +375,7 @@ const NetworkTopology: React.FC<NetworkTopologyProps> = ({ embedded = false }) =
     if (!containerRef.current || !filteredGraph) return;
 
     const nodes = new DataSet<any>(
-      filteredGraph.nodes.map((n) => buildVisNode(n, viewMode))
+      filteredGraph.nodes.map((n) => buildVisNode(n, viewMode, n.ip ? coverageByIp.get(n.ip) : undefined))
     );
     const edges = new DataSet<any>(
       filteredGraph.edges.map((e) => buildVisEdge(e, viewMode))
@@ -321,9 +398,9 @@ const NetworkTopology: React.FC<NetworkTopologyProps> = ({ embedded = false }) =
               enabled: true,
               direction: 'DU', // Down → Up so that L0 (field) is at the bottom
               sortMethod: 'directed',
-              levelSeparation: 120,
-              nodeSpacing: 160,
-              treeSpacing: 200,
+              levelSeparation: 150,
+              nodeSpacing: 240,
+              treeSpacing: 300,
             },
           },
       interaction: {
@@ -490,7 +567,7 @@ const NetworkTopology: React.FC<NetworkTopologyProps> = ({ embedded = false }) =
       network.off('doubleClick');
       network.off('beforeDrawing');
     };
-  }, [filteredGraph, viewMode]);
+  }, [filteredGraph, viewMode, coverageByIp]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -897,6 +974,32 @@ const NetworkTopology: React.FC<NetworkTopologyProps> = ({ embedded = false }) =
             <Legend />
           </div>
 
+          {selected && (() => {
+            const ip = selected.ip;
+            if (!ip) return null;
+            const dec = coverageByIp.get(ip);
+            if (!dec || !dec.applicable) return null;
+            const started = twinStartedIp[ip];
+            return (
+              <div className={`mb-3 rounded-lg px-3 py-2 ring-1 text-sm flex items-center justify-between gap-2 ${dec.mirrored ? 'bg-emerald-50 ring-emerald-200' : 'bg-rose-50 ring-rose-200'}`}>
+                <span className={`font-semibold ${dec.mirrored ? 'text-emerald-700' : 'text-rose-700'}`}>
+                  {dec.mirrored ? '✓ Mirrored by a decoy' : '⚠ Exposed - no decoy'}{dec.probed ? ' · probed' : ''}
+                </span>
+                {started ? (
+                  <span className="text-[11px] text-emerald-700 font-semibold whitespace-nowrap">twin live on {started}</span>
+                ) : (
+                  <button
+                    onClick={() => cloneDevice(ip, dec.assetId)}
+                    disabled={cloningIp === ip}
+                    className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white hover:shadow disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {cloningIp === ip ? 'Starting…' : 'Clone this device'}
+                  </button>
+                )}
+              </div>
+            );
+          })()}
+
           <DetailPanel
             node={selected}
             anomalies={rawData?.anomalies ?? []}
@@ -1065,6 +1168,15 @@ const Legend: React.FC = () => (
     <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
       <span className="inline-block w-3 h-3 rounded-full border-2 border-dashed border-gray-500 bg-white" />
       <span className="text-gray-600">Unknown IP (external)</span>
+    </div>
+    <div className="pt-1 border-t border-gray-100 font-semibold text-gray-700">Deception</div>
+    <div className="flex items-center gap-2">
+      <span className="inline-block w-3 h-3 rounded-full bg-white border-2" style={{ borderColor: '#16A34A' }} />
+      <span className="text-gray-600">Mirrored (decoy twin)</span>
+    </div>
+    <div className="flex items-center gap-2">
+      <span className="inline-block w-3 h-3 rounded-full bg-white border-2" style={{ borderColor: '#DC2626' }} />
+      <span className="text-gray-600">Exposed (no decoy)</span>
     </div>
   </div>
 );
@@ -1471,9 +1583,19 @@ const ZoneLegendOverlay: React.FC = () => (
 const rank = (s: Severity) =>
   ({ NONE: 0, INFO: 1, LOW: 2, MEDIUM: 3, HIGH: 4, CRITICAL: 5 } as Record<Severity, number>)[s];
 
-const buildVisNode = (n: TopologyNode, mode: ViewMode) => {
+type NodeDeception = { applicable: boolean; mirrored: boolean; probed: boolean; assetId?: string };
+
+const buildVisNode = (n: TopologyNode, mode: ViewMode, dec?: NodeDeception) => {
   const tone = n.worstSeverity !== 'NONE' ? n.worstSeverity : n.criticality;
-  const ringColor = SEVERITY_COLOR[tone];
+  // Deception coverage is the primary lens on this map: a mirrored asset gets a
+  // green ring, an exposed ICS asset (real device, no decoy) a red ring - so
+  // coverage gaps read spatially. Non-ICS / unknown nodes keep the severity ring.
+  let ringColor = SEVERITY_COLOR[tone];
+  let decWidth: number | null = null;
+  if (dec && dec.applicable) {
+    ringColor = dec.mirrored ? '#16A34A' : '#DC2626';
+    decWidth = dec.mirrored ? 3 : 4;
+  }
 
   // Pick an icon from the asset type; fall back to UNKNOWN for external IPs.
   const iconKey: AssetIconKey = n.isKnown
@@ -1482,9 +1604,22 @@ const buildVisNode = (n: TopologyNode, mode: ViewMode) => {
   const background = n.isOnline ? '#FFFFFF' : '#F3F4F6';
   const imageUri = makeIconDataUri(iconKey, { background });
 
+  // Compact label "vendor · .lastOctet" (e.g. "Apple · .234"). The full
+  // vendor/model name lives in the node tooltip and the detail panel; long
+  // auto-discovered names overlap badly on the map otherwise.
+  const lastOctet = n.ip && n.ip.includes('.') ? n.ip.slice(n.ip.lastIndexOf('.') + 1) : '';
+  const vendorRaw = n.asset?.manufacturer || '';
+  const vendorShort = vendorRaw
+    .replace(/,?\s*(inc\.?|corp\.?|corporation|ltd\.?|co\.?|llc|gmbh|s\.a\.?)$/i, '')
+    .trim()
+    .slice(0, 16);
+  const shortLabel = vendorShort
+    ? `${vendorShort} · .${lastOctet}`
+    : (n.ip || n.label);
+
   return {
     id: n.id,
-    label: n.label,
+    label: shortLabel,
     // Only emit `level` in Purdue mode - hierarchical layout uses it; in
     // zones mode physics is running and `level` would just pin nodes.
     //
@@ -1520,7 +1655,7 @@ const buildVisNode = (n: TopologyNode, mode: ViewMode) => {
       useBorderWithImage: true,
     },
     title: buildNodeTooltip(n),
-    borderWidth: n.worstSeverity === 'CRITICAL' ? 4 : 2.5,
+    borderWidth: decWidth ?? (n.worstSeverity === 'CRITICAL' ? 4 : 2.5),
     size: n.worstSeverity === 'CRITICAL' ? 28 : 24,
   };
 };

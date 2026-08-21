@@ -15,11 +15,13 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 /**
- * Seeds demo cases on first boot so the SOC analyst UI has something to look at.
- * Safe to run repeatedly: exits early if any cases exist.
+ * DISABLED. Previously seeded fabricated demo cases on first boot. Replaced by
+ * {@link RealCaseGeneratorService}, which opens cases from real decoy telemetry
+ * so the SOC queue only ever contains genuine, evidence-backed incidents. The
+ * {@code @Component} annotation is intentionally removed so this never runs; the
+ * code is kept for reference only.
  */
 @Slf4j
-@Component
 @RequiredArgsConstructor
 public class CaseSeeder {
 

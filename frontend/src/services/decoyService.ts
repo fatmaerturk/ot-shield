@@ -152,6 +152,81 @@ export interface DecoyActionResult {
 
 // ---------- API client ----------
 
+export interface DecoyRecommendation {
+  protocol: string;
+  suggestedVendor: string;
+  suggestedModel: string;
+  suggestedPort: number;
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  alreadyDeployed: boolean;
+  undeployable: boolean;
+  attackCount: number;
+  uniqueAttackers: number;
+  assetCount: number;
+  basedOn: string;
+  rationale: string;
+}
+
+export interface AssetCoverage {
+  assetId: string;
+  assetName: string;
+  manufacturer?: string | null;
+  model?: string | null;
+  ipAddress?: string | null;
+  protocol: string | null;
+  applicable: boolean;
+  mirrored: boolean;
+  decoyName?: string | null;
+  probed?: boolean;
+  attackCount?: number;
+  uniqueAttackers?: number;
+  suggestedVendor?: string;
+  suggestedModel?: string;
+  suggestedPort?: number;
+}
+
+export interface TwinSpec {
+  assetId: string;
+  assetName: string;
+  realIp: string;
+  protocol: string;
+  unitId: number;
+  vendor: string;
+  productCode: string;
+  modelName: string;
+  listenHost: string;
+  listenPort: number | null;
+  observedFunctions: string[];
+  observedEvents: number;
+  running: boolean;
+}
+
+export interface SegmentPlacement {
+  subnet: string;
+  purdueLevel: string;
+  purdueLabel: string;
+  assetCount: number;
+  protocols: string[];
+  probed: boolean;
+  protocolMirrored: boolean;
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  samples: string[];
+  exampleAssetId: string;
+  recommendation: string;
+}
+
+export interface TwinInteraction {
+  ts: string;
+  sourceIp: string;
+  functionCode: string;
+  function: string;
+  write: boolean;
+  detail: string;
+  threatensAssetId?: string;
+  threatensAsset?: string;
+  threatensIp?: string;
+}
+
 export const decoyService = {
   listInstances: () =>
     api.get<DecoyInstance[]>('/api/decoy/instances').then(r => r.data),
@@ -170,6 +245,44 @@ export const decoyService = {
 
   stats: () =>
     api.get<DecoyStats>('/api/decoy/stats').then(r => r.data),
+
+  getRecommendations: (): Promise<DecoyRecommendation[]> =>
+    api.get<DecoyRecommendation[]>('/api/decoy/recommendations').then(r => r.data),
+
+  deployDecoy: (rec: DecoyRecommendation): Promise<DecoyInstance> =>
+    api.post<DecoyInstance>('/api/decoy/deploy', rec).then(r => r.data),
+
+  undeployDecoy: (protocol: string): Promise<{ undeployed: boolean }> =>
+    api.delete<{ undeployed: boolean }>(`/api/decoy/deploy/${encodeURIComponent(protocol)}`).then(r => r.data),
+
+  getAssetCoverage: (): Promise<AssetCoverage[]> =>
+    api.get<AssetCoverage[]>('/api/decoy/asset-coverage').then(r => r.data),
+
+  getSegmentPlan: (): Promise<SegmentPlacement[]> =>
+    api.get<SegmentPlacement[]>('/api/decoy/segment-plan').then(r => r.data),
+
+  getTwinSpec: (assetId: string): Promise<TwinSpec> =>
+    api.get<TwinSpec>(`/api/decoy/twin/${encodeURIComponent(assetId)}/spec`).then(r => r.data),
+
+  startTwin: (assetId: string): Promise<TwinSpec> =>
+    api.post<TwinSpec>(`/api/decoy/twin/${encodeURIComponent(assetId)}/start`).then(r => r.data),
+
+  stopTwin: (): Promise<{ running: boolean }> =>
+    api.post<{ running: boolean }>('/api/decoy/twin/stop').then(r => r.data),
+
+  twinStatus: (): Promise<{ running: boolean; spec: TwinSpec | null }> =>
+    api.get<{ running: boolean; spec: TwinSpec | null }>('/api/decoy/twin/status').then(r => r.data),
+
+  twinInteractions: (): Promise<TwinInteraction[]> =>
+    api.get<TwinInteraction[]>('/api/decoy/twin/interactions').then(r => r.data),
+
+  deployForAsset: (c: AssetCoverage): Promise<DecoyInstance> =>
+    api.post<DecoyInstance>('/api/decoy/deploy', {
+      protocol: c.protocol,
+      suggestedVendor: c.suggestedVendor,
+      suggestedModel: c.suggestedModel,
+      suggestedPort: c.suggestedPort,
+    }).then(r => r.data),
 
   applyAction: (req: DecoyActionRequest) =>
     api.post<DecoyActionResult>('/api/decoy/actions', req).then(r => r.data),

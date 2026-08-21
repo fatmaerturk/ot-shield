@@ -140,13 +140,31 @@ const NAV: NavItem[] = [
     label: 'Deception',
     modes: 'soc',
     icon: <Icon.Eye className="w-4 h-4" />,
-    match: (p) => p === '/attack-intelligence' || p === '/otpot' || p === '/decoy' || p.startsWith('/integrations/ics-decoy') || p.startsWith('/integrations/conpot'),
+    match: (p) => p === '/attack-intelligence' || p === '/otpot' || p === '/decoy' || p === '/honeytokens' || p === '/engage' || p === '/deception-metrics' || p.startsWith('/integrations/ics-decoy') || p.startsWith('/integrations/conpot'),
     children: [
       {
         label: 'Decoy Layer',
         path: '/decoy',
         description: 'Live attacker engagement flow & deep payload inspector',
         icon: <Icon.Target className="w-4 h-4" />,
+      },
+      {
+        label: 'Honeytokens & Lures',
+        path: '/honeytokens',
+        description: 'Planted decoy credentials & beacons - false-positive-free breach signals',
+        icon: <Icon.Lock className="w-4 h-4" />,
+      },
+      {
+        label: 'MITRE Engage',
+        path: '/engage',
+        description: 'Defensive deception coverage mapped from live state - the ATT&CK complement',
+        icon: <Icon.Shield className="w-4 h-4" />,
+      },
+      {
+        label: 'Effectiveness Metrics',
+        path: '/deception-metrics',
+        description: 'Does the deception work? Effort absorbed, engagement depth, intel harvested',
+        icon: <Icon.TrendingUp className="w-4 h-4" />,
       },
       {
         label: 'Attack Intelligence',

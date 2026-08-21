@@ -64,6 +64,7 @@ export interface AssetDTO {
   assetType?: AssetType;
   assetCategory?: AssetCategory;
   purdueLevel?: PurdueLevel;
+  protocol?: string | null;
   manufacturer?: string;
   model?: string;
   serialNumber?: string;

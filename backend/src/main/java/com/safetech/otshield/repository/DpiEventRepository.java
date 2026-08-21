@@ -172,6 +172,32 @@ public interface DpiEventRepository extends JpaRepository<DpiEvent, String> {
             @Param("excludeSession") String excludeSession
     );
 
+    /**
+     * Passive asset discovery: per (device-ip, protocol) aggregates, one view
+     * treating the IP as the destination (responder/slave) and one as the source
+     * (initiator/master). Rows: [ip, protocol, count, firstSeen, lastSeen].
+     */
+    @Query("""
+            SELECT e.destinationIp, e.protocol, COUNT(e), MIN(e.eventTime), MAX(e.eventTime)
+            FROM DpiEvent e WHERE e.destinationIp IS NOT NULL
+            GROUP BY e.destinationIp, e.protocol
+            """)
+    List<Object[]> deviceStatsAsDestination();
+
+    @Query("""
+            SELECT e.sourceIp, e.protocol, COUNT(e), MIN(e.eventTime), MAX(e.eventTime)
+            FROM DpiEvent e WHERE e.sourceIp IS NOT NULL
+            GROUP BY e.sourceIp, e.protocol
+            """)
+    List<Object[]> deviceStatsAsSource();
+
+    /** Observed (register address, value) pairs for a device - seeds the twin's behavioral clone. */
+    @Query("""
+            SELECT e.registerAddress, e.value FROM DpiEvent e
+            WHERE (e.sourceIp = :ip OR e.destinationIp = :ip) AND e.registerAddress IS NOT NULL AND e.value IS NOT NULL
+            """)
+    List<Object[]> registerProfile(@Param("ip") String ip, org.springframework.data.domain.Pageable pageable);
+
     // --- Session cleanup ---------------------------------------------------
 
     long countByPcapSessionId(String pcapSessionId);

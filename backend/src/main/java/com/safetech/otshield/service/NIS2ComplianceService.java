@@ -7,6 +7,7 @@ import com.safetech.otshield.repository.AlertRepository;
 import com.safetech.otshield.repository.HoneypotLogRepository;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
@@ -23,13 +24,24 @@ import java.util.stream.Collectors;
  *  - Self-assessment scorecard
  *  - Audit trail
  *
- * No mock data — every number traces to honeypot_logs / alerts tables.
+ * No mock data - every number traces to honeypot_logs / alerts tables.
  */
 @Service
 public class NIS2ComplianceService {
 
+    /** Date the org first attested NIS2 compliance; anchors the annual self-audit cadence. */
+    private static final LocalDate NIS2_COMPLIANT_SINCE = LocalDate.of(2024, 10, 17);
+
     private final HoneypotLogRepository honeypotRepo;
     private final AlertRepository alertRepo;
+
+    /** Days until the next annual self-audit anniversary (NIS2 Art. 21 effectiveness review). */
+    private static long daysToNextSelfAudit() {
+        LocalDate today = LocalDate.now();
+        LocalDate next = NIS2_COMPLIANT_SINCE.withYear(today.getYear());
+        if (!next.isAfter(today)) next = next.plusYears(1);
+        return ChronoUnit.DAYS.between(today, next);
+    }
 
     public NIS2ComplianceService(HoneypotLogRepository honeypotRepo, AlertRepository alertRepo) {
         this.honeypotRepo = honeypotRepo;
@@ -37,10 +49,14 @@ public class NIS2ComplianceService {
     }
 
     public Map<String, Object> buildPosture() {
-        List<HoneypotLog> hpLogs = honeypotRepo.findAllByOrderByTimestampDesc().stream()
+        List<HoneypotLog> hpLogs = honeypotRepo.findTop8000ByOrderByTimestampDesc().stream()
             .filter(l -> !HoneypotLogService.isInternalNoise(l))
             .collect(Collectors.toList());
-        List<Alert> alerts = alertRepo.findAll();
+        // Recent-window snapshot: the full alerts table (with its EAGER tags
+        // collection) can be tens of thousands of rows and makes this endpoint
+        // time out. The posture is a current-state view, so the most recent
+        // alerts are the relevant ones.
+        List<Alert> alerts = alertRepo.findTop2000ByOrderByCreatedAtDesc();
 
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("organization", buildOrgProfile());
@@ -63,7 +79,7 @@ public class NIS2ComplianceService {
         org.put("sector", "Manufacturing (Annex II)");
         org.put("entityType", "Important Entity");
         org.put("country", "Türkiye");
-        org.put("nis2CompliantSince", "2024-10-17");
+        org.put("nis2CompliantSince", NIS2_COMPLIANT_SINCE.toString());
         return org;
     }
 
@@ -75,14 +91,39 @@ public class NIS2ComplianceService {
         int avg = (int) Math.round(measureScores.values().stream()
             .mapToInt(Integer::intValue).average().orElse(0));
 
+        // Real week-over-week trend: score the last 7 days of telemetry against
+        // the 7 days before it. Positive delta = posture improving. (Only the
+        // data-driven measures a/b/f move between windows; control-maturity
+        // measures are constant, so the delta reflects genuine detection/response
+        // activity rather than a fixed placeholder.)
+        LocalDateTime now = LocalDateTime.now();
+        int currentWeek  = windowScore(hpLogs, alerts, now.minusDays(7),  now);
+        int previousWeek = windowScore(hpLogs, alerts, now.minusDays(14), now.minusDays(7));
+        int trendDelta = currentWeek - previousWeek;
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("score", avg);
-        result.put("trendDelta", -3); // mock delta vs last week — could be persisted
+        result.put("trendDelta", trendDelta);
         result.put("classification",
             avg >= 85 ? "EXCELLENT" :
             avg >= 70 ? "GOOD" :
             avg >= 50 ? "DEVELOPING" : "DEFICIENT");
         return result;
+    }
+
+    /** Overall posture score computed from telemetry falling within [from, to). */
+    private int windowScore(List<HoneypotLog> hpLogs, List<Alert> alerts,
+                            LocalDateTime from, LocalDateTime to) {
+        List<HoneypotLog> lw = hpLogs.stream()
+            .filter(l -> l.getTimestamp() != null
+                && !l.getTimestamp().isBefore(from) && l.getTimestamp().isBefore(to))
+            .collect(Collectors.toList());
+        List<Alert> aw = alerts.stream()
+            .filter(a -> a.getCreatedAt() != null
+                && !a.getCreatedAt().isBefore(from) && a.getCreatedAt().isBefore(to))
+            .collect(Collectors.toList());
+        Map<String, Integer> s = scoreEachMeasure(lw, aw);
+        return (int) Math.round(s.values().stream().mapToInt(Integer::intValue).average().orElse(0));
     }
 
     private Map<String, Object> buildKpis(List<HoneypotLog> hpLogs, List<Alert> alerts) {
@@ -116,14 +157,14 @@ public class NIS2ComplianceService {
         kpi.put("criticalFindings", criticalFindings);
         kpi.put("reportableIncidents", reportable);
         kpi.put("reportableOverdue", reportableOverdue);
-        kpi.put("daysToNextSelfAudit", 23); // placeholder — could come from a config
+        kpi.put("daysToNextSelfAudit", daysToNextSelfAudit());
         kpi.put("evidenceArtifacts", hpLogs.size() + alerts.size());
 
         return kpi;
     }
 
     /**
-     * NIS2 Article 23 reportable incident — significant or having
+     * NIS2 Article 23 reportable incident - significant or having
      * substantial operational impact. We approximate "significant" as:
      *   - severity >= HIGH
      *   - source = ICS Decoy / Tripwire (real ICS-targeted activity)
@@ -135,7 +176,7 @@ public class NIS2ComplianceService {
         return src.contains("ICS") || src.contains("Tripwire") || src.contains("Conpot");
     }
 
-    /** Article 23.4(a) — early warning must be sent within 24 hours. */
+    /** Article 23.4(a) - early warning must be sent within 24 hours. */
     private boolean isReportingOverdue(Alert a) {
         if (a.getCreatedAt() == null) return false;
         long hours = ChronoUnit.HOURS.between(a.getCreatedAt(), LocalDateTime.now());
@@ -243,10 +284,10 @@ public class NIS2ComplianceService {
     private Map<String, Integer> scoreEachMeasure(List<HoneypotLog> hpLogs, List<Alert> alerts) {
         Map<String, Integer> s = new LinkedHashMap<>();
 
-        // (a) Risk analysis — high if honeypot data + threat intel exists
+        // (a) Risk analysis - high if honeypot data + threat intel exists
         s.put("a", hpLogs.size() > 100 ? 82 : hpLogs.size() > 10 ? 65 : 40);
 
-        // (b) Incident handling — based on alert resolution velocity
+        // (b) Incident handling - based on alert resolution velocity
         long total = Math.max(1, alerts.size());
         long resolved = alerts.stream()
             .filter(a -> a.getStatus() != null && "RESOLVED".equalsIgnoreCase(a.getStatus().name()))
@@ -254,10 +295,10 @@ public class NIS2ComplianceService {
         int resolveRate = (int) (resolved * 100 / total);
         s.put("b", Math.min(95, 50 + resolveRate / 2 + (hpLogs.size() > 100 ? 15 : 0)));
 
-        s.put("c", 75); // BC — placeholder
-        s.put("d", 68); // Supply chain — placeholder
+        s.put("c", 75); // BC - placeholder
+        s.put("d", 68); // Supply chain - placeholder
         s.put("e", 78); // Acquisition
-        // (f) Effectiveness assessment — based on having metrics + alerts coverage
+        // (f) Effectiveness assessment - based on having metrics + alerts coverage
         s.put("f", hpLogs.isEmpty() ? 30 : Math.min(90, 60 + Math.min(30, hpLogs.size() / 30)));
 
         s.put("g", 72); // Training
@@ -315,8 +356,8 @@ public class NIS2ComplianceService {
             r.put("status", a.getStatus() == null ? "NEW" : a.getStatus().name());
             r.put("recommendedAction",
                 "Submit early warning to USOM (Türkiye CSIRT) within 24h. "
-                + "Include indicators: " + (a.getSourceIp() == null ? "—" : a.getSourceIp())
-                + " probing " + (a.getProtocol() == null ? "—" : a.getProtocol()));
+                + "Include indicators: " + (a.getSourceIp() == null ? "-" : a.getSourceIp())
+                + " probing " + (a.getProtocol() == null ? "-" : a.getProtocol()));
             rows.add(r);
         }
 
@@ -338,11 +379,11 @@ public class NIS2ComplianceService {
         // categorize by Article 21 measure
         Map<String, Long> byArticle = new LinkedHashMap<>();
         byArticle.put("21.2.a", (long) Math.min(hpLogs.size(), 50));     // risk analysis
-        byArticle.put("21.2.b", (long) hpLogs.size());                   // incident handling — all logs
+        byArticle.put("21.2.b", (long) hpLogs.size());                   // incident handling - all logs
         byArticle.put("21.2.c", 12L);                                    // BC drills
         byArticle.put("21.2.d", 8L);                                     // supplier reviews
         byArticle.put("21.2.e", 5L);                                     // acquisition records
-        byArticle.put("21.2.f", (long) alerts.size());                   // effectiveness — alerts
+        byArticle.put("21.2.f", (long) alerts.size());                   // effectiveness - alerts
         byArticle.put("21.2.g", 24L);                                    // training certs
         byArticle.put("21.2.h", 16L);                                    // crypto policies
         byArticle.put("21.2.i", 142L);                                   // access reviews
@@ -495,7 +536,7 @@ public class NIS2ComplianceService {
         r.put("reportingEntity", "SafeTech ICS Operator");
         r.put("country", "Türkiye");
         r.put("sector", "Manufacturing (Annex II)");
-        r.put("csirtTarget", "USOM — Ulusal Siber Olaylara Müdahale Merkezi");
+        r.put("csirtTarget", "USOM - Ulusal Siber Olaylara Müdahale Merkezi");
         r.put("submittedAt", LocalDateTime.now().toString());
 
         Map<String, Object> incident = new LinkedHashMap<>();
@@ -508,7 +549,7 @@ public class NIS2ComplianceService {
         incident.put("destinationPort", a.getDestinationPort());
         incident.put("protocol", a.getProtocol());
 
-        // Article 23.4(a) — what early warning must contain
+        // Article 23.4(a) - what early warning must contain
         Map<String, Object> assessment = new LinkedHashMap<>();
         assessment.put("suspectedMaliciousCause", true);
         assessment.put("possibleCrossBorderImpact", true);
