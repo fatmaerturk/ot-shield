@@ -62,6 +62,7 @@ public class ModbusTwinEmulator {
     private final CaseService caseService;
     private final DpiEventRepository dpiRepo;
     private final AnomalyService anomalyService;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     // Behavioral clone: register address -> current value. Seeded from the real
     // device's observed values (DPI), then drifted over time so reads evolve like
@@ -69,10 +70,18 @@ public class ModbusTwinEmulator {
     private volatile Map<Integer, Integer> registerBaselines = new ConcurrentHashMap<>();
     private volatile int realIpHash;
 
-    public ModbusTwinEmulator(CaseService caseService, DpiEventRepository dpiRepo, AnomalyService anomalyService) {
+    // Fingerprint fidelity: learned from the real device so a scanner (nmap
+    // modbus-discover / PLCscan) can't tell the twin apart from the real PLC.
+    private volatile int validRegLo = 0;      // valid register-map bounds
+    private volatile int validRegHi = 1023;
+    private volatile int latencyBaseMs = 12;  // realistic response latency (real PLCs are not 0ms)
+
+    public ModbusTwinEmulator(CaseService caseService, DpiEventRepository dpiRepo, AnomalyService anomalyService,
+                              org.springframework.context.ApplicationEventPublisher eventPublisher) {
         this.caseService = caseService;
         this.dpiRepo = dpiRepo;
         this.anomalyService = anomalyService;
+        this.eventPublisher = eventPublisher;
     }
 
     public static final class TwinResult {
@@ -162,6 +171,11 @@ public class ModbusTwinEmulator {
                 if (!readFully(in, pdu, pduLen)) break;
 
                 byte[] respPdu = buildResponse(pdu, spec, remote);
+                // Realistic processing latency + small jitter, so timing analysis
+                // sees a live PLC, not an instant-responding honeypot.
+                try {
+                    Thread.sleep(latencyBaseMs + java.util.concurrent.ThreadLocalRandom.current().nextInt(0, 7));
+                } catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
                 byte[] frame = new byte[7 + respPdu.length];
                 frame[0] = mbap[0]; frame[1] = mbap[1];       // transaction id echo
                 frame[2] = 0; frame[3] = 0;                   // protocol id
@@ -189,9 +203,14 @@ public class ModbusTwinEmulator {
                 }
                 return exception(fc, 0x01);
             case 0x01: case 0x02: { // read coils / discrete inputs
-                int addr = pdu.length >= 3 ? (((pdu[1] & 0xFF) << 8) | (pdu[2] & 0xFF)) : 0;
-                int qty = pdu.length >= 5 ? (((pdu[3] & 0xFF) << 8) | (pdu[4] & 0xFF)) : 1;
-                qty = Math.max(1, Math.min(qty, 2000));
+                if (pdu.length < 5) return exception(fc, 0x03);
+                int addr = ((pdu[1] & 0xFF) << 8) | (pdu[2] & 0xFF);
+                int qty = ((pdu[3] & 0xFF) << 8) | (pdu[4] & 0xFF);
+                if (qty < 1 || qty > 2000) return exception(fc, 0x03);           // Illegal Data Value
+                if (addr < validRegLo || addr + qty - 1 > validRegHi) {          // Illegal Data Address
+                    record(remote, fc, fcName(fc), false, "out-of-range read @ " + addr);
+                    return exception(fc, 0x02);
+                }
                 int bytes = (qty + 7) / 8;
                 record(remote, fc, fcName(fc), false, "read " + qty + " @ " + addr);
                 byte[] r = new byte[2 + bytes];
@@ -200,9 +219,14 @@ public class ModbusTwinEmulator {
                 return r;
             }
             case 0x03: case 0x04: { // read holding / input registers -> evolving values
-                int addr = pdu.length >= 3 ? (((pdu[1] & 0xFF) << 8) | (pdu[2] & 0xFF)) : 0;
-                int qty = pdu.length >= 5 ? (((pdu[3] & 0xFF) << 8) | (pdu[4] & 0xFF)) : 1;
-                qty = Math.max(1, Math.min(qty, 125));
+                if (pdu.length < 5) return exception(fc, 0x03);
+                int addr = ((pdu[1] & 0xFF) << 8) | (pdu[2] & 0xFF);
+                int qty = ((pdu[3] & 0xFF) << 8) | (pdu[4] & 0xFF);
+                if (qty < 1 || qty > 125) return exception(fc, 0x03);            // Illegal Data Value
+                if (addr < validRegLo || addr + qty - 1 > validRegHi) {          // Illegal Data Address
+                    record(remote, fc, fcName(fc), false, "out-of-range read @ " + addr);
+                    return exception(fc, 0x02);
+                }
                 int bytes = qty * 2;
                 record(remote, fc, fcName(fc), false, "read " + qty + " regs @ " + addr);
                 byte[] r = new byte[2 + bytes];
@@ -214,22 +238,27 @@ public class ModbusTwinEmulator {
                 }
                 return r;
             }
-            case 0x05: case 0x06: // write single coil / register  -> HIGH SIGNAL
-                if (fc == 0x06 && pdu.length >= 5) {                 // a write sticks, like a real PLC
-                    registerBaselines.put(((pdu[1] & 0xFF) << 8) | (pdu[2] & 0xFF),
-                                          ((pdu[3] & 0xFF) << 8) | (pdu[4] & 0xFF));
+            case 0x05: case 0x06: { // write single coil / register  -> HIGH SIGNAL
+                int waddr = pdu.length >= 3 ? (((pdu[1] & 0xFF) << 8) | (pdu[2] & 0xFF)) : 0;
+                record(remote, fc, fcName(fc), true, "write to decoy @ " + waddr); // breach recorded regardless
+                if (fc == 0x06) {
+                    if (pdu.length < 5) return exception(fc, 0x03);
+                    if (waddr < validRegLo || waddr > validRegHi) return exception(fc, 0x02); // real PLC rejects
+                    registerBaselines.put(waddr, ((pdu[3] & 0xFF) << 8) | (pdu[4] & 0xFF));   // in-range write sticks
                 }
-                record(remote, fc, fcName(fc), true, "write to decoy");
                 return Arrays.copyOf(pdu, Math.min(pdu.length, 5)); // echo request
+            }
             case 0x0F: case 0x10: { // write multiple  -> HIGH SIGNAL
-                if (fc == 0x10 && pdu.length >= 6) {
-                    int addr = ((pdu[1] & 0xFF) << 8) | (pdu[2] & 0xFF);
-                    int qty = ((pdu[3] & 0xFF) << 8) | (pdu[4] & 0xFF);
+                int waddr = pdu.length >= 3 ? (((pdu[1] & 0xFF) << 8) | (pdu[2] & 0xFF)) : 0;
+                int wqty = pdu.length >= 5 ? (((pdu[3] & 0xFF) << 8) | (pdu[4] & 0xFF)) : 0;
+                record(remote, fc, fcName(fc), true, "write to decoy @ " + waddr); // breach recorded regardless
+                if (fc == 0x10) {
+                    if (pdu.length < 6 || wqty < 1 || wqty > 123) return exception(fc, 0x03);
+                    if (waddr < validRegLo || waddr + wqty - 1 > validRegHi) return exception(fc, 0x02);
                     int idx = 6;
-                    for (int i = 0; i < qty && idx + 1 < pdu.length; i++, idx += 2)
-                        registerBaselines.put(addr + i, ((pdu[idx] & 0xFF) << 8) | (pdu[idx + 1] & 0xFF));
+                    for (int i = 0; i < wqty && idx + 1 < pdu.length; i++, idx += 2)
+                        registerBaselines.put(waddr + i, ((pdu[idx] & 0xFF) << 8) | (pdu[idx + 1] & 0xFF));
                 }
-                record(remote, fc, fcName(fc), true, "write to decoy");
                 byte[] r = new byte[5];
                 r[0] = (byte) fc;
                 for (int i = 1; i < 5 && i < pdu.length; i++) r[i] = pdu[i]; // echo addr+qty
@@ -282,7 +311,24 @@ public class ModbusTwinEmulator {
             }
         } catch (Exception ignored) { }
         this.registerBaselines = base;
-        log.info("Twin behavior: {} observed register(s) seeded for {}", base.size(), spec.getRealIp());
+
+        // Learn the real device's register-map bounds so out-of-range reads
+        // return "Illegal Data Address" exactly like the real PLC would.
+        if (base.size() >= 2) {
+            int lo = Integer.MAX_VALUE, hi = Integer.MIN_VALUE;
+            for (Integer k : base.keySet()) { lo = Math.min(lo, k); hi = Math.max(hi, k); }
+            this.validRegLo = Math.max(0, lo);
+            this.validRegHi = Math.min(65535, hi + 32); // devices expose a contiguous-ish block
+        } else {
+            this.validRegLo = 0;
+            this.validRegHi = 255; // small plausible map when we haven't observed the real one
+        }
+        // Stable, realistic per-device response latency (8-27 ms) - real PLCs are
+        // never 0 ms, and a fixed 0 ms is a classic honeypot tell.
+        this.latencyBaseMs = 8 + Math.floorMod(this.realIpHash, 20);
+
+        log.info("Twin behavior: {} observed register(s), valid range {}..{}, ~{}ms latency for {}",
+                base.size(), validRegLo, validRegHi, latencyBaseMs, spec.getRealIp());
     }
 
     /**
@@ -406,6 +452,17 @@ public class ModbusTwinEmulator {
                 .build());
         } catch (Exception e) {
             log.warn("Twin anomaly creation failed: {}", e.getMessage());
+        }
+
+        // Close the loop: let the deception layer self-heal (expand decoys,
+        // block the attacker, rotate honeytokens). Decoupled via an event so we
+        // don't depend on the adaptation service directly.
+        try {
+            eventPublisher.publishEvent(new BreachDetectedEvent(
+                    "TWIN_WRITE", remote, spec.getAssetId(), spec.getAssetName(), spec.getProtocol(),
+                    fnName + " (FC " + fc + ")"));
+        } catch (Exception e) {
+            log.warn("Breach event publish failed: {}", e.getMessage());
         }
     }
 

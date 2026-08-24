@@ -10,6 +10,8 @@ import {
   DecoyProtocol,
   EngagementStatus,
   DecoyRecommendation,
+  AdaptationEvent,
+  AttackPathsResponse,
 } from '../services/decoyService';
 import { Icon, PageHero, Panel, severityStyle } from './theme';
 import PayloadInspector from './decoy/PayloadInspector';
@@ -74,6 +76,8 @@ const Decoy: React.FC = () => {
   const [liveArc, setLiveArc] = useState<{ engagementId: string; ts: number } | null>(null);
   const [topTab, setTopTab] = useState<'engagements' | 'fakeHmis'>('engagements');
   const [recommendations, setRecommendations] = useState<DecoyRecommendation[]>([]);
+  const [adaptations, setAdaptations] = useState<AdaptationEvent[]>([]);
+  const [attackPaths, setAttackPaths] = useState<AttackPathsResponse | null>(null);
   const [showRecs, setShowRecs] = useState(true);
   const [deploying, setDeploying] = useState<string | null>(null);
   const [deployingAll, setDeployingAll] = useState(false);
@@ -94,8 +98,32 @@ const Decoy: React.FC = () => {
       .then(setRecommendations)
       .catch(() => { /* non-fatal: panel just stays empty */ });
 
+  // ---- Adaptive (self-healing) deception feed ----
+  const [adaptTesting, setAdaptTesting] = useState(false);
+  const loadAdaptations = () =>
+    decoyService.listAdaptations()
+      .then(setAdaptations)
+      .catch(() => { /* non-fatal */ });
+
+  const runAdaptTest = async () => {
+    setAdaptTesting(true);
+    try {
+      await decoyService.triggerAdaptTest('203.0.113.66', 'MODBUS', 'Test PLC (simulated breach)');
+      await loadAdaptations();
+    } catch { /* ignore */ } finally { setAdaptTesting(false); }
+  };
+
+  const loadAttackPaths = () =>
+    decoyService.getAttackPaths()
+      .then(setAttackPaths)
+      .catch(() => { /* non-fatal */ });
+
   useEffect(() => {
     loadRecommendations();
+    loadAdaptations();
+    loadAttackPaths();
+    const t = window.setInterval(loadAdaptations, 15000);
+    return () => window.clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -387,6 +415,131 @@ const Decoy: React.FC = () => {
 
       {/* Segment-aware placement plan - where twins should sit */}
       <SegmentPlanPanel />
+
+      {/* Adaptive Response - the self-healing loop, made visible */}
+      <Panel
+        title="Adaptive Response"
+        subtitle="When a decoy or honeytoken is breached, the fabric self-heals automatically: expand decoys, block the attacker, rotate honeytokens."
+        icon={<Icon.Shield className="w-5 h-5" />}
+        actions={
+          <button
+            onClick={runAdaptTest}
+            disabled={adaptTesting}
+            className="px-3 py-1.5 text-xs font-semibold text-violet-700 bg-violet-50 ring-1 ring-violet-200 rounded-lg hover:bg-violet-100 transition disabled:opacity-50"
+          >
+            {adaptTesting ? 'Simulating…' : 'Simulate breach'}
+          </button>
+        }
+      >
+        {adaptations.length === 0 ? (
+          <div className="py-8 text-center text-sm text-slate-400">
+            No adaptations yet. When an attacker writes to a decoy twin or trips a honeytoken, the platform's automatic response appears here. Use "Simulate breach" to see it in action.
+          </div>
+        ) : (
+          <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+            {adaptations.map((a) => {
+              const tone =
+                a.trigger === 'TWIN_WRITE' ? 'bg-rose-50 text-rose-700 ring-rose-200'
+                : a.trigger === 'HONEYTOKEN_TRIP' ? 'bg-amber-50 text-amber-700 ring-amber-200'
+                : 'bg-slate-100 text-slate-600 ring-slate-200';
+              return (
+                <div key={a.id} className="rounded-xl ring-1 ring-slate-200 bg-white p-3">
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ring-1 ${tone}`}>{a.trigger.replace('_', ' ')}</span>
+                        {a.sourceIp && <span className="font-mono text-xs text-slate-600">{a.sourceIp}</span>}
+                        {a.protocol && <span className="text-[10px] text-slate-400">{a.protocol}</span>}
+                      </div>
+                      <div className="mt-1 text-sm font-medium text-slate-800">{a.summary}</div>
+                    </div>
+                    <span className="text-[11px] text-slate-400 whitespace-nowrap">{new Date(a.ts).toLocaleString()}</span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {a.actions.map((act, i) => (
+                      <div key={i} className={`flex items-start gap-2 rounded-lg px-2.5 py-1.5 ring-1 ${act.success ? 'bg-emerald-50/60 ring-emerald-100' : 'bg-rose-50/60 ring-rose-100'}`}>
+                        <span className={`mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0 ${act.success ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                        <div className="min-w-0">
+                          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{act.type.replace(/_/g, ' ')}</div>
+                          <div className="text-[11px] text-slate-600 leading-snug">{act.detail}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Panel>
+
+      {/* Predictive placement - attack paths to crown jewels */}
+      {attackPaths && (attackPaths.paths.length > 0 || attackPaths.topRecommendations.length > 0) && (
+        <Panel
+          title="Attack Paths & Predictive Placement"
+          subtitle="Where an attacker would go to reach your crown jewels - and the choke-points to put a decoy so you catch them first."
+          icon={<Icon.Target className="w-5 h-5" />}
+        >
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            {[
+              { label: 'Crown jewels', value: attackPaths.summary.crownJewelCount },
+              { label: 'Attack paths', value: attackPaths.summary.pathsFound },
+              { label: 'Observed edges', value: attackPaths.summary.observedEdges },
+              { label: 'Unreachable', value: attackPaths.summary.unreachableJewels },
+            ].map((s) => (
+              <div key={s.label} className="rounded-xl ring-1 ring-slate-200 bg-white p-3 text-center">
+                <div className="text-2xl font-bold text-slate-900">{s.value}</div>
+                <div className="text-[11px] text-slate-500">{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {attackPaths.topRecommendations.length > 0 && (
+            <div className="mb-4">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-2">Recommended decoy placements</div>
+              <div className="space-y-1.5">
+                {attackPaths.topRecommendations.map((r) => (
+                  <div key={r.ip} className={`flex items-start gap-2 rounded-lg px-3 py-2 ring-1 ${r.mirrored ? 'bg-emerald-50/60 ring-emerald-100' : 'bg-violet-50/60 ring-violet-100'}`}>
+                    <span className={`mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0 ${r.mirrored ? 'bg-emerald-500' : 'bg-violet-500'}`} />
+                    <div className="min-w-0">
+                      <span className="text-sm font-semibold text-slate-800">{r.name}</span>
+                      <span className="ml-2 text-[10px] text-slate-400">{r.protocol}{r.purdueLevel ? ' · ' + r.purdueLevel.replace('LEVEL_', 'L') : ''}</span>
+                      <div className="text-[11px] text-slate-600">{r.rationale}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {attackPaths.paths.length > 0 && (
+            <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+              {attackPaths.paths.map((p, i) => (
+                <div key={i} className="rounded-xl ring-1 ring-slate-200 bg-white p-3">
+                  <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                    {p.path.map((n, k) => (
+                      <React.Fragment key={k}>
+                        {k > 0 && <span className="text-slate-300">→</span>}
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md ring-1 ${
+                          n.ip === p.toIp ? 'bg-rose-50 text-rose-700 ring-rose-200 font-semibold'
+                          : p.chokepoint && n.ip === p.chokepoint.ip ? 'bg-violet-100 text-violet-800 ring-violet-300 font-semibold'
+                          : 'bg-slate-50 text-slate-600 ring-slate-200'
+                        }`}>
+                          {n.ip === p.toIp && <Icon.Lock className="w-3 h-3" />}
+                          {n.name}
+                          {n.mirrored && <span className="text-[9px] text-emerald-600">●</span>}
+                        </span>
+                      </React.Fragment>
+                    ))}
+                    <span className="ml-1 text-[10px] text-slate-400">{p.hops} hop(s)</span>
+                  </div>
+                  <div className="mt-1.5 text-[11px] text-slate-600">{p.recommendation}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+      )}
 
       {/* Top tab bar */}
       <div className="flex items-center gap-2 border-b border-slate-200">

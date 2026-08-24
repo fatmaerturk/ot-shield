@@ -1,70 +1,53 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
-import { User } from '../types/user';
 import { PageHero, Panel, Icon, pageContainer, pageItem } from './theme';
 import { motion } from 'framer-motion';
-
-interface Detection {
-  id: string;
-  timestamp: string;
-  tacticName: string;
-  techniqueName: string;
-  severity: 'low' | 'medium' | 'high';
-  description: string;
-}
+import { threatIntelService, TtpMatrix, TtpTechnique } from '../services/threatIntelService';
 
 interface MitreMatrixProps {
+  /**
+   * Optional extra technique IDs to force-highlight (e.g. IDs detected in a
+   * pcap). Merged with the techniques the backend reports as observed.
+   */
   highlightedTechniqueIds?: string[];
 }
 
-// Technique arayüzünü tanımla
-interface Technique {
-  name: string;
-  id: string;       // ID özelliğini ekle
-  highlighted: boolean; // Bu hala kullanılabilir veya kaldırılabilir
-}
-
-// Matrix'in tipini daha belirgin hale getir (opsiyonel ama önerilir)
-interface MatrixData {
-  description: string;
-  techniques: Technique[]; // Tanımladığımız arayüzü kullan
-}
-
-type MatrixStructure = Record<string, MatrixData>;
-
+/**
+ * Renders the real MITRE ATT&CK for ICS matrix served by
+ * {@code /api/threat-intel/ttp-matrix}: the full tactic/technique taxonomy the
+ * platform tracks, with the cells that were actually observed on the deception
+ * fabric highlighted from real observation counts. Nothing here is hard-coded -
+ * the taxonomy and the "observed" overlay both come from the backend.
+ */
 const MitreMatrix: React.FC<MitreMatrixProps> = ({ highlightedTechniqueIds = [] }) => {
-  const [currentUser, setCurrentUser] = useState<User | undefined>(undefined);
-  const [detections, setDetections] = useState<Detection[]>([]);
+  const [matrix, setMatrix] = useState<TtpMatrix | null>(null);
+  const [observedIds, setObservedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Fetch current user from local storage
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
       try {
-        setCurrentUser(JSON.parse(userStr) as User);
-      } catch {
-        setCurrentUser(undefined);
-      }
-    }
-
-    // Define async function to fetch data
-    const fetchData = async () => {
-      setLoading(true); // Start loading
-      try {
-        const res = await api.get<Detection[]>('/api/vulnerabilities?manufacturer=all');
-        setDetections(res.data);
-        setError(null); // Clear previous errors on success
+        const data = await threatIntelService.getMatrix();
+        if (!cancelled) { setMatrix(data); setError(null); }
       } catch (err: any) {
-        setError(err.response?.data?.message || 'Failed to load data');
+        if (!cancelled) setError(err?.response?.data?.message || 'Failed to load the ATT&CK for ICS matrix');
       } finally {
-        setLoading(false); // Stop loading regardless of success or failure
+        if (!cancelled) setLoading(false);
       }
-    };
-
-    fetchData(); // Call the async function
-  }, []); // Empty dependency array means this runs once on mount
+      // Overlay the techniques actually observed across all attackers (the
+      // aggregate honeypot TTP report). IDs appear inside "T0846 Name" strings,
+      // so we scan for MITRE ICS ids. Never fabricated - absence keeps cells cold.
+      try {
+        const rep = await api.get('/api/honeypot/ttp-analysis');
+        const ids = (JSON.stringify(rep.data).match(/T0\d{3,4}/g) || []).map(s => s.toUpperCase());
+        if (!cancelled) setObservedIds(new Set(ids));
+      } catch { /* leave observed empty on failure */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   if (loading) {
     return (
@@ -84,154 +67,17 @@ const MitreMatrix: React.FC<MitreMatrixProps> = ({ highlightedTechniqueIds = [] 
     );
   }
 
-  // Statik matrix verisi (ID'lerin eklendiğinden emin olun)
-  const matrix: MatrixStructure = {
-    'Initial Access': {
-      description: '13 techniques',
-      techniques: [
-        { name: 'Data Historian Compromise', id: 'T0811', highlighted: false },
-        { name: 'Drive-by Compromise', id: 'T1189', highlighted: false },
-        { name: 'Engineering Workstation Compromise', id: 'TXXXX_IA_3', highlighted: false },
-        { name: 'Exploit Public-Facing Application', id: 'TXXXX_IA_4', highlighted: false },
-        { name: 'External Remote Services', id: 'TXXXX_IA_5', highlighted: false },
-        { name: 'Internet Accessible Device', id: 'TXXXX_IA_6', highlighted: false },
-        { name: 'Remote Services', id: 'TXXXX_IA_7', highlighted: false },
-        { name: 'Replication Through Removable Media', id: 'TXXXX_IA_8', highlighted: false },
-        { name: 'Rogue Master', id: 'TXXXX_IA_9', highlighted: false },
-        { name: 'Supply Chain Compromise', id: 'TXXXX_IA_10', highlighted: false },
-        { name: 'Wireless Compromise', id: 'TXXXX_IA_11', highlighted: false }
-      ]
-    },
-    'Execution': {
-      description: '7 techniques',
-      techniques: [
-        { name: 'Change Operating Mode', id: 'TXXXX_EX_1', highlighted: false },
-        { name: 'Command-Line Interface', id: 'TXXXX_EX_2', highlighted: false },
-        { name: 'Execution through API', id: 'TXXXX_EX_3', highlighted: false },
-        { name: 'Graphical User Interface', id: 'TXXXX_EX_4', highlighted: false },
-        { name: 'Hooking', id: 'TXXXX_EX_5', highlighted: false },
-        { name: 'Native API', id: 'TXXXX_EX_6', highlighted: false },
-        { name: 'Scripting', id: 'TXXXX_EX_7', highlighted: false },
-        { name: 'User Execution', id: 'TXXXX_EX_8', highlighted: false }
-      ]
-    },
-    'Persistence': {
-      description: '3 techniques',
-      techniques: [
-        { name: 'Modify Program', id: 'TXXXX_PE_1', highlighted: false },
-        { name: 'Module Firmware', id: 'TXXXX_PE_2', highlighted: false },
-        { name: 'Project File Infection', id: 'TXXXX_PE_3', highlighted: false },
-        { name: 'System Firmware', id: 'TXXXX_PE_4', highlighted: false },
-        { name: 'Valid Accounts', id: 'TXXXX_PE_5', highlighted: false }
-      ]
-    },
-    'Privilege Escalation': {
-      description: '2 techniques',
-      techniques: [
-        { name: 'Exploitation for Privilege Escalation', id: 'TXXXX_PR_1', highlighted: false },
-        { name: 'Hooking', id: 'TXXXX_PR_2', highlighted: false }
-      ]
-    },
-    'Evasion': {
-      description: '6 techniques',
-      techniques: [
-        { name: 'Change Operating Mode', id: 'TXXXX_EV_1', highlighted: false },
-        { name: 'Exploitation for Evasion', id: 'TXXXX_EV_2', highlighted: false },
-        { name: 'Indicator Removal on Host', id: 'TXXXX_EV_3', highlighted: false },
-        { name: 'Masquerading', id: 'TXXXX_EV_4', highlighted: false },
-        { name: 'Rootkit', id: 'TXXXX_EV_5', highlighted: false },
-        { name: 'Spoof Reporting Message', id: 'TXXXX_EV_6', highlighted: false }
-      ]
-    },
-    'Discovery': {
-      description: '7 techniques',
-      techniques: [
-        { name: 'Network Connection Enumeration', id: 'T1049', highlighted: false },
-        { name: 'Network Sniffing', id: 'TXXXX_DI_3', highlighted: false },
-        { name: 'Remote System Discovery', id: 'TXXXX_DI_4', highlighted: false },
-        { name: 'Remote System Information Discovery', id: 'TXXXX_DI_5', highlighted: false },
-        { name: 'Wireless Sniffing', id: 'TXXXX_DI_6', highlighted: false },
-        { name: 'Network Service Scanning', id: 'T1046', highlighted: false }
-      ]
-    },
-    'Lateral Movement': {
-      description: '6 techniques',
-      techniques: [
-        { name: 'Default Credentials', id: 'TXXXX_LM_1', highlighted: false },
-        { name: 'Exploitation of Remote Services', id: 'TXXXX_LM_2', highlighted: false },
-        { name: 'Lateral Tool Transfer', id: 'TXXXX_LM_3', highlighted: false },
-        { name: 'Program Download', id: 'TXXXX_LM_4', highlighted: false },
-        { name: 'Remote Services', id: 'TXXXX_LM_5', highlighted: false },
-        { name: 'Valid Accounts', id: 'TXXXX_LM_6', highlighted: false }
-      ]
-    },
-    'Collection': {
-      description: '10 techniques',
-      techniques: [
-        { name: 'Automated Collection', id: 'TXXXX_CO_1', highlighted: false },
-        { name: 'Detect Operating Mode', id: 'TXXXX_CO_2', highlighted: false },
-        { name: 'I/O Image', id: 'TXXXX_CO_3', highlighted: false },
-        { name: 'Man in the Middle', id: 'TXXXX_CO_4', highlighted: false },
-        { name: 'Monitor Process State', id: 'TXXXX_CO_5', highlighted: false },
-        { name: 'Point & Tag Identification', id: 'TXXXX_CO_6', highlighted: false },
-        { name: 'Program Upload', id: 'TXXXX_CO_7', highlighted: false },
-        { name: 'Screen Capture', id: 'TXXXX_CO_8', highlighted: false },
-        { name: 'Wireless Sniffing', id: 'TXXXX_CO_9', highlighted: false }
-      ]
-    },
-    'Command and Control': {
-      description: '3 techniques',
-      techniques: [
-        { name: 'Commonly Used Port', id: 'TXXXX_CC_1', highlighted: false },
-        { name: 'Connection Proxy', id: 'TXXXX_CC_2', highlighted: false },
-        { name: 'Standard Application Layer Protocol', id: 'TXXXX_CC_3', highlighted: false }
-      ]
-    },
-    'Inhibit Response Function': {
-      description: '3 techniques',
-      techniques: [
-        { name: 'Activate Firmware Update Mode', id: 'TXXXX_IR_1', highlighted: false },
-        { name: 'Alarm Suppression', id: 'TXXXX_IR_2', highlighted: false },
-        { name: 'Block Command Message', id: 'TXXXX_IR_3', highlighted: false },
-        { name: 'Block Reporting Message', id: 'TXXXX_IR_4', highlighted: false },
-        { name: 'Block Serial COM', id: 'TXXXX_IR_5', highlighted: false }
-      ]
-    },
-    'Impair Process Control': {
-      description: '13 techniques',
-      techniques: [
-        { name: 'Brute Force I/O', id: 'TXXXX_IP_1', highlighted: false },
-        { name: 'Modify Parameter', id: 'TXXXX_IP_2', highlighted: false },
-        { name: 'Module Firmware', id: 'TXXXX_IP_3', highlighted: false },
-        { name: 'Spoof Reporting Message', id: 'TXXXX_IP_4', highlighted: false },
-        { name: 'Unauthorized Command Message', id: 'TXXXX_IP_5', highlighted: false }
-      ]
-    },
-    'Impact': {
-      description: '12 techniques',
-      techniques: [
-        { name: 'Damage to Property', id: 'TXXXX_IM_1', highlighted: false },
-        { name: 'Denial of Control', id: 'TXXXX_IM_2', highlighted: false },
-        { name: 'Denial of View', id: 'TXXXX_IM_3', highlighted: false },
-        { name: 'Loss of Availability', id: 'TXXXX_IM_4', highlighted: false },
-        { name: 'Loss of Control', id: 'TXXXX_IM_5', highlighted: false },
-        { name: 'Loss of Productivity and Revenue', id: 'TXXXX_IM_6', highlighted: false },
-        { name: 'Loss of Protection', id: 'TXXXX_IM_7', highlighted: false },
-        { name: 'Loss of Safety', id: 'TXXXX_IM_8', highlighted: false },
-        { name: 'Loss of View', id: 'TXXXX_IM_9', highlighted: false },
-        { name: 'Manipulation of Control', id: 'TXXXX_IM_10', highlighted: false },
-        { name: 'Manipulation of View', id: 'TXXXX_IM_11', highlighted: false },
-        { name: 'Theft of Operational Information', id: 'TXXXX_IM_12', highlighted: false }
-      ]
-    }
+  const tactics = (matrix?.tactics ?? []).slice().sort((a, b) => a.order - b.order);
+  const highlightSet = new Set(highlightedTechniqueIds.map(id => id.toUpperCase()));
+  const isObserved = (t: TtpTechnique) => {
+    const id = (t.id || '').toUpperCase();
+    return t.observationCount > 0 || highlightSet.has(id) || observedIds.has(id);
   };
 
-  const totalTechniques = Object.values(matrix).reduce((sum, t) => sum + t.techniques.length, 0);
-  const totalTactics = Object.keys(matrix).length;
-  const highlightedCount = Object.values(matrix).reduce(
-    (sum, t) => sum + t.techniques.filter(tech => highlightedTechniqueIds.includes(tech.id)).length,
-    0,
-  );
+  const totalTactics = tactics.length;
+  const totalTechniques = tactics.reduce((sum, t) => sum + t.techniques.length, 0);
+  const observedCount = tactics.reduce((sum, t) => sum + t.techniques.filter(isObserved).length, 0);
+  const maxTechniques = Math.max(1, ...tactics.map(t => t.techniques.length));
 
   return (
     <motion.div variants={pageContainer} initial="hidden" animate="visible" className="space-y-6">
@@ -239,77 +85,75 @@ const MitreMatrix: React.FC<MitreMatrixProps> = ({ highlightedTechniqueIds = [] 
         eyebrow="THREAT FRAMEWORK"
         icon={<Icon.Target className="w-4 h-4" />}
         title="MITRE ATT&CK for ICS"
-        subtitle="Adversary tactics and techniques observed across OT environments."
+        subtitle="The tactics and techniques the platform tracks, with the ones actually observed on your deception fabric highlighted from real telemetry."
         stats={[
           { label: 'Tactics', value: totalTactics },
           { label: 'Techniques', value: totalTechniques },
-          { label: 'Observed', value: highlightedCount },
+          { label: 'Observed', value: observedCount },
         ]}
       />
 
       <motion.div variants={pageItem}>
         <Panel
           title="ICS Kill Chain Matrix"
-          subtitle="Highlighted cells indicate techniques detected in your environment"
+          subtitle="Highlighted cells were observed in your environment (real attacker telemetry). The number is the observation count."
           icon={<Icon.Layers className="w-5 h-5" />}
         >
-          <div className="overflow-x-auto rounded-xl ring-1 ring-slate-200/70">
-            <table className="min-w-full border-collapse">
-              <thead>
-                <tr>
-                  {Object.entries(matrix).map(([tactic, data]) => (
-                    <th
-                      key={tactic}
-                      className="bg-gradient-to-b from-slate-50 to-slate-100 border-b border-r border-slate-200 p-3 text-center align-top min-w-[140px]"
-                    >
-                      <div className="text-xs font-bold text-slate-900 uppercase tracking-wide">
-                        {tactic}
-                      </div>
-                      <div className="text-[10px] text-slate-500 mt-1">{data.description}</div>
-                    </th>
+          {tactics.length === 0 ? (
+            <div className="py-10 text-center text-sm text-slate-400">No matrix data available yet.</div>
+          ) : (
+            <div className="overflow-x-auto rounded-xl ring-1 ring-slate-200/70">
+              <table className="min-w-full border-collapse">
+                <thead>
+                  <tr>
+                    {tactics.map(tac => (
+                      <th
+                        key={tac.id || tac.name}
+                        className="bg-gradient-to-b from-slate-50 to-slate-100 border-b border-r border-slate-200 p-3 text-center align-top min-w-[140px]"
+                      >
+                        <div className="text-xs font-bold text-slate-900 uppercase tracking-wide">{tac.name}</div>
+                        <div className="text-[10px] text-slate-500 mt-1">
+                          {tac.techniques.length} technique{tac.techniques.length === 1 ? '' : 's'}
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: maxTechniques }, (_, i) => (
+                    <tr key={i}>
+                      {tactics.map(tac => {
+                        const technique = tac.techniques[i];
+                        const observed = technique ? isObserved(technique) : false;
+                        return (
+                          <td
+                            key={`${tac.id || tac.name}-${i}`}
+                            className={`border-b border-r border-slate-200/70 p-1.5 text-xs align-top ${technique ? '' : 'bg-slate-50/50'}`}
+                          >
+                            {technique && (
+                              <div
+                                className={`rounded-lg px-2 py-1.5 transition-all duration-150 cursor-default ${
+                                  observed
+                                    ? 'bg-gradient-to-r from-rose-500 to-fuchsia-500 text-white font-semibold shadow-md ring-1 ring-rose-400/60'
+                                    : 'bg-white text-slate-700 hover:bg-violet-50 hover:text-violet-900 ring-1 ring-slate-100'
+                                }`}
+                                title={`${technique.name} (${technique.id})${technique.observationCount > 0 ? ` - ${technique.observationCount} observation(s)` : ''}`}
+                              >
+                                {technique.name}
+                                {observed && technique.observationCount > 0 && (
+                                  <span className="ml-1 font-bold">· {technique.observationCount}</span>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(() => {
-                  const maxTechniques = Math.max(...Object.values(matrix).map(t => t.techniques.length));
-                  const rows = [];
-                  for (let i = 0; i < maxTechniques; i++) {
-                    rows.push(
-                      <tr key={i}>
-                        {Object.entries(matrix).map(([tactic, data]) => {
-                          const technique = data.techniques[i];
-                          const isHighlighted = technique && (highlightedTechniqueIds.includes(technique.id));
-                          return (
-                            <td
-                              key={`${tactic}-${i}`}
-                              className={`border-b border-r border-slate-200/70 p-1.5 text-xs align-top ${
-                                technique ? '' : 'bg-slate-50/50'
-                              }`}
-                            >
-                              {technique && (
-                                <div
-                                  className={`rounded-lg px-2 py-1.5 transition-all duration-150 cursor-default ${
-                                    isHighlighted
-                                      ? 'bg-gradient-to-r from-rose-500 to-fuchsia-500 text-white font-semibold shadow-md ring-1 ring-rose-400/60'
-                                      : 'bg-white text-slate-700 hover:bg-violet-50 hover:text-violet-900 ring-1 ring-slate-100'
-                                  }`}
-                                  title={`${technique.name} (${technique.id})`}
-                                >
-                                  {technique.name}
-                                </div>
-                              )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  }
-                  return rows;
-                })()}
-              </tbody>
-            </table>
-          </div>
+                </tbody>
+              </table>
+            </div>
+          )}
           <div className="mt-4 flex items-center gap-4 text-xs text-slate-500">
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-gradient-to-r from-rose-500 to-fuchsia-500"></div>
@@ -326,4 +170,4 @@ const MitreMatrix: React.FC<MitreMatrixProps> = ({ highlightedTechniqueIds = [] 
   );
 };
 
-export default MitreMatrix; 
+export default MitreMatrix;

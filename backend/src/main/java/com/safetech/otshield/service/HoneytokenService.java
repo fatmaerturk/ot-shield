@@ -41,15 +41,18 @@ public class HoneytokenService {
     private final HoneytokenTripRepository tripRepo;
     private final HoneypotLogRepository honeypotRepo;
     private final CaseService caseService;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     public HoneytokenService(HoneytokenRepository tokenRepo,
                              HoneytokenTripRepository tripRepo,
                              HoneypotLogRepository honeypotRepo,
-                             CaseService caseService) {
+                             CaseService caseService,
+                             org.springframework.context.ApplicationEventPublisher eventPublisher) {
         this.tokenRepo = tokenRepo;
         this.tripRepo = tripRepo;
         this.honeypotRepo = honeypotRepo;
         this.caseService = caseService;
+        this.eventPublisher = eventPublisher;
     }
 
     // ---------------------------------------------------------------- CRUD ---
@@ -210,6 +213,14 @@ public class HoneytokenService {
 
         openCase(token, trip);
         log.warn("Honeytoken TRIP [{}] {} planted at '{}' by {}", method, token.getType(), token.getLabel(), sourceIp);
+
+        // Close the loop: trigger self-healing deception adaptation.
+        try {
+            eventPublisher.publishEvent(new com.safetech.otshield.service.decoy.BreachDetectedEvent(
+                    "HONEYTOKEN_TRIP", sourceIp, null, token.getLabel(), token.getType(), method));
+        } catch (Exception e) {
+            log.warn("Breach event publish failed: {}", e.getMessage());
+        }
     }
 
     private void openCase(Honeytoken token, HoneytokenTrip trip) {

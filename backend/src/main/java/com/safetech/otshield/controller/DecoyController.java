@@ -11,6 +11,9 @@ import com.safetech.otshield.service.decoy.DecoyService;
 import com.safetech.otshield.service.decoy.DecoyRecommendationService;
 import com.safetech.otshield.service.decoy.TwinSpecService;
 import com.safetech.otshield.service.decoy.ModbusTwinEmulator;
+import com.safetech.otshield.service.decoy.DeceptionAdaptationService;
+import com.safetech.otshield.service.decoy.BreachDetectedEvent;
+import com.safetech.otshield.service.decoy.AttackPathService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -32,15 +35,50 @@ public class DecoyController {
     private final CaseService caseService;
     private final TwinSpecService twinSpecService;
     private final ModbusTwinEmulator twinEmulator;
+    private final DeceptionAdaptationService adaptationService;
+    private final AttackPathService attackPathService;
 
     public DecoyController(DecoyService service, DecoyRecommendationService recommendationService,
                           CaseService caseService, TwinSpecService twinSpecService,
-                          ModbusTwinEmulator twinEmulator) {
+                          ModbusTwinEmulator twinEmulator, DeceptionAdaptationService adaptationService,
+                          AttackPathService attackPathService) {
         this.service = service;
         this.recommendationService = recommendationService;
         this.caseService = caseService;
         this.twinSpecService = twinSpecService;
         this.twinEmulator = twinEmulator;
+        this.adaptationService = adaptationService;
+        this.attackPathService = attackPathService;
+    }
+
+    /** Predictive placement: attack paths to crown jewels + recommended decoy choke-points. */
+    @GetMapping("/attack-paths")
+    public ResponseEntity<Map<String, Object>> attackPaths() {
+        return ResponseEntity.ok(attackPathService.buildAttackPaths());
+    }
+
+    // ---------- Adaptive (self-healing) deception ----------
+
+    /** Recent auto-adaptations the platform performed in response to breaches. */
+    @GetMapping("/adaptations")
+    public ResponseEntity<List<AdaptationEventDTO>> adaptations(@RequestParam(defaultValue = "50") int limit) {
+        return ResponseEntity.ok(adaptationService.recent(limit));
+    }
+
+    @GetMapping("/adaptations/stats")
+    public ResponseEntity<Map<String, Object>> adaptationStats() {
+        return ResponseEntity.ok(adaptationService.stats());
+    }
+
+    /** Manually fire the self-healing loop (demo / testing). */
+    @PostMapping("/adapt/test")
+    public ResponseEntity<AdaptationEventDTO> adaptTest(
+            @RequestParam String ip,
+            @RequestParam(defaultValue = "MODBUS") String protocol,
+            @RequestParam(required = false) String asset) {
+        AdaptationEventDTO ev = adaptationService.adapt(new BreachDetectedEvent(
+                "MANUAL", ip, null, asset != null ? asset : ("decoy-" + protocol), protocol, "Manual test trigger"));
+        return ResponseEntity.ok(ev);
     }
 
     @GetMapping("/instances")

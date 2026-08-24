@@ -141,7 +141,9 @@ const NIS2Compliance: React.FC = () => {
     let cancel = false;
     const load = async () => {
       try {
-        const r = await fetch('http://localhost:8080/api/compliance/nis2/posture');
+        const r = await fetch('http://localhost:8080/api/compliance/nis2/posture', {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
+        });
         if (!r.ok) {
           if (!cancel) { setError(`Backend HTTP ${r.status}`); setLoading(false); }
           return;
@@ -173,7 +175,9 @@ const NIS2Compliance: React.FC = () => {
 
   const generateEarlyWarning = async (alertId: string) => {
     try {
-      const r = await fetch(`http://localhost:8080/api/compliance/nis2/early-warning/${alertId}`);
+      const r = await fetch(`http://localhost:8080/api/compliance/nis2/early-warning/${alertId}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
+      });
       if (r.ok) setEarlyWarning(await r.json());
     } catch { /* noop */ }
   };
@@ -252,7 +256,7 @@ const NIS2Compliance: React.FC = () => {
           { label: 'Reportable incidents', value: data.kpis.reportableIncidents, sub: data.kpis.reportableOverdue > 0 ? `${data.kpis.reportableOverdue} overdue!` : 'on schedule', color: data.kpis.reportableOverdue > 0 ? 'from-rose-500 to-fuchsia-600' : 'from-emerald-500 to-teal-500' },
           { label: 'Evidence artifacts', value: data.kpis.evidenceArtifacts, sub: `${data.evidenceLibrary.retentionMonths}-month retention`, color: 'from-amber-500 to-orange-500' },
           { label: 'Days to next audit', value: data.kpis.daysToNextSelfAudit, sub: 'on schedule', color: 'from-emerald-500 to-teal-500' },
-          { label: 'Article 21 measures', value: 10, sub: `${data.article21Measures.filter((m) => m.status === 'COMPLIANT').length} compliant`, color: 'from-violet-500 to-fuchsia-500' },
+          { label: 'Article 21 measures', value: data.article21Measures.length, sub: `${data.article21Measures.filter((m) => m.status === 'COMPLIANT').length} compliant`, color: 'from-violet-500 to-fuchsia-500' },
           { label: 'Self-assessment', value: assessmentScore.answered, sub: `${assessmentScore.total} total`, color: 'from-fuchsia-500 to-pink-500' },
         ].map((k, i) => (
           <motion.div

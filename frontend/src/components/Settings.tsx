@@ -13,6 +13,12 @@ import {
   Cog6ToothIcon,
 } from '@heroicons/react/24/outline';
 
+// Raw fetch() bypasses the axios auth interceptor, so /api/settings/* (now an
+// authenticated surface) needs the JWT attached explicitly.
+const authHeaders = (): Record<string, string> => ({
+  Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+});
+
 // =====================================================================
 // Settings - unified configuration page
 // 9 tabs in a left sidebar:
@@ -193,22 +199,22 @@ const Settings: React.FC = () => {
     };
     setSettings(defaults);
 
-    fetch('http://localhost:8080/api/settings')
+    fetch('http://localhost:8080/api/settings', { headers: authHeaders() })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d && setSettings((s) => ({ ...defaults, ...s, ...d })))
       .catch(() => {});
 
-    fetch('http://localhost:8080/api/settings/system-status')
+    fetch('http://localhost:8080/api/settings/system-status', { headers: authHeaders() })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d && setSystemStatus(d))
       .catch(() => {});
 
-    fetch('http://localhost:8080/api/settings/tunnel-status')
+    fetch('http://localhost:8080/api/settings/tunnel-status', { headers: authHeaders() })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d && setTunnel(d))
       .catch(() => {});
 
-    fetch('http://localhost:8080/api/settings/audit-log?limit=200')
+    fetch('http://localhost:8080/api/settings/audit-log?limit=200', { headers: authHeaders() })
       .then((r) => (r.ok ? r.json() : []))
       .then((d) => Array.isArray(d) && setAudit(d))
       .catch(() => {});
@@ -226,13 +232,13 @@ const Settings: React.FC = () => {
         .finally(() => setUsersLoading(false));
     }
     if (tab === 'audit') {
-      fetch('http://localhost:8080/api/settings/audit-log?limit=200').then(r => r.json()).then(setAudit).catch(() => {});
+      fetch('http://localhost:8080/api/settings/audit-log?limit=200', { headers: authHeaders() }).then(r => r.json()).then(setAudit).catch(() => {});
     }
     if (tab === 'system') {
-      fetch('http://localhost:8080/api/settings/system-status').then(r => r.json()).then(setSystemStatus).catch(() => {});
+      fetch('http://localhost:8080/api/settings/system-status', { headers: authHeaders() }).then(r => r.json()).then(setSystemStatus).catch(() => {});
     }
     if (tab === 'tunnel') {
-      fetch('http://localhost:8080/api/settings/tunnel-status').then(r => r.json()).then(setTunnel).catch(() => {});
+      fetch('http://localhost:8080/api/settings/tunnel-status', { headers: authHeaders() }).then(r => r.json()).then(setTunnel).catch(() => {});
     }
   }, [tab]);
 
@@ -271,7 +277,7 @@ const Settings: React.FC = () => {
     const t = window.setTimeout(() => {
       fetch('http://localhost:8080/api/settings', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ [key]: value }),
       }).then(() => setSavedAt(Date.now())).catch(() => {});
     }, 700);
@@ -280,7 +286,7 @@ const Settings: React.FC = () => {
 
   const rotateToken = async () => {
     if (!window.confirm('Rotate the honeypot ingest token? Your forwarder will stop ingesting until you update OTSHIELD_INGEST_TOKEN env var.')) return;
-    const r = await fetch('http://localhost:8080/api/settings/rotate-token', { method: 'POST' });
+    const r = await fetch('http://localhost:8080/api/settings/rotate-token', { method: 'POST', headers: authHeaders() });
     if (r.ok) {
       const d = await r.json();
       setSettings((s) => ({ ...s, ingestToken: d.newToken }));

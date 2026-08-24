@@ -76,8 +76,12 @@ public class ThreatIntelService {
         ))
     );
 
-    public ThreatIntelService(DecoyService decoyService) {
+    private final com.safetech.otshield.service.IpAnonymityService ipAnonymityService;
+
+    public ThreatIntelService(DecoyService decoyService,
+                              com.safetech.otshield.service.IpAnonymityService ipAnonymityService) {
         this.decoyService = decoyService;
+        this.ipAnonymityService = ipAnonymityService;
     }
 
     // ---------- Public API ----------
@@ -261,6 +265,15 @@ public class ThreatIntelService {
         s.setTags(p.getTags() == null ? List.of() : new ArrayList<>(p.getTags()));
         s.setBlocked(p.getBlocked());
         s.setQuarantined(p.getQuarantined());
+
+        // connection-nature (Tor / hosting / VPN vs residential) - real IP intel
+        com.safetech.otshield.service.IpAnonymityService.AnonymityInfo an = ipAnonymityService.classify(p.getIp());
+        s.setAnonymityCategory(an.category.name());
+        s.setAnonymityLabel(an.label());
+        s.setAnonymityConfidence(an.confidence.name());
+        s.setAnonymized(an.isAnonymized());
+        s.setAnonymityNote(an.note);
+        s.setAnonymitySignals(an.signals);
 
         // protocols
         Set<String> protos = engagements.stream()
@@ -689,5 +702,86 @@ public class ThreatIntelService {
     }
     private static class TechniqueSpec {
         String id; String name;
+    }
+
+    // ------------------------------------------------------------------
+    // First-party OT threat-intel FEED (outbound intel production)
+    // ------------------------------------------------------------------
+
+    /**
+     * Live STIX 2.1 bundle of every attacker IOC observed on our decoys, built
+     * directly from the lightweight attacker summaries (fast - avoids a
+     * per-IP detail lookup) with stable indicator IDs so subscribers can dedupe.
+     */
+    public Map<String, Object> buildStixFeed() {
+        List<AttackerIntelSummaryDTO> attackers = listAttackers(null, null, null);
+        Instant now = Instant.now();
+        List<Map<String, Object>> objects = new ArrayList<>();
+        for (AttackerIntelSummaryDTO a : attackers) {
+            if (a.getIp() == null || a.getIp().isBlank()) continue;
+            List<String> labels = new ArrayList<>();
+            if (a.getTags() != null) labels.addAll(a.getTags());
+            labels.add("malicious-activity");
+            List<String> protos = a.getProtocols() == null ? List.of() : a.getProtocols();
+            String desc = "First-party OT IOC observed on OTShield decoys"
+                + (a.getCountryName() != null ? " from " + a.getCountryName() : "")
+                + (protos.isEmpty() ? "" : "; protocols: " + String.join(", ", protos))
+                + (a.getThreatScore() != null ? "; threat score " + a.getThreatScore() : "")
+                + (a.getDominantTactic() != null ? "; tactic " + a.getDominantTactic() : "");
+
+            Map<String, Object> ind = new LinkedHashMap<>();
+            ind.put("type", "indicator");
+            ind.put("spec_version", "2.1");
+            ind.put("id", "indicator--" + UUID.nameUUIDFromBytes(("otshield-" + a.getIp())
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            ind.put("created", a.getFirstSeen() != null ? a.getFirstSeen() : now);
+            ind.put("modified", a.getLastSeen() != null ? a.getLastSeen() : now);
+            ind.put("name", "OT decoy attacker " + a.getIp());
+            ind.put("description", desc);
+            ind.put("indicator_types", List.of("malicious-activity"));
+            ind.put("pattern", "[ipv4-addr:value = '" + a.getIp() + "']");
+            ind.put("pattern_type", "stix");
+            ind.put("valid_from", a.getFirstSeen() != null ? a.getFirstSeen() : now);
+            ind.put("labels", labels);
+            ind.put("confidence", a.getThreatScore() != null ? a.getThreatScore() : 0);
+            objects.add(ind);
+        }
+        Map<String, Object> bundle = new LinkedHashMap<>();
+        bundle.put("type", "bundle");
+        bundle.put("id", "bundle--" + UUID.randomUUID());
+        bundle.put("spec_version", "2.1");
+        bundle.put("objects", objects);
+        return bundle;
+    }
+
+    /** Headline metrics for the "you PRODUCE OT intel" feed surface. */
+    public Map<String, Object> feedSummary() {
+        List<AttackerIntelSummaryDTO> attackers = listAttackers(null, null, null);
+        int total = attackers.size();
+        long highRisk = attackers.stream()
+                .filter(a -> a.getThreatScore() != null && a.getThreatScore() >= 70).count();
+        Set<String> countries = new LinkedHashSet<>();
+        Set<String> protocols = new LinkedHashSet<>();
+        Set<String> tactics = new LinkedHashSet<>();
+        Instant lastUpdated = null;
+        for (AttackerIntelSummaryDTO a : attackers) {
+            if (a.getCountry() != null) countries.add(a.getCountry());
+            if (a.getProtocols() != null) protocols.addAll(a.getProtocols());
+            if (a.getDominantTactic() != null) tactics.add(a.getDominantTactic());
+            if (a.getLastSeen() != null && (lastUpdated == null || a.getLastSeen().isAfter(lastUpdated))) {
+                lastUpdated = a.getLastSeen();
+            }
+        }
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("producedIocs", total);
+        m.put("highRisk", highRisk);
+        m.put("countries", countries.size());
+        m.put("protocols", new ArrayList<>(protocols));
+        m.put("tacticsCovered", tactics.size());
+        m.put("lastUpdated", lastUpdated);
+        m.put("generatedAt", Instant.now());
+        m.put("formats", List.of("STIX", "CSV", "PLAIN"));
+        m.put("feedUrl", "/api/threat-intel/feed");
+        return m;
     }
 }

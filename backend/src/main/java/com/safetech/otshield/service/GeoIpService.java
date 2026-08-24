@@ -1,6 +1,7 @@
 package com.safetech.otshield.service;
 
 import com.maxmind.geoip2.DatabaseReader;
+import com.maxmind.geoip2.model.AsnResponse;
 import com.maxmind.geoip2.model.CityResponse;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -55,11 +56,24 @@ public class GeoIpService {
 
     public static final GeoInfo UNKNOWN = new GeoInfo(null, null, null, null);
 
+    /** Autonomous System (network owner) of an IP - basis for datacenter/VPN classification. */
+    public static final class Asn {
+        public final Long number;
+        public final String org;
+        public Asn(Long number, String org) { this.number = number; this.org = org; }
+    }
+
     @Value("${geoip.database.path:backend/geoip/GeoLite2-City.mmdb}")
     private String databasePath;
 
+    @Value("${geoip.asn.database.path:backend/geoip/GeoLite2-ASN.mmdb}")
+    private String asnDatabasePath;
+
     private DatabaseReader reader;
+    private DatabaseReader asnReader;
+    private volatile boolean asnAvailable = false;
     private final Map<String, GeoInfo> cache = new ConcurrentHashMap<>();
+    private final Map<String, Asn> asnCache = new ConcurrentHashMap<>();
     private volatile boolean available = false;
 
     @PostConstruct
@@ -88,12 +102,65 @@ public class GeoIpService {
             log.error("Failed to load GeoIP database '{}': {}", f.getAbsolutePath(), e.getMessage());
             available = false;
         }
+
+        // ASN database (network owner) - optional, same graceful-degradation contract.
+        File af = new File(asnDatabasePath);
+        if (!af.exists()) {
+            File alt = new File(asnDatabasePath.replaceFirst("^backend/", ""));
+            if (alt.exists()) af = alt;
+        }
+        if (!af.exists()) {
+            log.warn("GeoIP ASN database not found at '{}'. Network-owner / anonymity classification will be NOT_ASSESSED. " +
+                    "Download GeoLite2-ASN.mmdb from https://www.maxmind.com/ and place it at '{}'.",
+                asnDatabasePath, af.getAbsolutePath());
+            asnAvailable = false;
+        } else {
+            try {
+                asnReader = new DatabaseReader.Builder(af).build();
+                asnAvailable = true;
+                log.info("GeoIP ASN database loaded: {}", af.getAbsolutePath());
+            } catch (Exception e) {
+                log.error("Failed to load GeoIP ASN database '{}': {}", af.getAbsolutePath(), e.getMessage());
+                asnAvailable = false;
+            }
+        }
     }
 
     @PreDestroy
     public void close() {
         if (reader != null) {
             try { reader.close(); } catch (Exception ignored) {}
+        }
+        if (asnReader != null) {
+            try { asnReader.close(); } catch (Exception ignored) {}
+        }
+    }
+
+    public boolean isAsnAvailable() {
+        return asnAvailable;
+    }
+
+    /** True for addresses that cannot be geolocated / attributed publicly (RFC1918, loopback, doc ranges). */
+    public boolean isPrivateOrLoopbackPublic(String ip) {
+        return ip != null && isPrivateOrLoopback(ip);
+    }
+
+    /** Look up the Autonomous System (network owner) of an IP. Returns null if unavailable, private, or not found. */
+    public Asn lookupAsn(String ip) {
+        if (ip == null || ip.isBlank() || !asnAvailable) return null;
+        if (isPrivateOrLoopback(ip)) return null;
+        Asn cached = asnCache.get(ip);
+        if (cached != null) return cached;
+        try {
+            AsnResponse resp = asnReader.asn(InetAddress.getByName(ip));
+            Long num = resp.getAutonomousSystemNumber();
+            String org = resp.getAutonomousSystemOrganization();
+            Asn asn = new Asn(num, org);
+            if (asnCache.size() < 50_000) asnCache.put(ip, asn);
+            return asn;
+        } catch (Exception e) {
+            if (asnCache.size() < 50_000) asnCache.put(ip, new Asn(null, null));
+            return null;
         }
     }
 

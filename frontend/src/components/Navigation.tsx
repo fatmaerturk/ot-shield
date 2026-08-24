@@ -88,13 +88,19 @@ const NAV: NavItem[] = [
     modes: 'soc',
     icon: <Icon.Search className="w-4 h-4" />,
     match: (p) =>
-      p === '/anomalies' || p === '/mitre-matrix' || p.startsWith('/threat-intelligence') || p.startsWith('/threat-intel'),
+      p === '/anomalies' || p === '/campaigns' || p === '/mitre-matrix' || p.startsWith('/threat-intelligence') || p.startsWith('/threat-intel'),
     children: [
       {
         label: 'Anomaly Detection',
         path: '/anomalies',
         description: 'AI-powered anomaly stream',
         icon: <Icon.Brain className="w-4 h-4" />,
+      },
+      {
+        label: 'Attack Campaigns',
+        path: '/campaigns',
+        description: 'Per-attacker kill-chain timeline',
+        icon: <Icon.Target className="w-4 h-4" />,
       },
       {
         label: 'MITRE ATT&CK for ICS',
@@ -114,13 +120,19 @@ const NAV: NavItem[] = [
         description: 'TTP matrix, fingerprints & campaigns from decoys',
         icon: <Icon.Target className="w-4 h-4" />,
       },
+      {
+        label: 'OT Intel Feed',
+        path: '/threat-intel/feed',
+        description: 'First-party OT IOCs you produce (STIX feed)',
+        icon: <Icon.Bolt className="w-4 h-4" />,
+      },
     ],
   },
   {
     label: 'Respond',
     modes: 'soc',
     icon: <Icon.Alert className="w-4 h-4" />,
-    match: (p) => p === '/alerts' || p === '/cases' || p.startsWith('/cases/'),
+    match: (p) => p === '/alerts' || p === '/cases' || p.startsWith('/cases/') || p === '/integrations/siem',
     children: [
       {
         label: 'Security Alerts',
@@ -133,6 +145,12 @@ const NAV: NavItem[] = [
         path: '/cases',
         description: 'Investigation files - timeline, IOCs, MTTR',
         icon: <Icon.Layers className="w-4 h-4" />,
+      },
+      {
+        label: 'SIEM Forwarding',
+        path: '/integrations/siem',
+        description: 'Push deception & anomaly events to your SIEM (syslog/CEF)',
+        icon: <Icon.Network className="w-4 h-4" />,
       },
     ],
   },
@@ -246,6 +264,12 @@ const NAV: NavItem[] = [
         path: '/compliance/nis2',
         description: 'Network and Information Security Directive 2',
         icon: <Icon.CheckCircle className="w-4 h-4" />,
+      },
+      {
+        label: 'IEC 62443',
+        path: '/compliance/iec62443',
+        description: 'IACS security (ISA/IEC 62443-3-3)',
+        icon: <Icon.Lock className="w-4 h-4" />,
       },
     ],
   },

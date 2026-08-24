@@ -36,12 +36,37 @@ public class SecurityConfig {
             .csrf()
             .disable()
             .authorizeHttpRequests()
-            .requestMatchers("/error", "/api/auth/**", "/h2-console/**", "/api/upload/**", "/api/conpot/**", "/api/honeypot/**", "/api/decoy/**", "/api/deception/**", "/api/honeytoken/**", "/api/engage/**", "/api/threat-intel/**", "/api/cases", "/api/cases/**", "/api/assistant/**", "/api/research/**", "/api/compliance/**", "/api/settings/**", "/pcap/**", "/ws/**", "/pcap/interfaces", "/pcap/pcap-interfaces")
+            // Public by necessity - these cannot rely on a per-request user JWT:
+            //   /api/auth              login / register (issues the JWT)
+            //   /api/honeypot          ingest sidecar authenticates with its own
+            //                          bearer token; /events is an EventSource (SSE)
+            //                          which cannot set an Authorization header
+            //   /api/honeytoken/hit    attacker-facing decoy trip callback
+            //   /api/assistant         SSE via SseEmitter - Spring re-dispatches the
+            //                          async request to finalise the stream, and our
+            //                          stateless JWT auth is not restored on that
+            //                          async dispatch, so requiring auth here yields
+            //                          an AccessDenied on completion. Keep it open.
+            //   /api/upload            pcap upload flow (kept open for now)
+            //   /pcap, /ws             streaming / websocket surfaces
+            .requestMatchers(
+                "/error",
+                "/api/auth/**",
+                "/api/upload/**",
+                "/api/honeypot/**",
+                "/api/honeytoken/hit/**",
+                "/api/assistant/**",
+                "/pcap/**", "/ws/**", "/pcap/interfaces", "/pcap/pcap-interfaces"
+            )
             .permitAll()
             .requestMatchers("/api/anomalies/**").hasAnyRole("ADMIN", "ANALYST", "USER")
             .requestMatchers("/api/assets/**").hasAnyRole("ADMIN", "ANALYST", "USER")
             .requestMatchers("/api/alerts/**").hasAnyRole("ADMIN", "ANALYST", "USER")
             .requestMatchers("/api/users/**").hasRole("ADMIN")
+            // Everything else (cases, decoy, deception, settings, research,
+            // engage, threat-intel, compliance, conpot, honeytoken management,
+            // ...) now requires an authenticated user. The frontend attaches the
+            // JWT to every request via an axios interceptor.
             .anyRequest()
             .authenticated()
             .and()

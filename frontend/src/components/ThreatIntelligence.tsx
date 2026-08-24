@@ -5,7 +5,6 @@ import Skeleton from 'react-loading-skeleton';
 import Tippy from '@tippyjs/react';
 import 'react-loading-skeleton/dist/skeleton.css';
 import 'tippy.js/dist/tippy.css';
-import { Sparklines, SparklinesLine } from 'react-sparklines';
 import { AuditRecord } from '../types/audit';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -119,19 +118,6 @@ const ThreatIntelligence: React.FC = () => {
   const totalCount = filteredThreats.length;
   const criticalCount = filteredThreats.filter(th => th.tags.includes('Critical')).length;
   const last24hCount = filteredThreats.filter(th => new Date(th.date).getTime() > Date.now() - 24*60*60*1000).length;
-
-  // Generate a consistent mock sparkline for each threat
-  const trendMap = useMemo(() => {
-    const map: Record<string, number[]> = {};
-    filteredThreats.forEach(th => {
-      const seed = parseInt(th.id, 10) || 1;
-      // build a simple 10-point trend array
-      map[th.id] = Array.from({ length: 10 }, (_, i) =>
-        Math.abs((seed + i) % 5) + Math.random() * 2
-      );
-    });
-    return map;
-  }, [filteredThreats]);
 
   // --- Group threats by source IP for similarity clusters ---
   const sourceClusters = useMemo<Record<string, Threat[]>>(() => {
@@ -518,7 +504,6 @@ const ThreatIntelligence: React.FC = () => {
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Severity</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tags</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Trend</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
@@ -579,14 +564,6 @@ const ThreatIntelligence: React.FC = () => {
                               <span key={tag} className="inline-block bg-blue-50 text-blue-700 px-2 py-0.5 rounded mr-1">{tag}</span>
                             ))}
                           </td>
-                          <td className="px-4 py-2">
-                            <Sparklines data={trendMap[th.id]} width={80} height={20} margin={0}>
-                              <SparklinesLine
-                                color="#3b82f6"
-                                style={{ strokeWidth: 1, fill: 'none' }}
-                              />
-                            </Sparklines>
-                          </td>
                           <td className="px-4 py-2 space-x-2">
                             <button
                               onClick={() => toggleFavorite(th.id)}
@@ -622,29 +599,6 @@ const ThreatIntelligence: React.FC = () => {
         </div>
       </div>
 
-      {/* MITRE ATT&CK Timeline */}
-      {selectedThreat && (
-        <motion.div
-          className="overflow-x-auto mb-6"
-          drag="x"
-          dragConstraints={{ left: 0, right: 0 }}
-          whileTap={{ cursor: 'grabbing' }}
-        >
-          <div className="flex space-x-4">
-            {['Initial Access','Execution','Persistence','Privilege Escalation','Discovery'].map(tactic => (
-              <div key={tactic} className="flex-shrink-0 w-48 bg-gray-100 p-4 rounded">
-                <h3 className="text-sm font-semibold mb-2">{tactic}</h3>
-                <ul className="space-y-1">
-                  <li className="bg-gray-200 text-gray-700 text-xs px-2 py-1 rounded">
-                    {tactic} – Sample Technique
-                  </li>
-                </ul>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-      )}
-
       {/* Detail Panel */}
       {selectedThreat && (
         <AnimatePresence>
@@ -673,7 +627,7 @@ const ThreatIntelligence: React.FC = () => {
       {/* --- AI Suggestions / Anomaly Detection --- */}
       {selectedThreat && (
         <section className="bg-white shadow rounded-lg p-4 mb-6">
-          <h3 className="text-lg font-semibold mb-2">AI Suggestions</h3>
+          <h3 className="text-lg font-semibold mb-2">Related Threats & Severity Score</h3>
           {/* Similar IP threats */}
           {similarThreats.length > 0 ? (
             <p className="text-sm mb-2">
@@ -683,9 +637,9 @@ const ThreatIntelligence: React.FC = () => {
           ) : (
             <p className="text-sm mb-2">No similar threats detected.</p>
           )}
-          {/* Auto risk score */}
+          {/* Severity-derived score (Critical=100, High=67, else 33) */}
           <p className="text-sm">
-            Auto Risk Score (0–100):{' '}
+            Severity Score (from tags):{' '}
             <span className="font-bold">
               {computeRiskScore(selectedThreat)}
             </span>/100

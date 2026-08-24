@@ -238,24 +238,6 @@ const ExecutiveDashboard: React.FC = () => {
     return Math.round((100 - postureScore) / 10 * 10) / 10;
   }, [postureScore]);
 
-  // MTTD/MTTR/Dwell: derived from honeypot session data when available; sensible defaults otherwise
-  const mttd = useMemo(() => {
-    // Conpot detects on first packet - effectively < 1min. Show 1.
-    return honeypotStats?.totalAttacks && honeypotStats.totalAttacks > 0 ? 1 : 0;
-  }, [honeypotStats]);
-  const mttr = useMemo(() => {
-    // Without ticketing data this is a placeholder; use blocked rate as a proxy
-    const total = honeypotStats?.totalAttacks ?? 0;
-    const blocked = honeypotStats?.blockedAttacks ?? 0;
-    if (total === 0) return 0;
-    // Faster response if more blocked
-    return Math.max(5, 60 - Math.round((blocked / total) * 50));
-  }, [honeypotStats]);
-  const dwellTime = useMemo(() => {
-    // Average session length not exposed; estimate from logs (low number = decoy)
-    return honeypotStats?.uniqueSessions && honeypotStats.uniqueSessions > 0 ? 11 : 0;
-  }, [honeypotStats]);
-
   // Crown jewels: high-criticality assets
   const crownJewelAssets = useMemo<AssetDTO[]>(() => {
     return assets.filter((a) => a.criticalityLevel === 'CRITICAL' || a.criticalityLevel === 'HIGH');
@@ -312,21 +294,15 @@ const ExecutiveDashboard: React.FC = () => {
     };
   }, [assets]);
 
-  // Threat trend: last 7 days from honeypot dailySeries
+  // Threat trend: last 7 days of real daily attack counts from the honeypot
+  // dailySeries. Only the real total per day - no fabricated stage split.
   const threatTrends = useMemo(() => {
     const labels = lastNDays(7);
     const daily = honeypotStats?.dailySeries ?? [];
-    // Map daily series to labels by index (best-effort: assume server returns last 7 days in order)
-    const series = labels.map((label, idx) => {
-      const fromBackend = daily[idx]?.count ?? 0;
-      return {
-        day: label,
-        confirmed: Math.round(fromBackend * 0.04), // confirmed is a fraction
-        investigated: Math.round(fromBackend * 0.18),
-        noise: Math.max(0, fromBackend - Math.round(fromBackend * 0.22)),
-      };
-    });
-    return series;
+    return labels.map((label, idx) => ({
+      day: label,
+      total: daily[idx]?.count ?? 0,
+    }));
   }, [honeypotStats]);
 
   // MITRE tactics from backend ttp-analysis
@@ -336,7 +312,7 @@ const ExecutiveDashboard: React.FC = () => {
         id: t.id,
         name: t.name,
         observed: t.observed ?? 0,
-        coverage: t.coverage ?? 80,
+        coverage: t.coverage ?? 0,
       }));
     }
     // Fallback: build from mitreHeatmap
@@ -353,7 +329,7 @@ const ExecutiveDashboard: React.FC = () => {
         id,
         name: known[id] ?? id,
         observed: count,
-        coverage: 80,
+        coverage: 0,
       }));
     }
     return [];
@@ -447,37 +423,10 @@ const ExecutiveDashboard: React.FC = () => {
     datasets: [
       {
         type: 'bar' as const,
-        label: 'Noise filtered',
-        data: threatTrends.map((t) => t.noise),
-        backgroundColor: 'rgba(148,163,184,0.35)',
-        borderRadius: 6,
-        stack: 'events',
-        order: 3,
-      },
-      {
-        type: 'bar' as const,
-        label: 'Investigated',
-        data: threatTrends.map((t) => t.investigated),
+        label: 'Attacks per day',
+        data: threatTrends.map((t) => t.total),
         backgroundColor: 'rgba(168,85,247,0.55)',
         borderRadius: 6,
-        stack: 'events',
-        order: 2,
-      },
-      {
-        type: 'line' as const,
-        label: 'Confirmed incidents',
-        data: threatTrends.map((t) => t.confirmed),
-        borderColor: '#ec4899',
-        backgroundColor: 'rgba(236,72,153,0.15)',
-        tension: 0.35,
-        fill: false,
-        pointBackgroundColor: '#ec4899',
-        pointBorderColor: '#fff',
-        pointRadius: 5,
-        pointHoverRadius: 7,
-        borderWidth: 3,
-        yAxisID: 'y1',
-        order: 1,
       },
     ],
   };
@@ -677,36 +626,36 @@ const ExecutiveDashboard: React.FC = () => {
           </div>
         </motion.div>
 
-        {/* ====== OPERATIONAL KPIs - vs industry benchmark ====== */}
+        {/* ====== OPERATIONAL KPIs (real honeypot telemetry) ====== */}
         <motion.div variants={item} className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           {[
             {
-              icon: <Icon.Clock className="w-5 h-5" />,
-              label: 'Mean Time to Detect',
-              value: showLoadingValue(mttd, ' min'),
-              benchmark: '197 days industry avg',
-              delta: mttd > 0 ? `${Math.round(197*1440/Math.max(mttd,1)).toLocaleString()}× faster` : 'No data',
+              icon: <Icon.Bolt className="w-5 h-5" />,
+              label: 'Attacks Absorbed',
+              value: (honeypotStats?.totalAttacks ?? 0).toLocaleString(),
+              benchmark: 'Total interactions on the decoy fabric',
+              delta: 'Live',
               deltaGood: true,
               from: 'from-violet-500',
               to: 'to-fuchsia-500',
             },
             {
-              icon: <Icon.Bolt className="w-5 h-5" />,
-              label: 'Mean Time to Respond',
-              value: showLoadingValue(mttr, ' min'),
-              benchmark: 'Target SLA: 60 min',
-              delta: mttr > 0 ? (mttr <= 60 ? 'Within SLA' : 'Over SLA') : 'No data',
-              deltaGood: mttr > 0 && mttr <= 60,
+              icon: <Icon.Eye className="w-5 h-5" />,
+              label: 'Attacker Sessions',
+              value: (honeypotStats?.uniqueSessions ?? 0).toLocaleString(),
+              benchmark: 'Distinct attacker sessions observed',
+              delta: 'Observed',
+              deltaGood: true,
               from: 'from-fuchsia-500',
               to: 'to-pink-500',
             },
             {
-              icon: <Icon.Eye className="w-5 h-5" />,
-              label: 'Attacker Dwell Time',
-              value: showLoadingValue(dwellTime, ' min'),
-              benchmark: '84 days industry avg',
-              delta: dwellTime > 0 ? 'Contained at decoy layer' : 'No interactions yet',
-              deltaGood: true,
+              icon: <Icon.Shield className="w-5 h-5" />,
+              label: 'Block Rate',
+              value: `${honeypotStats?.totalAttacks ? Math.round(((honeypotStats.blockedAttacks ?? 0) / honeypotStats.totalAttacks) * 100) : 0}%`,
+              benchmark: `${(honeypotStats?.blockedAttacks ?? 0).toLocaleString()} of ${(honeypotStats?.totalAttacks ?? 0).toLocaleString()} blocked`,
+              delta: (honeypotStats?.blockedAttacks ?? 0) > 0 ? 'Enforced' : 'Monitor',
+              deltaGood: (honeypotStats?.blockedAttacks ?? 0) > 0,
               from: 'from-pink-500',
               to: 'to-rose-500',
             },
@@ -813,9 +762,9 @@ const ExecutiveDashboard: React.FC = () => {
           <div className="lg:col-span-2 bg-white rounded-2xl p-6 ring-1 ring-slate-200/70 shadow-sm">
             <div className="flex items-start justify-between mb-5">
               <div>
-                <h3 className="text-base font-semibold text-slate-900">Alert Funnel · Last 7 Days</h3>
+                <h3 className="text-base font-semibold text-slate-900">Attack Volume · Last 7 Days</h3>
                 <p className="text-xs text-slate-500 mt-1">
-                  From raw events to confirmed incidents. Built from honeypot daily counts.
+                  Real daily attack counts on the decoy fabric (honeypot dailySeries).
                 </p>
               </div>
               <div className="flex items-center gap-3 text-xs">
@@ -891,8 +840,8 @@ const ExecutiveDashboard: React.FC = () => {
           <div className="bg-white rounded-2xl p-6 ring-1 ring-slate-200/70 shadow-sm">
             <div className="flex items-center justify-between mb-5">
               <div>
-                <h3 className="text-base font-semibold text-slate-900">Compliance Posture &amp; Gaps</h3>
-                <p className="text-xs text-slate-500 mt-1">Derived from asset coverage and alert resolution</p>
+                <h3 className="text-base font-semibold text-slate-900">Compliance Readiness (estimate)</h3>
+                <p className="text-xs text-slate-500 mt-1">Estimated from real asset coverage &amp; alert resolution - an indicator, not a formal audit score. See the NIS2 page for the real posture.</p>
               </div>
               <Icon.CheckCircle className="w-5 h-5 text-violet-500" />
             </div>

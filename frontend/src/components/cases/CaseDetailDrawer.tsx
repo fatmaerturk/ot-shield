@@ -32,6 +32,13 @@ const CaseDetailDrawer: React.FC<{
 
   useEffect(() => { void refresh(); }, [refresh]);
 
+  // Close on Escape.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   const transition = async (to: CaseStatus, note?: string, resolutionSummary?: string) => {
     if (!caseObj) return;
     setSaving(true);
@@ -47,7 +54,10 @@ const CaseDetailDrawer: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-end bg-slate-900/50 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-[10000] flex items-stretch justify-end bg-slate-900/50 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
       <div className="bg-white w-full max-w-5xl h-full flex flex-col shadow-2xl">
         {/* Header */}
         <div

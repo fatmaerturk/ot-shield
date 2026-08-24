@@ -20,6 +20,8 @@ import L from 'leaflet';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import TTPIntelTab from './TTPIntelTab';
 import AttackerWatchlist from './AttackerWatchlist';
+import AnonymityBadge from './AnonymityBadge';
+import { threatIntelService, IpAnonymity } from '../services/threatIntelService';
 
 ChartJS.register(
   CategoryScale,
@@ -381,6 +383,9 @@ const Honeypot: React.FC = () => {
   const [reportTab, setReportTab] = useState<'threat-intel' | 'geographic' | 'time-analytics' | 'owasp' | 'event-distribution' | 'watchlist'>('threat-intel');
   const [mainTab, setMainTab] = useState<'overview' | 'ttp'>('overview');
   const [selectedAttacker, setSelectedAttacker] = useState<TopAttacker | null>(null);
+  // Connection-nature (Tor / hosting / VPN vs residential) per top-attacker IP,
+  // fetched from the real IP-intel classifier. Cached by IP.
+  const [anonByIp, setAnonByIp] = useState<Record<string, IpAnonymity>>({});
   // Impact flash state - increments on each projectile hit so we can rotate keys
   const [impactFlash, setImpactFlash] = useState<{ id: number; color: string } | null>(null);
   const impactCounter = useRef(0);
@@ -388,6 +393,28 @@ const Honeypot: React.FC = () => {
     impactCounter.current += 1;
     setImpactFlash({ id: impactCounter.current, color });
   };
+
+  // Classify the connection nature of each top-attacker IP (dedup + cache).
+  useEffect(() => {
+    const ips = Array.from(new Set((stats.topSourceIps || []).map(a => a.ip).filter(Boolean)));
+    const missing = ips.filter(ip => !(ip in anonByIp));
+    if (missing.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const results = await Promise.all(missing.map(async (ip) => {
+        try { return [ip, await threatIntelService.classifyIp(ip)] as const; }
+        catch { return null; }
+      }));
+      if (cancelled) return;
+      setAnonByIp(prev => {
+        const next = { ...prev };
+        for (const r of results) if (r) next[r[0]] = r[1];
+        return next;
+      });
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stats.topSourceIps]);
 
   // -------- data fetching --------
   const fetchStats = async () => {
@@ -817,6 +844,7 @@ const Honeypot: React.FC = () => {
                       <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">#</th>
                       <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">IP</th>
                       <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Country</th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Origin</th>
                       <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Protocol</th>
                       <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Severity</th>
                       <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Events</th>
@@ -836,6 +864,11 @@ const Honeypot: React.FC = () => {
                             </span>
                           ) : '-'}
                           {a.city ? <span className="text-slate-400"> · {a.city}</span> : ''}
+                        </td>
+                        <td className="px-4 py-2.5 text-sm">
+                          {anonByIp[a.ip]
+                            ? <AnonymityBadge a={{ anonymityCategory: anonByIp[a.ip].category, anonymityLabel: anonByIp[a.ip].label, anonymityConfidence: anonByIp[a.ip].confidence, anonymityNote: anonByIp[a.ip].note }} />
+                            : <span className="text-slate-300">…</span>}
                         </td>
                         <td className="px-4 py-2.5 text-sm">{a.topProtocol ? <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 ring-1 ring-slate-200">{a.topProtocol}</span> : '-'}</td>
                         <td className="px-4 py-2.5 text-sm">{a.highestSeverity ? (
@@ -1109,7 +1142,7 @@ const Honeypot: React.FC = () => {
 
       {/* Attacker drilldown modal */}
       {selectedAttacker && (
-        <AttackerModal attacker={selectedAttacker} events={stats.recentEvents.filter(e => e.sourceIp === selectedAttacker.ip)} onClose={() => setSelectedAttacker(null)} />
+        <AttackerModal attacker={selectedAttacker} events={stats.recentEvents.filter(e => e.sourceIp === selectedAttacker.ip)} anon={anonByIp[selectedAttacker.ip]} onClose={() => setSelectedAttacker(null)} />
       )}
     </div>
   );
@@ -1417,7 +1450,7 @@ const CredCard: React.FC<{
   );
 };
 
-const AttackerModal: React.FC<{ attacker: TopAttacker; events: RecentEvent[]; onClose: () => void }> = ({ attacker, events, onClose }) => (
+const AttackerModal: React.FC<{ attacker: TopAttacker; events: RecentEvent[]; anon?: IpAnonymity; onClose: () => void }> = ({ attacker, events, anon, onClose }) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={onClose}>
     <div className="bg-white rounded-2xl shadow-2xl ring-1 ring-slate-200/70 w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
       <div className="px-6 py-4 border-b border-slate-200/70 flex items-center justify-between gap-4">
@@ -1426,8 +1459,13 @@ const AttackerModal: React.FC<{ attacker: TopAttacker; events: RecentEvent[]; on
             <Icon.Users className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-slate-900 font-mono">{attacker.ip}</h2>
-            <p className="text-xs text-slate-500 mt-0.5">{attacker.country || 'Unknown country'}{attacker.city ? ` · ${attacker.city}` : ''} · {attacker.count.toLocaleString()} events</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-lg font-semibold text-slate-900 font-mono">{attacker.ip}</h2>
+              {anon && anon.category !== 'NOT_ASSESSED' && (
+                <AnonymityBadge a={{ anonymityCategory: anon.category, anonymityLabel: anon.label, anonymityConfidence: anon.confidence, anonymityNote: anon.note }} />
+              )}
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">{attacker.country || 'Unknown country'}{attacker.city ? ` · ${attacker.city}` : ''} · {attacker.count.toLocaleString()} events{anon && anon.asnOrg ? ` · ${anon.asnOrg}` : ''}</p>
           </div>
         </div>
         <button onClick={onClose} className="w-8 h-8 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 flex items-center justify-center transition" aria-label="Close">

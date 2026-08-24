@@ -27,4 +27,12 @@ public class AttackerIntelSummaryDTO {
     private Boolean blocked;
     private Boolean quarantined;
     private List<Integer> activitySparkline; // last 12 buckets (engagement count)
+
+    // Connection-nature classification (real IP intel; NOT a guaranteed VPN yes/no).
+    private String anonymityCategory;    // TOR_EXIT | VPN_PROVIDER | HOSTING_DATACENTER | RESIDENTIAL_ISP | INTERNAL | NOT_ASSESSED
+    private String anonymityLabel;       // human label
+    private String anonymityConfidence;  // HIGH | MEDIUM | LOW | NONE
+    private Boolean anonymized;           // true = Tor / VPN / hosting (not an apparently-direct residential source)
+    private String anonymityNote;        // honest caveat / basis
+    private List<String> anonymitySignals; // which signals fired
 }

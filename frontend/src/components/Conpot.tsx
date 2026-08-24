@@ -101,7 +101,9 @@ const Conpot: React.FC = () => {
   useEffect(() => {
     const checkStatus = async () => {
       try {
-        const r = await fetch('http://localhost:8080/api/conpot/status');
+        const r = await fetch('http://localhost:8080/api/conpot/status', {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
+        });
         const d = await r.json();
         setRemoteMode(Boolean(d.remoteMode));
         setBackendReachable(true);
@@ -117,7 +119,9 @@ const Conpot: React.FC = () => {
   // ---------- Stats polling ----------
   const fetchStats = async () => {
     try {
-      const r = await fetch('http://localhost:8080/api/conpot/statistics');
+      const r = await fetch('http://localhost:8080/api/conpot/statistics', {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
+      });
       if (r.ok) {
         const d = await r.json();
         setStats(prev => {
@@ -668,8 +672,8 @@ const Conpot: React.FC = () => {
             <div className="bg-white rounded-2xl p-6 ring-1 ring-slate-200/70 shadow-sm hover:shadow-md transition">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-base font-semibold text-slate-900">Containment Rate</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">High-severity events isolated</p>
+                  <h3 className="text-base font-semibold text-slate-900">High-Severity Share</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Share of events rated high severity</p>
                 </div>
                 <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full bg-violet-50 text-violet-700 ring-1 ring-violet-200">
                   Defence

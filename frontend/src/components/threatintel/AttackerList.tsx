@@ -1,5 +1,6 @@
 import React from 'react';
 import { AttackerIntelSummary } from '../../services/threatIntelService';
+import AnonymityBadge from '../AnonymityBadge';
 
 interface Props {
   items: AttackerIntelSummary[];
@@ -80,6 +81,9 @@ const AttackerList: React.FC<Props> = ({ items, selectedIp, onSelect }) => {
                 ))}
                 {a.blocked && <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-600 text-white">BLOCKED</span>}
                 {a.quarantined && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500 text-white">QUAR</span>}
+                {a.anonymityCategory && a.anonymityCategory !== 'NOT_ASSESSED' && a.anonymityCategory !== 'INTERNAL' && (
+                  <AnonymityBadge a={a} />
+                )}
               </div>
               <Sparkline values={a.activitySparkline || []} />
             </div>

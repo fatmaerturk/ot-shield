@@ -39,6 +39,13 @@ export interface AttackerIntelSummary {
   blocked: boolean;
   quarantined: boolean;
   activitySparkline: number[];
+  // Connection-nature classification (real IP intel; not a guaranteed VPN yes/no)
+  anonymityCategory?: 'TOR_EXIT' | 'VPN_PROVIDER' | 'HOSTING_DATACENTER' | 'RESIDENTIAL_ISP' | 'INTERNAL' | 'NOT_ASSESSED';
+  anonymityLabel?: string;
+  anonymityConfidence?: 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE';
+  anonymized?: boolean;
+  anonymityNote?: string;
+  anonymitySignals?: string[];
 }
 
 export interface BehavioralFingerprint {
@@ -133,4 +140,39 @@ export const threatIntelService = {
 
   push: (req: IntelPushRequest) =>
     api.post<IntelPushResult>('/api/threat-intel/push', req).then(r => r.data),
+
+  // ---- First-party OT threat-intel feed (outbound production) ----
+  getFeedSummary: () =>
+    api.get<FeedSummary>('/api/threat-intel/feed/summary').then(r => r.data),
+  getFeed: () =>
+    api.get<string>('/api/threat-intel/feed', { transformResponse: (d) => d }).then(r => r.data),
+
+  // ---- IP connection-nature (Tor / hosting / VPN vs residential) ----
+  ipIntelStatus: () =>
+    api.get<{ asnDbAvailable: boolean; torNodes: number; torUpdatedAt: string | null }>('/api/threat-intel/ip-intel/status').then(r => r.data),
+  classifyIp: (ip: string) =>
+    api.get<IpAnonymity>(`/api/threat-intel/ip-intel/classify`, { params: { ip } }).then(r => r.data),
 };
+
+export interface IpAnonymity {
+  category: 'TOR_EXIT' | 'VPN_PROVIDER' | 'HOSTING_DATACENTER' | 'RESIDENTIAL_ISP' | 'INTERNAL' | 'NOT_ASSESSED';
+  label: string;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE';
+  anonymized: boolean;
+  signals: string[];
+  asn: number | null;
+  asnOrg: string | null;
+  note: string;
+}
+
+export interface FeedSummary {
+  producedIocs: number;
+  highRisk: number;
+  countries: number;
+  protocols: string[];
+  tacticsCovered: number;
+  lastUpdated: string | null;
+  generatedAt: string;
+  formats: string[];
+  feedUrl: string;
+}

@@ -6,14 +6,17 @@ import ExecutiveDashboard from './components/ExecutiveDashboard';
 import Assets from './components/Assets';
 import PrivateRoute from './components/PrivateRoute';
 import Anomalies from './components/Anomalies';
+import AttackerCampaigns from './components/AttackerCampaigns';
 import Honeypot from './components/Honeypot';
 import MitreMatrix from './components/MitreMatrix';
-import UserManagement from './components/UserManagement';
 import Settings from './components/Settings';
 import ThreatIntelligence from './components/ThreatIntelligence';
 import Alerts from './components/Alerts';
 import Conpot from './components/Conpot';
 import NIS2Compliance from './components/NIS2Compliance';
+import IEC62443Compliance from './components/IEC62443Compliance';
+import OutboundIntelFeed from './components/OutboundIntelFeed';
+import SiemForwarding from './components/SiemForwarding';
 import NetworkTopology from './components/NetworkTopology';
 import Decoy from './components/Decoy';
 import Honeytoken from './components/Honeytoken';
@@ -67,6 +70,7 @@ const App: React.FC = () => {
           <Route path="/dashboard" element={<PrivateRoute><Dashboard/></PrivateRoute>} />
           <Route path="/assets" element={<PrivateRoute><Assets /></PrivateRoute>} />
           <Route path="/anomalies" element={<PrivateRoute><Anomalies /></PrivateRoute>} />
+          <Route path="/campaigns" element={<PrivateRoute><AttackerCampaigns /></PrivateRoute>} />
           <Route path="/alerts" element={<PrivateRoute><Alerts /></PrivateRoute>} />
           <Route path="/honeypot" element={<PrivateRoute><Honeypot /></PrivateRoute>} />
           <Route path="/attack-intelligence" element={<PrivateRoute><Honeypot /></PrivateRoute>} />
@@ -81,13 +85,16 @@ const App: React.FC = () => {
           {/* Backwards-compatible redirect: keep old /integrations/conpot URLs working */}
           <Route path="/integrations/conpot" element={<Navigate to="/integrations/ics-decoy" replace />} />
           <Route path="/compliance/nis2" element={<PrivateRoute><NIS2Compliance /></PrivateRoute>} />
+          <Route path="/compliance/iec62443" element={<PrivateRoute><IEC62443Compliance /></PrivateRoute>} />
           <Route path="/network-topology" element={<PrivateRoute><NetworkTopology /></PrivateRoute>} />
           <Route path="/decoy" element={<PrivateRoute><Decoy /></PrivateRoute>} />
           <Route path="/honeytokens" element={<PrivateRoute><Honeytoken /></PrivateRoute>} />
           <Route path="/engage" element={<PrivateRoute><Engage /></PrivateRoute>} />
           <Route path="/deception-metrics" element={<PrivateRoute><DeceptionMetrics /></PrivateRoute>} />
           <Route path="/threat-intel/attackers" element={<PrivateRoute><ThreatIntelAttackers /></PrivateRoute>} />
+          <Route path="/threat-intel/feed" element={<PrivateRoute><OutboundIntelFeed /></PrivateRoute>} />
           <Route path="/cases" element={<PrivateRoute><Cases /></PrivateRoute>} />
+          <Route path="/integrations/siem" element={<PrivateRoute><SiemForwarding /></PrivateRoute>} />
           <Route path="/research/library" element={<PrivateRoute><ResearchRoute /></PrivateRoute>} />
           <Route path="/research/threads" element={<PrivateRoute><ResearchRoute /></PrivateRoute>} />
           <Route path="/research/findings" element={<PrivateRoute><ResearchRoute /></PrivateRoute>} />

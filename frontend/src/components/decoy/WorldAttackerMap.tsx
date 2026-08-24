@@ -223,30 +223,9 @@ const ArcLayer: React.FC<ArcLayerProps> = ({ liveArc, selectedEngagementId, enga
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveArc?.ts]);
 
-  // Ambient storm: every 700-1500ms pick a random engagement and emit an attack.
-  // Gives the map a "something is always happening" feel even without backend stream.
-  useEffect(() => {
-    if (!engagements.length) return;
-    let cancelled = false;
-    let timer: number | null = null;
-
-    const loop = () => {
-      if (cancelled) return;
-      // Prefer active engagements, fall back to any
-      const active = engagements.filter(e => e.status === 'ACTIVE');
-      const pool = active.length ? active : engagements;
-      const pick = pool[Math.floor(Math.random() * pool.length)];
-      if (pick) spawnAttack(pick);
-      const delay = 600 + Math.random() * 900;
-      timer = window.setTimeout(loop, delay);
-    };
-    // Seed first attack quickly
-    timer = window.setTimeout(loop, 400);
-    return () => {
-      cancelled = true;
-      if (timer) window.clearTimeout(timer);
-    };
-  }, [engagements, spawnAttack]);
+  // Arcs are only spawned from real WebSocket EVENT messages (the liveArc
+  // effect above). No synthetic "ambient" traffic - a quiet map means the
+  // decoy fabric is genuinely quiet.
 
   const selectedArc = useMemo(() => {
     if (!selectedEngagementId) return null;

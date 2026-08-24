@@ -14,9 +14,24 @@ import java.util.Map;
 public class ThreatIntelController {
 
     private final ThreatIntelService service;
+    private final com.safetech.otshield.service.IpAnonymityService ipAnonymityService;
 
-    public ThreatIntelController(ThreatIntelService service) {
+    public ThreatIntelController(ThreatIntelService service,
+                                 com.safetech.otshield.service.IpAnonymityService ipAnonymityService) {
         this.service = service;
+        this.ipAnonymityService = ipAnonymityService;
+    }
+
+    /** IP-intel feed status (ASN DB loaded? Tor node count?). */
+    @GetMapping("/ip-intel/status")
+    public ResponseEntity<Map<String, Object>> ipIntelStatus() {
+        return ResponseEntity.ok(ipAnonymityService.status());
+    }
+
+    /** Classify a single IP's connection nature (Tor / hosting / VPN vs residential). */
+    @GetMapping("/ip-intel/classify")
+    public ResponseEntity<Map<String, Object>> classifyIp(@RequestParam String ip) {
+        return ResponseEntity.ok(ipAnonymityService.classify(ip).toMap());
     }
 
     @GetMapping("/attackers")
@@ -51,6 +66,20 @@ public class ThreatIntelController {
     @PostMapping("/push")
     public ResponseEntity<IntelPushResultDTO> push(@RequestBody IntelPushRequest req) {
         return ResponseEntity.ok(service.push(req));
+    }
+
+    // ---- First-party OT threat-intel feed (outbound intel production) ----
+
+    /** Headline metrics for the produced OT intel feed. */
+    @GetMapping("/feed/summary")
+    public ResponseEntity<Map<String, Object>> feedSummary() {
+        return ResponseEntity.ok(service.feedSummary());
+    }
+
+    /** Live STIX 2.1 bundle of all first-party OT IOCs (subscribe by polling this). */
+    @GetMapping("/feed")
+    public ResponseEntity<Map<String, Object>> feed() {
+        return ResponseEntity.ok(service.buildStixFeed());
     }
 
     @GetMapping("/health")

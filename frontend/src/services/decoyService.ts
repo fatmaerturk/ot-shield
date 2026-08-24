@@ -289,7 +289,76 @@ export const decoyService = {
 
   recentActions: (limit = 20) =>
     api.get<DecoyActionResult[]>('/api/decoy/actions/recent', { params: { limit } }).then(r => r.data),
+
+  // ---- Adaptive (self-healing) deception ----
+  listAdaptations: (limit = 50) =>
+    api.get<AdaptationEvent[]>('/api/decoy/adaptations', { params: { limit } }).then(r => r.data),
+  adaptationStats: () =>
+    api.get<AdaptationStats>('/api/decoy/adaptations/stats').then(r => r.data),
+  triggerAdaptTest: (ip: string, protocol = 'MODBUS', asset?: string) =>
+    api.post<AdaptationEvent>('/api/decoy/adapt/test', null, { params: { ip, protocol, asset } }).then(r => r.data),
+
+  // ---- Predictive placement / attack paths ----
+  getAttackPaths: () =>
+    api.get<AttackPathsResponse>('/api/decoy/attack-paths').then(r => r.data),
 };
+
+export interface AttackPathNode {
+  ip: string;
+  name: string;
+  purdueLevel: string | null;
+  criticality: string | null;
+  protocol: string | null;
+  mirrored: boolean;
+}
+export interface AttackPath {
+  fromIp: string;
+  fromName: string;
+  toIp: string;
+  toName: string;
+  hops: number;
+  path: AttackPathNode[];
+  chokepoint: AttackPathNode | null;
+  recommendation: string;
+}
+export interface AttackPathRec {
+  ip: string;
+  name: string;
+  protocol: string;
+  onPaths: number;
+  mirrored: boolean;
+  purdueLevel: string | null;
+  rationale: string;
+}
+export interface AttackPathsResponse {
+  summary: { assetCount: number; crownJewelCount: number; observedEdges: number; pathsFound: number; unreachableJewels: number };
+  crownJewels: AttackPathNode[];
+  entryPoints: AttackPathNode[];
+  paths: AttackPath[];
+  topRecommendations: AttackPathRec[];
+}
+
+export interface AdaptationAction {
+  type: 'EXPAND_DECOY' | 'BLOCK_ATTACKER' | 'ROTATE_HONEYTOKEN' | string;
+  detail: string;
+  success: boolean;
+}
+export interface AdaptationEvent {
+  id: string;
+  ts: string;
+  trigger: string;          // TWIN_WRITE | HONEYTOKEN_TRIP | MANUAL
+  sourceIp: string | null;
+  assetName: string | null;
+  protocol: string | null;
+  summary: string;
+  actions: AdaptationAction[];
+}
+export interface AdaptationStats {
+  totalAdaptations: number;
+  decoysExpanded: number;
+  attackersBlocked: number;
+  honeytokensPlanted: number;
+}
 
 // ---------- WebSocket helper ----------
 

@@ -352,7 +352,7 @@ const FakeHmiDetailModal: React.FC<{ hmi: FakeHmiInstance; onClose: () => void }
           {/* Side: interactions + actions */}
           <div className="space-y-4">
             <div className="rounded-2xl bg-white ring-1 ring-slate-200 p-4">
-              <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">SOC actions - simulate attacker</div>
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Test tool - inject a simulated attacker hit</div>
               <div className="grid grid-cols-2 gap-2">
                 {(['PAGE_VIEW', 'LOGIN_ATTEMPT', 'DATA_POLL', 'CONTROL_WRITE', 'ALARM_ACK', 'CONFIG_PROBE'] as const).map(t => (
                   <button

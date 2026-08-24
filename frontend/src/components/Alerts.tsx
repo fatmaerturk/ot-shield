@@ -687,6 +687,71 @@ const Alerts: React.FC = () => {
     return { mtta: a, mttr: r };
   }, [alerts]);
 
+  /**
+   * Real response-time / SLA analytics for the "Response Time" tab, all
+   * derived from the loaded alerts (createdAt -> acknowledgedAt/resolvedAt
+   * timestamps) and the per-severity SLA budgets. No fabricated values.
+   */
+  const responseMetrics = useMemo(() => {
+    const SEVS: Alert['severity'][] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+
+    const withSla = alerts.filter(a => SLA_MS[a.severity] != null);
+    let breached = 0;
+    for (const a of withSla) if (computeSla(a).kind === 'breached') breached++;
+    const slaTotal = withSla.length;
+    const compliancePct = slaTotal ? Math.round(((slaTotal - breached) / slaTotal) * 100) : null;
+
+    const bySeverity = SEVS.map(sev => {
+      const subset = alerts.filter(a => a.severity === sev);
+      const ack = meanDurationMs(subset, x => x.createdAt ?? x.timestamp, x => x.acknowledgedAt);
+      const sla = subset.filter(a => SLA_MS[a.severity] != null);
+      let b = 0;
+      for (const a of sla) if (computeSla(a).kind === 'breached') b++;
+      const compl = sla.length ? Math.round(((sla.length - b) / sla.length) * 100) : null;
+      return { sev, ackMs: ack.ms, ackCount: ack.count, compliancePct: compl, slaCount: sla.length, budgetMs: SLA_MS[sev]! };
+    });
+    const maxAck = Math.max(1, ...bySeverity.map(s => (s.ackCount ? s.ackMs : 0)));
+
+    const buckets = [
+      { label: '0-5 min', max: 5 * 60 * 1000, n: 0 },
+      { label: '5-30 min', max: 30 * 60 * 1000, n: 0 },
+      { label: '30-120 min', max: 120 * 60 * 1000, n: 0 },
+      { label: '2h+', max: Infinity, n: 0 },
+    ];
+    let distTotal = 0;
+    for (const a of alerts) {
+      const s = a.createdAt ?? a.timestamp;
+      const e = a.acknowledgedAt;
+      if (!s || !e) continue;
+      const d = new Date(e).getTime() - new Date(s).getTime();
+      if (Number.isNaN(d) || d < 0) continue;
+      distTotal++;
+      for (const bk of buckets) { if (d <= bk.max) { bk.n++; break; } }
+    }
+
+    return { compliancePct, breached, slaTotal, bySeverity, maxAck, buckets, distTotal };
+  }, [alerts]);
+
+  // Real data for the Incident tab (open investigation Cases) and the Threat
+  // Indicators tab (attacker IOCs from threat intelligence). Replaces the old
+  // hard-coded sample lists - nothing here is fabricated.
+  const [realIncidents, setRealIncidents] = useState<any[]>([]);
+  const [realIndicators, setRealIndicators] = useState<any[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get('/api/cases', { params: { page: 0, size: 25, sortBy: 'createdAt', sortDir: 'desc' } });
+        if (!cancelled) setRealIncidents(res.data?.content ?? []);
+      } catch { if (!cancelled) setRealIncidents([]); }
+      try {
+        const res = await api.get('/api/threat-intel/attackers');
+        if (!cancelled) setRealIndicators(Array.isArray(res.data) ? res.data : []);
+      } catch { if (!cancelled) setRealIndicators([]); }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   // Handle alert actions (acknowledge, snooze, resolve)
   const handleAction = async (
     id: string,
@@ -2085,436 +2150,6 @@ const Alerts: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'analytics' | 'correlation' | 'enrichment' | 'hunting' | 'incident' | 'responseTime'>('analytics');
 
-  // Threat Hunting state
-  const [huntingQueries, setHuntingQueries] = useState<Array<{
-    id: string;
-    name: string;
-    query: string;
-    description: string;
-    lastRun: string;
-    results: number;
-    status: 'active' | 'paused' | 'completed';
-  }>>([
-    {
-      id: '1',
-      name: 'Suspicious PowerShell Activity',
-      query: 'process.name="powershell.exe" AND (command_line CONTAINS "Invoke-Expression" OR command_line CONTAINS "IEX")',
-      description: 'Detect potential PowerShell-based attacks using obfuscated commands',
-      lastRun: new Date().toISOString(),
-      results: 12,
-      status: 'active'
-    },
-    {
-      id: '2',
-      name: 'Lateral Movement Detection',
-      query: 'event_type="authentication" AND source_ip IN (SELECT source_ip FROM events WHERE event_type="failed_login" GROUP BY source_ip HAVING COUNT(*) > 5)',
-      description: 'Identify potential lateral movement from previously compromised sources',
-      lastRun: new Date(Date.now() - 3600000).toISOString(),
-      results: 3,
-      status: 'active'
-    },
-    {
-      id: '3',
-      name: 'Data Exfiltration Patterns',
-      query: 'data_transfer.size > 100MB AND destination_ip NOT IN (SELECT ip FROM whitelist) AND time > now() - 1h',
-      description: 'Monitor for large data transfers to suspicious destinations',
-      lastRun: new Date(Date.now() - 7200000).toISOString(),
-      results: 0,
-      status: 'paused'
-    }
-  ]);
-
-
-
-  const [threatIndicators, setThreatIndicators] = useState<Array<{
-    id: string;
-    type: 'ip' | 'domain' | 'hash' | 'url' | 'email';
-    value: string;
-    confidence: number;
-    threatLevel: 'high' | 'medium' | 'low';
-    firstSeen: string;
-    lastSeen: string;
-    sources: string[];
-    tags: string[];
-  }>>([
-    {
-      id: '1',
-      type: 'ip',
-      value: '192.168.1.100',
-      confidence: 85,
-      threatLevel: 'high',
-      firstSeen: new Date(Date.now() - 86400000).toISOString(),
-      lastSeen: new Date().toISOString(),
-      sources: ['Firewall', 'IDS', 'Threat Intel'],
-      tags: ['malware', 'command-control', 'suspicious']
-    },
-    {
-      id: '2',
-      type: 'domain',
-      value: 'malicious-domain.com',
-      confidence: 95,
-      threatLevel: 'high',
-      firstSeen: new Date(Date.now() - 172800000).toISOString(),
-      lastSeen: new Date().toISOString(),
-      sources: ['DNS', 'Proxy', 'Threat Intel'],
-      tags: ['phishing', 'malware-distribution']
-    },
-    {
-      id: '3',
-      type: 'hash',
-      value: 'a1b2c3d4e5f6...',
-      confidence: 78,
-      threatLevel: 'medium',
-      firstSeen: new Date(Date.now() - 259200000).toISOString(),
-      lastSeen: new Date(Date.now() - 86400000).toISOString(),
-      sources: ['Antivirus', 'Sandbox'],
-      tags: ['trojan', 'keylogger']
-    }
-  ]);
-
-  const [investigationSessions, setInvestigationSessions] = useState<Array<{
-    id: string;
-    title: string;
-    description: string;
-    status: 'open' | 'in_progress' | 'closed';
-    assignedTo: string;
-    createdAt: string;
-    updatedAt: string;
-    evidence: Array<{
-      id: string;
-      type: 'log' | 'alert' | 'network' | 'file' | 'process';
-      content: string;
-      timestamp: string;
-      source: string;
-    }>;
-  }>>([
-    {
-      id: '1',
-      title: 'Suspicious Network Activity Investigation',
-      description: 'Investigating unusual network traffic patterns from internal hosts',
-      status: 'in_progress',
-      assignedTo: 'Security Analyst',
-      createdAt: new Date(Date.now() - 86400000).toISOString(),
-      updatedAt: new Date().toISOString(),
-      evidence: [
-        {
-          id: '1',
-          type: 'network',
-          content: 'Multiple connection attempts to external IPs on port 443',
-          timestamp: new Date().toISOString(),
-          source: 'Network Monitor'
-        },
-        {
-          id: '2',
-          type: 'alert',
-          content: 'High volume of encrypted traffic detected',
-          timestamp: new Date(Date.now() - 3600000).toISOString(),
-          source: 'IDS'
-        }
-      ]
-    }
-  ]);
-
-  // Threat Hunting functions
-  const createHuntingQuery = () => {
-    const newQuery = {
-      id: Date.now().toString(),
-      name: 'New Hunting Query',
-      query: '',
-      description: 'Enter query description',
-      lastRun: new Date().toISOString(),
-      results: 0,
-      status: 'active' as const
-    };
-    setHuntingQueries([...huntingQueries, newQuery]);
-  };
-
-  const runHuntingQuery = (queryId: string) => {
-    setHuntingQueries(prev => prev.map(q => 
-      q.id === queryId 
-        ? { ...q, lastRun: new Date().toISOString(), results: Math.floor(Math.random() * 50) }
-        : q
-    ));
-  };
-
-  const addThreatIndicator = () => {
-    const newIndicator = {
-      id: Date.now().toString(),
-      type: 'ip' as const,
-      value: '0.0.0.0',
-      confidence: 50,
-      threatLevel: 'medium' as const,
-      firstSeen: new Date().toISOString(),
-      lastSeen: new Date().toISOString(),
-      sources: ['Manual Entry'],
-      tags: ['suspicious']
-    };
-    setThreatIndicators([...threatIndicators, newIndicator]);
-  };
-
-  const createInvestigationSession = () => {
-    const newSession = {
-      id: Date.now().toString(),
-      title: 'New Investigation',
-      description: 'Enter investigation description',
-      status: 'open' as const,
-      assignedTo: 'Current User',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      evidence: []
-    };
-    setInvestigationSessions([...investigationSessions, newSession]);
-  };
-
-  // Incident Response state
-  const [incidents, setIncidents] = useState<Array<{
-    id: string;
-    title: string;
-    description: string;
-    severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
-    status: 'OPEN' | 'IN_PROGRESS' | 'ESCALATED' | 'RESOLVED' | 'CLOSED';
-    priority: 'P1' | 'P2' | 'P3' | 'P4';
-    assignedTo: string;
-    createdAt: string;
-    updatedAt: string;
-    affectedAssets: string[];
-    affectedUsers: number;
-    estimatedImpact: string;
-    responseTime: number; // in minutes
-    mttr: number; // Mean Time to Resolution in minutes
-    tags: string[];
-    notes: Array<{
-      id: string;
-      content: string;
-      author: string;
-      timestamp: string;
-      type: 'note' | 'action' | 'decision';
-    }>;
-  }>>([
-    {
-      id: '1',
-      title: 'Suspicious Network Activity Detected',
-      description: 'Multiple failed login attempts and unusual network traffic patterns detected from internal hosts',
-      severity: 'HIGH',
-      status: 'IN_PROGRESS',
-      priority: 'P2',
-      assignedTo: 'Security Team Lead',
-      createdAt: new Date(Date.now() - 7200000).toISOString(),
-      updatedAt: new Date().toISOString(),
-      affectedAssets: ['Web Server 01', 'Database Server', 'Load Balancer'],
-      affectedUsers: 150,
-      estimatedImpact: 'Medium - Potential data exposure risk',
-      responseTime: 15,
-      mttr: 240,
-      tags: ['network', 'authentication', 'internal-threat'],
-      notes: [
-        {
-          id: '1',
-          content: 'Initial assessment completed. Suspicious activity confirmed.',
-          author: 'Security Analyst',
-          timestamp: new Date(Date.now() - 3600000).toISOString(),
-          type: 'note'
-        },
-        {
-          id: '2',
-          content: 'Isolated affected systems. Monitoring for further activity.',
-          author: 'Security Team Lead',
-          timestamp: new Date(Date.now() - 1800000).toISOString(),
-          type: 'action'
-        }
-      ]
-    },
-    {
-      id: '2',
-      title: 'Malware Detection on Endpoint',
-      description: 'Antivirus software detected suspicious file behavior on multiple endpoints',
-      severity: 'CRITICAL',
-      status: 'ESCALATED',
-      priority: 'P1',
-      assignedTo: 'Incident Response Team',
-      createdAt: new Date(Date.now() - 14400000).toISOString(),
-      updatedAt: new Date().toISOString(),
-      affectedAssets: ['Workstation-001', 'Workstation-002', 'Workstation-003'],
-      affectedUsers: 3,
-      estimatedImpact: 'High - Potential data breach and system compromise',
-      responseTime: 5,
-      mttr: 180,
-      tags: ['malware', 'endpoint', 'data-breach'],
-      notes: [
-        {
-          id: '1',
-          content: 'Malware samples collected for analysis.',
-          author: 'Forensics Team',
-          timestamp: new Date(Date.now() - 7200000).toISOString(),
-          type: 'note'
-        },
-        {
-          id: '2',
-          content: 'Escalated to senior management due to critical severity.',
-          author: 'Incident Manager',
-          timestamp: new Date(Date.now() - 3600000).toISOString(),
-          type: 'decision'
-        }
-      ]
-    }
-  ]);
-
-  const [responseProcedures, setResponseProcedures] = useState<Array<{
-    id: string;
-    name: string;
-    description: string;
-    category: 'INCIDENT_RESPONSE' | 'FORENSICS' | 'COMMUNICATION' | 'RECOVERY' | 'LESSONS_LEARNED';
-    steps: Array<{
-      id: string;
-      order: number;
-      action: string;
-      description: string;
-      estimatedTime: number;
-      responsible: string;
-      completed: boolean;
-    }>;
-    lastUpdated: string;
-    version: string;
-  }>>([
-    {
-      id: '1',
-      name: 'Data Breach Response Procedure',
-      description: 'Standard operating procedure for responding to data breach incidents',
-      category: 'INCIDENT_RESPONSE',
-      steps: [
-        {
-          id: '1',
-          order: 1,
-          action: 'Immediate Containment',
-          description: 'Isolate affected systems and networks to prevent further data loss',
-          estimatedTime: 30,
-          responsible: 'Security Team',
-          completed: false
-        },
-        {
-          id: '2',
-          order: 2,
-          action: 'Evidence Preservation',
-          description: 'Document and preserve all evidence for forensic analysis',
-          estimatedTime: 60,
-          responsible: 'Forensics Team',
-          completed: false
-        },
-        {
-          id: '3',
-          order: 3,
-          action: 'Stakeholder Notification',
-          description: 'Notify relevant stakeholders and legal team',
-          estimatedTime: 45,
-          responsible: 'Incident Manager',
-          completed: false
-        }
-      ],
-      lastUpdated: new Date(Date.now() - 86400000).toISOString(),
-      version: '2.1'
-    },
-    {
-      id: '2',
-      name: 'Malware Incident Response',
-      description: 'Procedure for handling malware detection and removal',
-      category: 'INCIDENT_RESPONSE',
-      steps: [
-        {
-          id: '1',
-          order: 1,
-          action: 'Threat Assessment',
-          description: 'Assess the type and scope of malware infection',
-          estimatedTime: 30,
-          responsible: 'Security Analyst',
-          completed: false
-        },
-        {
-          id: '2',
-          order: 2,
-          action: 'System Isolation',
-          description: 'Isolate infected systems from network',
-          estimatedTime: 15,
-          responsible: 'Network Team',
-          completed: false
-        },
-        {
-          id: '3',
-          order: 3,
-          action: 'Malware Removal',
-          description: 'Remove malware and restore system integrity',
-          estimatedTime: 120,
-          responsible: 'IT Support',
-          completed: false
-        }
-      ],
-      lastUpdated: new Date(Date.now() - 172800000).toISOString(),
-      version: '1.8'
-    }
-  ]);
-
-  // Incident Response functions
-  const createIncident = () => {
-    const newIncident = {
-      id: Date.now().toString(),
-      title: 'New Incident',
-      description: 'Enter incident description',
-      severity: 'MEDIUM' as const,
-      status: 'OPEN' as const,
-      priority: 'P3' as const,
-      assignedTo: 'Unassigned',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      affectedAssets: [],
-      affectedUsers: 0,
-      estimatedImpact: 'Low',
-      responseTime: 0,
-      mttr: 0,
-      tags: [],
-      notes: []
-    };
-    setIncidents([...incidents, newIncident]);
-  };
-
-  const updateIncidentStatus = (incidentId: string, newStatus: 'OPEN' | 'IN_PROGRESS' | 'ESCALATED' | 'RESOLVED' | 'CLOSED') => {
-    setIncidents(prev => prev.map(incident => 
-      incident.id === incidentId 
-        ? { ...incident, status: newStatus, updatedAt: new Date().toISOString() }
-        : incident
-    ));
-  };
-
-  const addIncidentNote = (incidentId: string, content: string, type: 'note' | 'action' | 'decision') => {
-    const newNote = {
-      id: Date.now().toString(),
-      content,
-      author: 'Current User',
-      timestamp: new Date().toISOString(),
-      type
-    };
-    
-    setIncidents(prev => prev.map(incident => 
-      incident.id === incidentId 
-        ? { 
-            ...incident, 
-            notes: [...incident.notes, newNote],
-            updatedAt: new Date().toISOString()
-          }
-        : incident
-    ));
-  };
-
-  const createResponseProcedure = () => {
-    const newProcedure = {
-      id: Date.now().toString(),
-      name: 'New Response Procedure',
-      description: 'Enter procedure description',
-      category: 'INCIDENT_RESPONSE' as const,
-      steps: [],
-      lastUpdated: new Date().toISOString(),
-      version: '1.0'
-    };
-    setResponseProcedures([...responseProcedures, newProcedure]);
-  };
 
   if (loading) return <div className="p-4 text-slate-500">Loading alerts...</div>;
   if (error) return <div className="p-4 text-rose-600">{error}</div>;
@@ -3052,7 +2687,7 @@ const Alerts: React.FC = () => {
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              Threat Hunting
+              Threat Indicators
             </button>
             <button
               onClick={() => setActiveTab('incident')}
@@ -3948,64 +3583,13 @@ const Alerts: React.FC = () => {
 
           {activeTab === 'hunting' && (
             <div>
-              <h2 className="text-xl font-semibold text-slate-800 mb-4">Threat Hunting</h2>
-              
-              {/* Hunting Queries Section */}
-              <div className="mb-8">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-slate-700">Hunting Queries</h3>
-          <button
-                    onClick={createHuntingQuery}
-                    className="px-4 py-2 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white rounded-lg hover:shadow-md transition"
-          >
-                    + New Query
-          </button>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {huntingQueries.map((query) => (
-                    <div key={query.id} className="bg-white p-4 rounded-lg ring-1 ring-slate-200 shadow-sm">
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-medium text-slate-800">{query.name}</h4>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          query.status === 'active' ? 'bg-emerald-100 text-emerald-700' :
-                          query.status === 'paused' ? 'bg-amber-100 text-amber-700' :
-                          'bg-slate-100 text-slate-700'
-                        }`}>
-                          {query.status}
-          </span>
-                      </div>
-                      <p className="text-sm text-slate-600 mb-3">{query.description}</p>
-                      <div className="text-xs text-slate-500 mb-3">
-                        <div>Last Run: {new Date(query.lastRun).toLocaleString()}</div>
-                        <div>Results: {query.results}</div>
-                      </div>
-                      <div className="flex space-x-2">
-          <button
-                          onClick={() => runHuntingQuery(query.id)}
-                          className="px-3 py-1 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-xs rounded hover:shadow-md transition"
-          >
-                          Run Query
-                        </button>
-                        <button className="px-3 py-1 bg-slate-100 text-slate-700 ring-1 ring-slate-200 text-xs rounded hover:bg-slate-200 transition">
-                          Edit
-          </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-        </div>
+              <h2 className="text-xl font-semibold text-slate-800 mb-1">Threat Indicators</h2>
+              <p className="text-xs text-slate-500 mb-4">Live attacker IOCs observed on the deception fabric (from threat intelligence). No synthetic entries.</p>
 
               {/* Threat Indicators Section */}
               <div className="mb-8">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-slate-700">Threat Indicators</h3>
-                  <button
-                    onClick={addThreatIndicator}
-                    className="px-4 py-2 bg-rose-50 text-rose-700 ring-1 ring-rose-200 rounded-lg hover:bg-rose-100 transition"
-                  >
-                    + Add Indicator
-                  </button>
+                  <h3 className="text-lg font-semibold text-slate-700">Observed Indicators</h3>
                 </div>
                 
                 <div className="bg-white rounded-lg ring-1 ring-slate-200 overflow-hidden">
@@ -4021,7 +3605,17 @@ const Alerts: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-slate-200">
-                      {threatIndicators.map((indicator) => (
+                      {realIndicators.map((a: any) => {
+                        const score = Math.round(a.threatScore ?? 0);
+                        const indicator = {
+                          id: a.ip,
+                          type: 'ip',
+                          value: a.ip,
+                          confidence: score,
+                          threatLevel: (score >= 70 ? 'high' : score >= 40 ? 'medium' : 'low') as 'high' | 'medium' | 'low',
+                          lastSeen: a.lastSeen,
+                        };
+                        return (
                         <tr key={indicator.id}>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
@@ -4048,87 +3642,15 @@ const Alerts: React.FC = () => {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                             <button className="text-violet-700 hover:text-violet-900 mr-3">View</button>
-                            <button className="text-rose-600 hover:text-rose-900">Remove</button>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
               </div>
 
-              {/* Investigation Sessions Section */}
-              <div className="mb-8">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-slate-700">Investigation Sessions</h3>
-              <button
-                    onClick={createInvestigationSession}
-                    className="px-4 py-2 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 rounded-lg hover:bg-emerald-100 transition"
-              >
-                    + New Investigation
-              </button>
-                </div>
-                
-                <div className="space-y-4">
-                  {investigationSessions.map((session) => (
-                    <div key={session.id} className="bg-white p-4 rounded-lg ring-1 ring-slate-200 shadow-sm">
-                      <div className="flex items-center justify-between mb-3">
-                        <div>
-                          <h4 className="font-medium text-slate-800">{session.title}</h4>
-                          <p className="text-sm text-slate-600">{session.description}</p>
-                        </div>
-                        <div className="text-right">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            session.status === 'open' ? 'bg-emerald-100 text-emerald-700' :
-                            session.status === 'in_progress' ? 'bg-amber-100 text-amber-700' :
-                            'bg-emerald-100 text-emerald-700'
-                          }`}>
-                            {session.status.replace('_', ' ').toUpperCase()}
-                          </span>
-                          <div className="text-xs text-slate-500 mt-1">Assigned to: {session.assignedTo}</div>
-                        </div>
-                      </div>
-                      
-                      <div className="text-xs text-slate-500 mb-3">
-                        Created: {new Date(session.createdAt).toLocaleString()} | 
-                        Updated: {new Date(session.updatedAt).toLocaleString()}
-                      </div>
-                      
-                      {session.evidence.length > 0 && (
-                        <div className="border-t border-slate-200 pt-3">
-                          <h5 className="text-sm font-medium text-slate-700 mb-2">Evidence ({session.evidence.length})</h5>
-                          <div className="space-y-2">
-                            {session.evidence.map((evidence) => (
-                              <div key={evidence.id} className="flex items-center space-x-3 p-2 bg-slate-50 rounded">
-                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                  evidence.type === 'log' ? 'bg-emerald-100 text-emerald-700' :
-                                  evidence.type === 'alert' ? 'bg-rose-100 text-rose-700' :
-                                  evidence.type === 'network' ? 'bg-emerald-100 text-emerald-700' :
-                                  evidence.type === 'file' ? 'bg-violet-100 text-violet-700' :
-                                  'bg-slate-100 text-slate-700'
-                                }`}>
-                                  {evidence.type.toUpperCase()}
-                                </span>
-                                <span className="text-sm text-slate-700 flex-1">{evidence.content}</span>
-                                <span className="text-xs text-slate-500">{evidence.source}</span>
-                              </div>
-                            ))}
-            </div>
-          </div>
-        )}
-
-                      <div className="flex justify-end space-x-2 mt-3 pt-3 border-t border-slate-200">
-                        <button className="px-3 py-1 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-sm rounded hover:shadow-md transition">
-                          Add Evidence
-                        </button>
-                        <button className="px-3 py-1 bg-slate-100 text-slate-700 ring-1 ring-slate-200 text-sm rounded hover:bg-slate-200 transition">
-                          Update Status
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </div>
           )}
 
@@ -4139,17 +3661,28 @@ const Alerts: React.FC = () => {
               {/* Incidents Section */}
               <div className="mb-8">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-slate-700">Incidents</h3>
-          <button
-                    onClick={createIncident}
-                    className="px-4 py-2 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white rounded-lg hover:shadow-md transition"
-          >
-                    + New Incident
-          </button>
+                  <h3 className="text-lg font-semibold text-slate-700">Open Cases</h3>
         </div>
                 
                 <div className="space-y-4">
-                  {incidents.map((incident) => (
+                  {realIncidents.map((cse: any) => {
+                    const incident = {
+                      id: cse.id,
+                      title: cse.caseNumber ? `${cse.caseNumber} · ${cse.title}` : cse.title,
+                      description: cse.description || '',
+                      status: cse.status || 'NEW',
+                      assignedTo: cse.assigneeName || 'Unassigned',
+                      createdAt: cse.createdAt || new Date().toISOString(),
+                      updatedAt: cse.updatedAt || cse.createdAt || new Date().toISOString(),
+                      severity: cse.severity || '-',
+                      priority: cse.priority || '-',
+                      estimatedImpact: cse.category || '-',
+                      responseTime: cse.mttAcknowledgeSeconds != null ? Math.round(cse.mttAcknowledgeSeconds / 60) : '-',
+                      mttr: cse.mttResolveSeconds != null ? Math.round(cse.mttResolveSeconds / 60) : '-',
+                      tags: Array.isArray(cse.tags) ? cse.tags : [],
+                      notes: [] as Array<{ id: string; content: string }>,
+                    };
+                    return (
                     <div key={incident.id} className="bg-white p-4 rounded-lg ring-1 ring-slate-200 shadow-sm">
                       <div className="flex items-center justify-between mb-3">
                         <div>
@@ -4209,262 +3742,105 @@ const Alerts: React.FC = () => {
                       
                       <div className="flex justify-end space-x-2 mt-3 pt-3 border-t border-slate-200">
                         <button className="px-3 py-1 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-sm rounded hover:shadow-md transition">
-                          Add Note
-                        </button>
-                        <button className="px-3 py-1 bg-slate-100 text-slate-700 ring-1 ring-slate-200 text-sm rounded hover:bg-slate-200 transition">
                           Update Status
                         </button>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
+                  {realIncidents.length === 0 && (
+                    <p className="text-sm text-slate-400 text-center py-8">No open cases yet. Promote an anomaly or open a case to populate this.</p>
+                  )}
                 </div>
               </div>
 
-              {/* Response Procedures Section */}
-              <div className="mb-8">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-slate-700">Response Procedures</h3>
-                  <button
-                    onClick={createResponseProcedure}
-                    className="px-4 py-2 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 rounded-lg hover:bg-emerald-100 transition"
-                  >
-                    + New Procedure
-                  </button>
-                </div>
-                
-                <div className="space-y-4">
-                  {responseProcedures.map((procedure) => (
-                    <div key={procedure.id} className="bg-white p-4 rounded-lg ring-1 ring-slate-200 shadow-sm">
-                      <div className="flex items-center justify-between mb-3">
-                        <div>
-                          <h4 className="font-medium text-slate-800">{procedure.name}</h4>
-                          <p className="text-sm text-slate-600">{procedure.description}</p>
-                        </div>
-                        <div className="text-right">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            procedure.category === 'INCIDENT_RESPONSE' ? 'bg-emerald-100 text-emerald-700' :
-                            procedure.category === 'FORENSICS' ? 'bg-emerald-100 text-emerald-700' :
-                            procedure.category === 'COMMUNICATION' ? 'bg-amber-100 text-amber-700' :
-                            procedure.category === 'RECOVERY' ? 'bg-orange-100 text-orange-700' :
-                            'bg-violet-100 text-violet-700'
-                          }`}>
-                            {procedure.category.toUpperCase()}
-                          </span>
-                          <div className="text-xs text-slate-500 mt-1">Last Updated: {new Date(procedure.lastUpdated).toLocaleString()}</div>
-                        </div>
-                      </div>
-                      
-                      <div className="text-sm text-slate-600 mb-3">
-                        <strong>Steps:</strong>
-                        <ul className="list-disc pl-6">
-                          {procedure.steps.map((step) => (
-                            <li key={step.id}>{step.action}</li>
-                          ))}
-                        </ul>
-                      </div>
-                      
-                      <div className="text-sm text-slate-600 mb-3">
-                        <strong>Estimated Time:</strong> {procedure.steps.reduce((total, step) => total + step.estimatedTime, 0)} minutes
-                      </div>
-                      
-                      <div className="text-sm text-slate-600 mb-3">
-                        <strong>Responsible:</strong> {procedure.steps.filter(step => step.completed).length} of {procedure.steps.length} steps completed
-                      </div>
-                      
-                      <div className="flex justify-end space-x-2 mt-3 pt-3 border-t border-slate-200">
-                        <button className="px-3 py-1 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-sm rounded hover:shadow-md transition">
-                          Add Step
-                        </button>
-                        <button className="px-3 py-1 bg-slate-100 text-slate-700 ring-1 ring-slate-200 text-sm rounded hover:bg-slate-200 transition">
-                          Update Status
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </div>
           )}
 
           {activeTab === 'responseTime' && (
             <div className="max-h-96 overflow-y-auto custom-scrollbar pr-2">
-              <h2 className="text-xl font-semibold text-slate-800 mb-4">Alert Response Time Metrics</h2>
-              
-              {/* Response Time Overview Cards */}
+              <h2 className="text-xl font-semibold text-slate-800 mb-1">Alert Response Time Metrics</h2>
+              <p className="text-xs text-slate-500 mb-4">Computed from the acknowledge / resolve timestamps of the loaded alerts and the per-severity SLA budgets. No estimates.</p>
+
+              {/* Overview cards - all derived from real alert timestamps */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div className="bg-gradient-to-r from-green-500 to-green-600 p-4 rounded-lg text-white">
-                  <div className="text-2xl font-bold">2.3 min</div>
-                  <div className="text-sm opacity-90">Average Response Time</div>
-                </div>
-                <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-4 rounded-lg text-white">
-                  <div className="text-2xl font-bold">15 min</div>
-                  <div className="text-sm opacity-90">Target Response Time</div>
-                </div>
-                <div className="bg-gradient-to-r from-yellow-500 to-yellow-600 p-4 rounded-lg text-white">
-                  <div className="text-2xl font-bold">87%</div>
-                  <div className="text-sm opacity-90">SLA Compliance</div>
+                  <div className="text-2xl font-bold">{mtta.count ? formatShortDuration(mtta.ms) : '-'}</div>
+                  <div className="text-sm opacity-90">Mean Time to Acknowledge{mtta.count ? ` (${mtta.count})` : ''}</div>
                 </div>
                 <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-4 rounded-lg text-white">
-                  <div className="text-2xl font-bold">45 min</div>
-                  <div className="text-sm opacity-90">Mean Time to Resolution</div>
+                  <div className="text-2xl font-bold">{mttr.count ? formatShortDuration(mttr.ms) : '-'}</div>
+                  <div className="text-sm opacity-90">Mean Time to Resolve{mttr.count ? ` (${mttr.count})` : ''}</div>
+                </div>
+                <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-4 rounded-lg text-white">
+                  <div className="text-2xl font-bold">{responseMetrics.compliancePct != null ? `${responseMetrics.compliancePct}%` : '-'}</div>
+                  <div className="text-sm opacity-90">SLA Compliance{responseMetrics.slaTotal ? ` (${responseMetrics.slaTotal})` : ''}</div>
+                </div>
+                <div className="bg-gradient-to-r from-rose-500 to-rose-600 p-4 rounded-lg text-white">
+                  <div className="text-2xl font-bold">{responseMetrics.breached}</div>
+                  <div className="text-sm opacity-90">SLA Breached</div>
                 </div>
               </div>
 
-              {/* Response Time by Severity */}
+              {/* Mean acknowledge time by severity - real */}
               <div className="mb-6">
-                <h3 className="text-lg font-semibold text-slate-700 mb-4">Response Time by Severity</h3>
+                <h3 className="text-lg font-semibold text-slate-700 mb-4">Mean Acknowledge Time by Severity</h3>
                 <div className="bg-white p-4 rounded-lg ring-1 ring-slate-200">
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-slate-700">Critical</span>
-                      <div className="flex items-center space-x-2">
-                        <div className="w-32 bg-slate-200 rounded-full h-2">
-                          <div className="bg-rose-500 h-2 rounded-full" style={{ width: '85%' }}></div>
-                        </div>
-                        <span className="text-sm text-slate-600">1.2 min</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-slate-700">High</span>
-                      <div className="flex items-center space-x-2">
-                        <div className="w-32 bg-slate-200 rounded-full h-2">
-                          <div className="bg-orange-500 h-2 rounded-full" style={{ width: '70%' }}></div>
-                        </div>
-                        <span className="text-sm text-slate-600">2.8 min</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-slate-700">Medium</span>
-                      <div className="flex items-center space-x-2">
-                        <div className="w-32 bg-slate-200 rounded-full h-2">
-                          <div className="bg-amber-500 h-2 rounded-full" style={{ width: '55%' }}></div>
-                        </div>
-                        <span className="text-sm text-slate-600">4.1 min</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-slate-700">Low</span>
-                      <div className="flex items-center space-x-2">
-                        <div className="w-32 bg-slate-200 rounded-full h-2">
-                          <div className="bg-violet-500 h-2 rounded-full" style={{ width: '40%' }}></div>
-                        </div>
-                        <span className="text-sm text-slate-600">6.5 min</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Response Time Trends */}
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-slate-700 mb-4">Response Time Trends (Last 30 Days)</h3>
-                <div className="bg-white p-4 rounded-lg ring-1 ring-slate-200">
-                  <div className="grid grid-cols-7 gap-2 text-center">
-                    {Array.from({ length: 7 }, (_, i) => {
-                      const daysAgo = 6 - i;
-                      const responseTime = Math.random() * 5 + 1; // Random time between 1-6 minutes
+                    {responseMetrics.bySeverity.map(({ sev, ackMs, ackCount }) => {
+                      const color = sev === 'CRITICAL' ? 'bg-rose-500' : sev === 'HIGH' ? 'bg-orange-500' : sev === 'MEDIUM' ? 'bg-amber-500' : 'bg-violet-500';
+                      const width = ackCount ? Math.max(4, Math.round((ackMs / responseMetrics.maxAck) * 100)) : 0;
                       return (
-                        <div key={i} className="space-y-2">
-                          <div className="text-xs text-slate-500">
-                            {daysAgo === 0 ? 'Today' : daysAgo === 1 ? '1d ago' : `${daysAgo}d ago`}
+                        <div key={sev} className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-slate-700 capitalize">{sev.toLowerCase()}</span>
+                          <div className="flex items-center space-x-2">
+                            <div className="w-32 bg-slate-200 rounded-full h-2">
+                              <div className={`${color} h-2 rounded-full`} style={{ width: `${width}%` }}></div>
+                            </div>
+                            <span className="text-sm text-slate-600 w-16 text-right">{ackCount ? formatShortDuration(ackMs) : '-'}</span>
                           </div>
-                          <div className="text-sm font-medium text-slate-700">{responseTime.toFixed(1)}m</div>
-                          <div 
-                            className="mx-auto bg-gradient-to-t from-violet-500 to-fuchsia-500 rounded-t"
-                            style={{ 
-                              height: `${(responseTime / 6) * 40}px`,
-                              width: '20px'
-                            }}
-                          ></div>
                         </div>
                       );
                     })}
                   </div>
+                  {responseMetrics.bySeverity.every(s => !s.ackCount) && (
+                    <p className="text-xs text-slate-400 mt-2">No acknowledged alerts yet.</p>
+                  )}
                 </div>
               </div>
 
-              {/* Performance Metrics */}
+              {/* Performance metrics - real distribution + per-severity SLA */}
               <div className="mb-6">
                 <h3 className="text-lg font-semibold text-slate-700 mb-4">Performance Metrics</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="bg-white p-4 rounded-lg ring-1 ring-slate-200">
-                    <h4 className="font-medium text-slate-800 mb-3">Response Time Distribution</h4>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-600">0-1 min:</span>
-                        <span className="font-medium">35%</span>
+                    <h4 className="font-medium text-slate-800 mb-3">Acknowledge-Time Distribution{responseMetrics.distTotal ? ` (${responseMetrics.distTotal})` : ''}</h4>
+                    {responseMetrics.distTotal ? (
+                      <div className="space-y-2">
+                        {responseMetrics.buckets.map(b => (
+                          <div key={b.label} className="flex justify-between text-sm">
+                            <span className="text-slate-600">{b.label}:</span>
+                            <span className="font-medium">{Math.round((b.n / responseMetrics.distTotal) * 100)}%</span>
+                          </div>
+                        ))}
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-600">1-2 min:</span>
-                        <span className="font-medium">28%</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-600">2-3 min:</span>
-                        <span className="font-medium">22%</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-600">3+ min:</span>
-                        <span className="font-medium">15%</span>
-                      </div>
-                    </div>
+                    ) : (
+                      <p className="text-xs text-slate-400">No acknowledged alerts yet.</p>
+                    )}
                   </div>
-                  
-                  <div className="bg-white p-4 rounded-lg ring-1 ring-slate-200">
-                    <h4 className="font-medium text-slate-800 mb-3">SLA Performance</h4>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-600">Critical (≤2 min):</span>
-                        <span className="font-medium text-emerald-600">95%</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-600">High (≤5 min):</span>
-                        <span className="font-medium text-emerald-600">88%</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-600">Medium (≤15 min):</span>
-                        <span className="font-medium text-amber-600">75%</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-600">Low (≤30 min):</span>
-                        <span className="font-medium text-rose-600">62%</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
 
-              {/* Team Performance */}
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-slate-700 mb-4">Team Performance</h3>
-                <div className="bg-white p-4 rounded-lg ring-1 ring-slate-200">
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-slate-700">Security Team A</span>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm text-slate-600">1.8 min avg</span>
-                        <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded">Excellent</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-slate-700">Security Team B</span>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm text-slate-600">2.4 min avg</span>
-                        <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded">Good</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-slate-700">Network Team</span>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-slate-600">3.1 min avg</span>
-                        <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded">Average</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-slate-700">IT Support</span>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm text-slate-600">4.2 min avg</span>
-                        <span className="text-xs bg-rose-100 text-rose-700 px-2 py-1 rounded">Needs Improvement</span>
-                      </div>
+                  <div className="bg-white p-4 rounded-lg ring-1 ring-slate-200">
+                    <h4 className="font-medium text-slate-800 mb-3">SLA Compliance by Severity</h4>
+                    <div className="space-y-2">
+                      {responseMetrics.bySeverity.map(({ sev, compliancePct, budgetMs }) => {
+                        const tone = compliancePct == null ? 'text-slate-400' : compliancePct >= 90 ? 'text-emerald-600' : compliancePct >= 70 ? 'text-amber-600' : 'text-rose-600';
+                        return (
+                          <div key={sev} className="flex justify-between text-sm">
+                            <span className="text-slate-600 capitalize">{sev.toLowerCase()} (≤{formatShortDuration(budgetMs)}):</span>
+                            <span className={`font-medium ${tone}`}>{compliancePct == null ? '-' : `${compliancePct}%`}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
