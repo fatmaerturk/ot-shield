@@ -12,7 +12,7 @@
 #       /opt/splunk/bin/python3 /tmp/hec_resync.py
 # From there OTSHIELD defaults to the in-network backend and HEC to localhost.
 import json, ssl, os, urllib.request, urllib.error, time
-from datetime import datetime
+from datetime import datetime, timezone
 
 OTSHIELD  = os.environ.get("OTSHIELD_URL", "http://backend:8080")
 HEC_URL   = os.environ.get("HEC_URL", "https://127.0.0.1:8088/services/collector/event")
@@ -96,7 +96,10 @@ def render_cef(h):
             + cef_header(name) + "|" + str(cef_sev(sev)) + "|" + ext_str)
 
 def epoch(ts):
-    try: return datetime.fromisoformat(ts).timestamp()
+    # OTShield stores naive UTC wall-clock timestamps; treat them as UTC
+    # explicitly so the computed _time is correct regardless of the container's
+    # own timezone (Splunk then displays it in UTC to match the OTShield UI).
+    try: return datetime.fromisoformat(ts).replace(tzinfo=timezone.utc).timestamp()
     except: return time.time()
 
 def post_batch(lines):
