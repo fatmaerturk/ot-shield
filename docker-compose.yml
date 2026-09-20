@@ -27,9 +27,10 @@ services:
   backend:
     build: ./backend
     restart: unless-stopped
-    # Cap the JVM so it shares the box with Ollama (JAVA_OPTS uses
-    # MaxRAMPercentage=75, i.e. ~1.5g heap of this 2g limit).
-    mem_limit: 2g
+    # Cap the JVM so it shares the box with Ollama, but not too tightly - 2g
+    # strangled it (GeoIP mmap + vector store + Spring). 4g heap-ceiling ~3g,
+    # leaving ~4g for Ollama + postgres on the 8g VM.
+    mem_limit: 4g
     depends_on:
       postgres:
         condition: service_healthy
