@@ -377,6 +377,9 @@ const Honeypot: React.FC = () => {
   const [stats, setStats] = useState<HoneypotStats>(EMPTY_STATS);
   const [logs, setLogs] = useState<RecentEvent[]>([]);
   const [backendReachable, setBackendReachable] = useState<boolean | null>(null);
+  // True until the first /stats fetch resolves, so KPI cards show a skeleton
+  // instead of flashing zeros (and the header reads "Connecting", not "Offline").
+  const [initialLoading, setInitialLoading] = useState(true);
   const [logPage, setLogPage] = useState(0);
   const [logSize] = useState(20);
   const [logFilter, setLogFilter] = useState('');
@@ -428,6 +431,8 @@ const Honeypot: React.FC = () => {
       }
     } catch {
       setBackendReachable(false);
+    } finally {
+      setInitialLoading(false);
     }
   };
 
@@ -609,15 +614,18 @@ const Honeypot: React.FC = () => {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 ring-1 ring-white/20 backdrop-blur-sm">
-              <span className={`w-2 h-2 rounded-full ${backendReachable ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
+              <span className={`w-2 h-2 rounded-full ${
+                backendReachable === null ? 'bg-amber-300 animate-pulse'
+                : backendReachable ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'
+              }`} />
               <span className="text-xs font-semibold uppercase tracking-wider text-white">
-                {backendReachable ? 'Live' : 'Offline'}
+                {backendReachable === null ? 'Connecting' : backendReachable ? 'Live' : 'Offline'}
               </span>
             </div>
             <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 ring-1 ring-white/20 backdrop-blur-sm">
               <Icon.Globe className="w-4 h-4" />
               <span className="text-xs font-semibold uppercase tracking-wider text-white">
-                GeoIP {stats.geoIpAvailable ? 'ready' : 'disabled'}
+                GeoIP {initialLoading ? '…' : stats.geoIpAvailable ? 'ready' : 'disabled'}
               </span>
             </div>
           </div>
@@ -663,8 +671,17 @@ const Honeypot: React.FC = () => {
               {k.icon}
             </div>
             <p className="mt-4 text-[11px] uppercase tracking-wider text-slate-500 font-semibold">{k.label}</p>
-            <p className="mt-1 text-3xl font-bold text-slate-900 tracking-tight">{k.value}</p>
-            <p className="mt-1 text-xs text-slate-500">{k.hint}</p>
+            {initialLoading ? (
+              <>
+                <div className="mt-2 h-8 w-24 rounded-md bg-slate-200 animate-pulse" />
+                <div className="mt-2.5 h-3 w-28 rounded bg-slate-100 animate-pulse" />
+              </>
+            ) : (
+              <>
+                <p className="mt-1 text-3xl font-bold text-slate-900 tracking-tight">{k.value}</p>
+                <p className="mt-1 text-xs text-slate-500">{k.hint}</p>
+              </>
+            )}
           </div>
         ))}
       </div>
