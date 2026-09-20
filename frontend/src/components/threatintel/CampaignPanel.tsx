@@ -7,6 +7,15 @@ interface Props {
   onSelectRelated?: (ip: string) => void;
 }
 
+// A campaign name is a "/"-joined list of the countries it spans, which overflows
+// the card once it covers many countries. Show the first few and a "+N more"
+// tail; the full list stays available in the title tooltip.
+const shortCampaignName = (name: string): string => {
+  const parts = name.split('/').map(s => s.trim()).filter(Boolean);
+  if (parts.length <= 4) return parts.join(' / ');
+  return `${parts.slice(0, 3).join(' / ')} +${parts.length - 3} more`;
+};
+
 const CampaignPanel: React.FC<Props> = ({ campaigns, relatedIps, onSelectRelated }) => {
   if (!campaigns.length && !relatedIps.length) {
     return (
@@ -22,7 +31,7 @@ const CampaignPanel: React.FC<Props> = ({ campaigns, relatedIps, onSelectRelated
           <div className="flex items-start justify-between gap-2">
             <div>
               <div className="text-[10px] uppercase tracking-wider text-violet-600 font-semibold">Campaign</div>
-              <div className="text-sm font-bold text-slate-900">{c.name}</div>
+              <div className="text-sm font-bold text-slate-900 break-words" title={c.name}>{shortCampaignName(c.name)}</div>
             </div>
             <div className="text-right">
               <div className="text-[10px] text-slate-500">Severity</div>

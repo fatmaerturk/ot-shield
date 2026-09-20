@@ -1,7 +1,10 @@
 package com.safetech.otshield.service.integration;
 
 import com.safetech.otshield.model.Anomaly;
+import com.safetech.otshield.model.HoneypotLog;
 import com.safetech.otshield.repository.AnomalyRepository;
+import com.safetech.otshield.repository.HoneypotLogRepository;
+import com.safetech.otshield.service.HoneypotLogService;
 import com.safetech.otshield.service.decoy.BreachDetectedEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -69,6 +72,7 @@ public class SiemForwarderService {
     private volatile String minSeverity;
 
     private final AnomalyRepository anomalyRepository;
+    private final HoneypotLogRepository honeypotLogRepository;
 
     // ---- runtime telemetry ----
     private final AtomicLong sent = new AtomicLong();
@@ -80,6 +84,9 @@ public class SiemForwarderService {
 
     // anomaly tail checkpoint + a small dedup ring so a boundary anomaly is not sent twice
     private volatile LocalDateTime anomalyCheckpoint = LocalDateTime.now();
+    // Id checkpoint for the internet-exposed decoy (honeypot) tail; -1 until the
+    // first run pins it to the current max id so the backlog is not re-shipped.
+    private volatile long honeypotCheckpoint = -1L;
     private final Set<String> recentlyForwarded = ConcurrentHashMap.newKeySet();
     private final Deque<String> forwardOrder = new ArrayDeque<>();
     private static final int DEDUP_MAX = 1000;
@@ -89,6 +96,7 @@ public class SiemForwarderService {
 
     public SiemForwarderService(
             AnomalyRepository anomalyRepository,
+            HoneypotLogRepository honeypotLogRepository,
             @Value("${siem.forward.enabled:false}") boolean enabled,
             @Value("${siem.forward.host:}") String host,
             @Value("${siem.forward.port:514}") int port,
@@ -96,6 +104,7 @@ public class SiemForwarderService {
             @Value("${siem.forward.format:CEF}") String format,
             @Value("${siem.forward.min-severity:LOW}") String minSeverity) {
         this.anomalyRepository = anomalyRepository;
+        this.honeypotLogRepository = honeypotLogRepository;
         this.enabled = enabled;
         this.host = host == null ? "" : host.trim();
         this.port = port;
@@ -159,6 +168,187 @@ public class SiemForwarderService {
         } finally {
             anomalyCheckpoint = now;
         }
+    }
+
+    /**
+     * Near real-time tail of internet-exposed decoy (honeypot) interactions.
+     * Every external hit on the exposed OT decoy is shipped to the SIEM once,
+     * so the SOC sees live attacker probes alongside the deception breaches.
+     * Tails by monotonic id (clock-skew proof); the first run pins the checkpoint
+     * to the current max id so the historical backlog is not re-shipped.
+     */
+    @Scheduled(fixedDelayString = "${siem.forward.honeypot-poll-ms:5000}", initialDelay = 15000)
+    public void forwardNewHoneypotHits() {
+        if (!enabled || host.isBlank()) return;
+        try {
+            if (honeypotCheckpoint < 0) {
+                HoneypotLog top = honeypotLogRepository.findTopByOrderByIdDesc();
+                honeypotCheckpoint = (top != null && top.getId() != null) ? top.getId() : 0L;
+                return; // skip backlog - only forward hits arriving after we start
+            }
+            List<HoneypotLog> fresh =
+                    honeypotLogRepository.findTop500ByIdGreaterThanOrderByIdAsc(honeypotCheckpoint);
+            for (HoneypotLog h : fresh) {
+                if (h.getId() == null) continue;
+                honeypotCheckpoint = Math.max(honeypotCheckpoint, h.getId());
+                if (isInternalHit(h)) continue; // internal noise, not an attack
+                if (!markForwarded("hp:" + h.getId())) continue;
+                try {
+                    deliver(fromHoneypot(h));
+                } catch (Exception ex) {
+                    log.debug("Honeypot hit {} forward error: {}", h.getId(), ex.getMessage());
+                }
+            }
+        } catch (Exception ex) {
+            log.warn("SIEM honeypot tail failed: {}", ex.getMessage());
+        }
+    }
+
+    /** Internal/RFC1918 (or missing) source - a decoy probe from inside the lab,
+     *  not a real external attack. Excluded from SIEM forwarding so Splunk mirrors
+     *  OTShield's external-attack view rather than raw sensor noise. */
+    /** Delegates to OTShield's single internal-noise definition so the SIEM's
+     *  external-attack view can never diverge from the app's own stats (same
+     *  RFC1918/geo-Internal exclusion, same internal-decoy tripwire exception). */
+    private static boolean isInternalHit(HoneypotLog h) {
+        return HoneypotLogService.isInternalNoise(h);
+    }
+
+    private SiemEvent fromHoneypot(HoneypotLog h) {
+        SiemEvent ev = new SiemEvent();
+        String proto = h.getProtocol() != null ? h.getProtocol() : "";
+        ev.category = "internet-exposed-decoy";
+        ev.signatureId = "OT-DECOY-PROBE";
+        ev.name = "Internet-exposed decoy probed" + (proto.isBlank() ? "" : " (" + proto + ")");
+        ev.severity = (h.getSeverity() != null && !h.getSeverity().isBlank())
+                ? h.getSeverity().toUpperCase() : "LOW";
+        ev.sourceIp = h.getSourceIp();
+        ev.destinationName = h.getDestinationIp();
+        ev.protocol = proto;
+        ev.message = (h.getDescription() != null && !h.getDescription().isBlank())
+                ? h.getDescription()
+                : "External source " + h.getSourceIp() + " interacted with the internet-exposed OT decoy";
+        ev.ts = h.getTimestamp() != null
+                ? h.getTimestamp().atZone(ZoneId.systemDefault()).toInstant() : Instant.now();
+        if (h.getAttackType() != null) ev.ext.put("otAttackType", h.getAttackType());
+        if (h.getCountry() != null) ev.ext.put("otSrcCountry", h.getCountry());
+        if (h.getCity() != null) ev.ext.put("otSrcCity", h.getCity());
+        if (h.getDestinationPort() != null) ev.ext.put("dpt", String.valueOf(h.getDestinationPort()));
+        if (h.getSourcePort() != null) ev.ext.put("spt", String.valueOf(h.getSourcePort()));
+        // ICS ATT&CK classification of the observed decoy interaction (kill-chain
+        // coverage). A deterministic mapping of the real attackType to its ICS
+        // tactic/technique - not a fabricated label. Lets the SIEM's MITRE panels
+        // reflect decoy telemetry, consistent with anomaly events that already
+        // carry otMitre* fields.
+        String[] mitre = mitreForAttack(h.getAttackType());
+        ev.ext.put("otMitreTactic", mitre[0]);
+        ev.ext.put("otMitreTechnique", mitre[1]);
+        ev.ext.put("otRiskScore", String.valueOf(riskForSeverity(ev.severity)));
+        return ev;
+    }
+
+    /** Maps an observed decoy attackType to its ICS ATT&CK tactic + a representative
+     *  technique. Read/scan/enumeration is Discovery; a register/coil write is
+     *  Impair Process Control; a login/brute attempt is Initial Access; an exploit
+     *  is Execution. Everything else defaults to Discovery (the decoy's baseline). */
+    private static String[] mitreForAttack(String attackType) {
+        String a = attackType == null ? "" : attackType.toLowerCase();
+        if (a.contains("write") || a.contains("coil write"))
+            return new String[]{"Impair Process Control", "T0836 Modify Parameter"};
+        if (a.contains("exploit"))
+            return new String[]{"Execution", "T0871 Execution through API"};
+        if (a.contains("login") || a.contains("brute") || a.contains("credential"))
+            return new String[]{"Initial Access", "T0812 Default Credentials"};
+        if (a.contains("scan") || a.contains("recon"))
+            return new String[]{"Discovery", "T0846 Remote System Discovery"};
+        if (a.contains("read") || a.contains("report slave") || a.contains("encapsulated"))
+            return new String[]{"Discovery", "T0888 Remote System Information Discovery"};
+        return new String[]{"Discovery", "T0846 Remote System Discovery"};
+    }
+
+    private static int riskForSeverity(String sev) {
+        switch (sev == null ? "" : sev.toUpperCase()) {
+            case "CRITICAL": return 95;
+            case "HIGH":     return 80;
+            case "MEDIUM":   return 55;
+            case "LOW":      return 25;
+            default:         return 15;
+        }
+    }
+
+    /**
+     * One-time backfill: replay the FULL internet-exposed decoy attack history to
+     * the SIEM (oldest id first), so the SOC's dashboards mirror OTShield's entire
+     * attack picture - not just events arriving after forwarding was enabled.
+     * Uses a single reused socket (per-event sockets would mean tens of thousands
+     * of opens) and throttles UDP so the receiver's datagram buffer is not swamped.
+     * maxEvents <= 0 means "everything". Does not touch the live tail checkpoint.
+     */
+    public synchronized Map<String, Object> backfillHoneypot(int maxEvents) {
+        Map<String, Object> res = new LinkedHashMap<>();
+        if (!enabled || host.isBlank()) {
+            res.put("ok", false);
+            res.put("reason", "SIEM forwarding is disabled or the host is not set");
+            return res;
+        }
+        int forwarded = 0, droppedLow = 0;
+        long lastId = 0L;
+        int minRank = severityRank(minSeverity);
+        DatagramSocket udp = null;
+        Socket tcp = null;
+        OutputStream tcpOut = null;
+        InetAddress addr = null;
+        try {
+            if (protocol == Protocol.UDP) {
+                udp = new DatagramSocket();
+                addr = InetAddress.getByName(host);
+            } else {
+                tcp = new Socket();
+                tcp.connect(new InetSocketAddress(host, port), 4000);
+                tcpOut = tcp.getOutputStream();
+            }
+            boolean done = false;
+            while (!done) {
+                List<HoneypotLog> page = honeypotLogRepository.findTop500ByIdGreaterThanOrderByIdAsc(lastId);
+                if (page.isEmpty()) break;
+                for (HoneypotLog h : page) {
+                    if (h.getId() == null) continue;
+                    lastId = h.getId();
+                    if (maxEvents > 0 && forwarded >= maxEvents) { done = true; break; }
+                    if (isInternalHit(h)) continue; // internal noise, not an attack
+                    SiemEvent ev = fromHoneypot(h);
+                    if (severityRank(ev.severity) < minRank) { droppedLow++; continue; }
+                    byte[] payload = render(ev).getBytes(StandardCharsets.UTF_8);
+                    if (protocol == Protocol.UDP) {
+                        udp.send(new DatagramPacket(payload, payload.length, addr, port));
+                        if ((forwarded % 50) == 0) Thread.sleep(10); // let the UDP receiver drain
+                    } else {
+                        tcpOut.write(payload);
+                        if (payload.length == 0 || payload[payload.length - 1] != '\n') tcpOut.write('\n');
+                    }
+                    forwarded++;
+                    sent.incrementAndGet();
+                    lastSentAt = Instant.now();
+                }
+            }
+            if (tcpOut != null) tcpOut.flush();
+            lastMessage = "backfill complete: " + forwarded + " decoy hits replayed to SIEM";
+            lastError = null;
+            res.put("ok", true);
+        } catch (Exception ex) {
+            lastError = ex.getClass().getSimpleName() + ": " + ex.getMessage();
+            log.warn("SIEM backfill aborted after {} events: {}", forwarded, lastError);
+            res.put("ok", false);
+            res.put("error", lastError);
+        } finally {
+            try { if (tcp != null) tcp.close(); } catch (Exception ignore) { /* best effort */ }
+            if (udp != null) udp.close();
+        }
+        res.put("forwarded", forwarded);
+        res.put("droppedBelowThreshold", droppedLow);
+        res.put("transport", protocol.name());
+        res.put("format", format.name());
+        return res;
     }
 
     // ------------------------------------------------------------------

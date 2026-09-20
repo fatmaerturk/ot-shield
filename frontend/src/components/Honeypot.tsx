@@ -18,6 +18,7 @@ import {
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { CARTO_DARK_URL, CARTO_SUBDOMAINS, CARTO_ATTRIBUTION } from '../lib/basemap';
 import TTPIntelTab from './TTPIntelTab';
 import AttackerWatchlist from './AttackerWatchlist';
 import AnonymityBadge from './AnonymityBadge';
@@ -259,7 +260,7 @@ const decoyIcon = L.divIcon({
   iconAnchor: [30, 30],
 });
 
-// Severity → stroke color for the attack arc + projectile.
+// Severity â†’ stroke color for the attack arc + projectile.
 // MUST stay in sync with the on-map legend below and the .attacker-pulse
 // CSS rules in App.css - otherwise the dot, the arc, and the legend swatch
 // disagree for the same severity. The "unknown" default is a neutral slate
@@ -292,7 +293,7 @@ const COUNTRY_COORDS: Record<string, L.LatLngTuple> = {
 // flags next to country names. Covers the most common attacker origins
 // observed in honeypot traffic plus a wide international fallback list.
 const COUNTRY_ISO: Record<string, string> = {
-  'Türkiye': 'TR', 'Turkey': 'TR',
+  'TÃ¼rkiye': 'TR', 'Turkey': 'TR',
   'United States': 'US', 'United States of America': 'US', 'USA': 'US',
   'United Kingdom': 'GB', 'UK': 'GB', 'Great Britain': 'GB',
   'China': 'CN', "China, People's Republic of": 'CN',
@@ -344,7 +345,7 @@ function isoFor(country: string | null | undefined): string | null {
 
 /** Render a country flag as an SVG image (works on every OS, including
  *  Windows where emoji flags don't render natively). Uses flagcdn.com
- *  free CDN - small (≈1kb each, served as PNG/SVG with caching).
+ *  free CDN - small (â‰ˆ1kb each, served as PNG/SVG with caching).
  *  Falls back to a globe glyph when the country is not in the mapping. */
 const Flag: React.FC<{ country: string | null | undefined; size?: number; className?: string }> = ({
   country,
@@ -353,7 +354,7 @@ const Flag: React.FC<{ country: string | null | undefined; size?: number; classN
 }) => {
   const iso = isoFor(country);
   if (!iso) {
-    return <span aria-hidden="true" className={className} style={{ fontSize: size }}>🌐</span>;
+    return <span aria-hidden="true" className={className} style={{ fontSize: size }}>ðŸŒ</span>;
   }
   const w = Math.round(size * 1.4);
   return (
@@ -419,7 +420,7 @@ const Honeypot: React.FC = () => {
   // -------- data fetching --------
   const fetchStats = async () => {
     try {
-      const r = await fetch('http://localhost:8080/api/honeypot/stats');
+      const r = await fetch('/api/honeypot/stats');
       if (r.ok) {
         const d = await r.json();
         setStats({ ...EMPTY_STATS, ...d });
@@ -437,7 +438,7 @@ const Honeypot: React.FC = () => {
       params.set('size', String(logSize));
       if (logFilter) params.set('sourceIp', logFilter);
       if (logProtocol) params.set('protocol', logProtocol);
-      const r = await fetch(`http://localhost:8080/api/honeypot/logs?${params}`);
+      const r = await fetch(`/api/honeypot/logs?${params}`);
       if (r.ok) {
         const d = await r.json();
         setLogs(Array.isArray(d) ? d : []);
@@ -601,7 +602,7 @@ const Honeypot: React.FC = () => {
               <span className="block mt-3 text-sm text-violet-100/70">
                 Want to inspect a single decoy's threat posture and Modbus telemetry? Open{' '}
                 <Link to="/integrations/ics-decoy" className="underline decoration-violet-300/60 hover:decoration-white font-semibold text-white">
-                  ICS Decoy →
+                  ICS Decoy â†’
                 </Link>
               </span>
             </h1>
@@ -630,7 +631,7 @@ const Honeypot: React.FC = () => {
           </div>
           <div className="text-sm text-rose-800 leading-relaxed">
             <strong className="block mb-1">Backend unreachable.</strong>
-            Cannot reach the Spring Boot API at <code className="bg-rose-100 px-1.5 py-0.5 rounded text-xs font-mono">http://localhost:8080</code>. Start the backend and refresh.
+            Cannot reach the Spring Boot API at <code className="bg-rose-100 px-1.5 py-0.5 rounded text-xs font-mono">the backend API</code>. Start the backend and refresh.
           </div>
         </div>
       )}
@@ -653,7 +654,7 @@ const Honeypot: React.FC = () => {
         {[
           { label: 'Total Attacks', value: stats.totalAttacks.toLocaleString(), hint: `${stats.recentAttacks24h.toLocaleString()} in last 24h`, gradient: 'from-rose-500 to-orange-500', icon: <Icon.Zap className="w-5 h-5" /> },
           { label: 'Unique Attackers', value: stats.uniqueIPs.toLocaleString(), hint: `${stats.topSourceIps.length} in top list`, gradient: 'from-violet-500 to-fuchsia-500', icon: <Icon.Users className="w-5 h-5" /> },
-          { label: 'Countries', value: Object.keys(stats.countryBreakdown).length.toLocaleString(), hint: stats.geoIpAvailable ? 'Geo-resolved via MaxMind' : 'GeoIP DB required', gradient: 'from-emerald-500 to-teal-500', icon: <Icon.Globe className="w-5 h-5" /> },
+          { label: 'Countries', value: ((stats as any).distinctCountries ?? Object.keys(stats.countryBreakdown).length).toLocaleString(), hint: stats.geoIpAvailable ? 'Geo-resolved via MaxMind' : 'GeoIP DB required', gradient: 'from-emerald-500 to-teal-500', icon: <Icon.Globe className="w-5 h-5" /> },
           { label: 'Blocked', value: stats.blockedAttacks.toLocaleString(), hint: `${stats.uniqueSessions.toLocaleString()} sessions tracked`, gradient: 'from-fuchsia-500 to-pink-500', icon: <Icon.Ban className="w-5 h-5" /> },
         ].map((k, i) => (
           <div key={i} className="group relative bg-white rounded-2xl p-6 ring-1 ring-slate-200/70 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 overflow-hidden">
@@ -700,7 +701,7 @@ const Honeypot: React.FC = () => {
           </p>
           <div className="mt-4">
             <Link to="/integrations/ics-decoy" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white font-semibold text-sm hover:shadow-lg hover:shadow-violet-500/30 transition">
-              Go to ICS Decoy →
+              Go to ICS Decoy â†’
             </Link>
           </div>
         </div>
@@ -720,7 +721,7 @@ const Honeypot: React.FC = () => {
                 <div>
                   <h3 className="text-base font-semibold text-slate-900">Global Attack Map</h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    {attackerMarkers.length} geolocated attackers · arcs spawn on each real honeypot hit (SSE) · severity-coloured
+                    {attackerMarkers.length} geolocated attackers Â· arcs spawn on each real honeypot hit (SSE) Â· severity-coloured
                   </p>
                 </div>
               </div>
@@ -728,14 +729,14 @@ const Honeypot: React.FC = () => {
             </div>
             <div className="relative" style={{ height: '480px', width: '100%' }}>
               <MapContainer center={[25, 15]} zoom={2} scrollWheelZoom={false} style={{ height: '100%', width: '100%' }}>
-                <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; <a href="https://carto.com/">CARTO</a>' />
+                <TileLayer url={CARTO_DARK_URL} subdomains={CARTO_SUBDOMAINS} attribution={CARTO_ATTRIBUTION} />
 
                 {/* Decoy marker - pulsing target */}
                 <Marker position={DECOY_POS} icon={decoyIcon}>
                   <Popup>
                     <div className="text-xs">
                       <div className="font-semibold">Decoy (Ankara)</div>
-                      <div className="text-slate-500">Honeypot target · attack arcs converge here</div>
+                      <div className="text-slate-500">Honeypot target Â· attack arcs converge here</div>
                     </div>
                   </Popup>
                 </Marker>
@@ -748,8 +749,8 @@ const Honeypot: React.FC = () => {
                       <Popup>
                         <div className="text-xs">
                           <div className="font-mono font-semibold">{a.ip}</div>
-                          <div>{a.country || 'Unknown'}{a.city ? ` · ${a.city}` : ''}</div>
-                          <div>{a.count.toLocaleString()} events · {a.topProtocol || 'N/A'}</div>
+                          <div>{a.country || 'Unknown'}{a.city ? ` Â· ${a.city}` : ''}</div>
+                          <div>{a.count.toLocaleString()} events Â· {a.topProtocol || 'N/A'}</div>
                           {a.highestSeverity && (
                             <div className="mt-1">Severity: <span className="font-semibold" style={{ color }}>{a.highestSeverity}</span></div>
                           )}
@@ -781,7 +782,7 @@ const Honeypot: React.FC = () => {
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1.5">Severity</p>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="w-2 h-2 rounded-full" style={{ background: '#f43f5e', boxShadow: '0 0 6px #f43f5e' }} />
-                  <span>High · critical events</span>
+                  <span>High Â· critical events</span>
                 </div>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="w-2 h-2 rounded-full" style={{ background: '#f97316', boxShadow: '0 0 6px #f97316' }} />
@@ -789,7 +790,7 @@ const Honeypot: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="w-2 h-2 rounded-full" style={{ background: '#a855f7', boxShadow: '0 0 6px #a855f7' }} />
-                  <span>Low · reconnaissance</span>
+                  <span>Low Â· reconnaissance</span>
                 </div>
                 <div className="flex items-center gap-2 pt-2 border-t border-white/10">
                   <span className="w-2.5 h-2.5 rounded-full" style={{ background: 'radial-gradient(circle, #ec4899, #8b5cf6)', boxShadow: '0 0 8px #ec4899' }} />
@@ -804,7 +805,7 @@ const Honeypot: React.FC = () => {
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
                 </span>
                 <span className="font-semibold tabular-nums">{stats.totalAttacks.toLocaleString()}</span>
-                <span className="text-white/60">events · {attackerMarkers.length} live sources</span>
+                <span className="text-white/60">events Â· {attackerMarkers.length} live sources</span>
               </div>
             </div>
           </div>
@@ -817,7 +818,7 @@ const Honeypot: React.FC = () => {
             <PanelCard title="Severity Mix" subtitle="Attack severity distribution" badge="Severity" badgeTone="rose">
               <div className="h-64"><Doughnut data={severityDoughnut} options={chartOptions} /></div>
             </PanelCard>
-            <PanelCard title="24-hour Activity" subtitle="Events per hour · high severity overlay" badge="Timeline" badgeTone="fuchsia">
+            <PanelCard title="24-hour Activity" subtitle="Events per hour Â· high severity overlay" badge="Timeline" badgeTone="fuchsia">
               <div className="h-64"><Line data={hourlyLineChart} options={lineOpts} /></div>
             </PanelCard>
           </div>
@@ -832,7 +833,7 @@ const Honeypot: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="text-base font-semibold text-slate-900">Top Attackers</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">Most active source IPs · click a row for drilldown</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Most active source IPs Â· click a row for drilldown</p>
                   </div>
                 </div>
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-rose-700 bg-rose-50 ring-1 ring-rose-200 px-2 py-1 rounded-full">IPs</span>
@@ -863,12 +864,12 @@ const Honeypot: React.FC = () => {
                               <span>{a.country}</span>
                             </span>
                           ) : '-'}
-                          {a.city ? <span className="text-slate-400"> · {a.city}</span> : ''}
+                          {a.city ? <span className="text-slate-400"> Â· {a.city}</span> : ''}
                         </td>
                         <td className="px-4 py-2.5 text-sm">
                           {anonByIp[a.ip]
                             ? <AnonymityBadge a={{ anonymityCategory: anonByIp[a.ip].category, anonymityLabel: anonByIp[a.ip].label, anonymityConfidence: anonByIp[a.ip].confidence, anonymityNote: anonByIp[a.ip].note }} />
-                            : <span className="text-slate-300">…</span>}
+                            : <span className="text-slate-300">â€¦</span>}
                         </td>
                         <td className="px-4 py-2.5 text-sm">{a.topProtocol ? <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 ring-1 ring-slate-200">{a.topProtocol}</span> : '-'}</td>
                         <td className="px-4 py-2.5 text-sm">{a.highestSeverity ? (
@@ -972,7 +973,7 @@ const Honeypot: React.FC = () => {
                               {e.country && <span className="text-[10px] text-slate-500">{e.country}</span>}
                               <span className="ml-auto text-[10px] text-slate-400">{formatRelative(e.timestamp)}</span>
                             </div>
-                            <p className="text-xs text-slate-600 truncate">{e.attackType} · {e.protocol}</p>
+                            <p className="text-xs text-slate-600 truncate">{e.attackType} Â· {e.protocol}</p>
                           </div>
                         ))}
                       </div>
@@ -1069,13 +1070,13 @@ const Honeypot: React.FC = () => {
             <div className="px-6 py-4 border-b border-slate-200/70 flex items-center justify-between gap-3 flex-wrap">
               <div>
                 <h3 className="text-base font-semibold text-slate-900">Attack Log</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Full-text view of persisted honeypot events · filter by IP or protocol</p>
+                <p className="text-xs text-slate-500 mt-0.5">Full-text view of persisted honeypot events Â· filter by IP or protocol</p>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 <input
                   value={logFilter}
                   onChange={e => { setLogFilter(e.target.value); setLogPage(0); }}
-                  placeholder="Filter by IP…"
+                  placeholder="Filter by IPâ€¦"
                   className="px-3 py-1.5 text-sm rounded-lg ring-1 ring-slate-200 bg-white focus:ring-2 focus:ring-violet-400 focus:outline-none font-mono"
                 />
                 <select
@@ -1108,7 +1109,7 @@ const Honeypot: React.FC = () => {
                       <td className="px-4 py-2.5 text-xs text-slate-500 whitespace-nowrap">{formatRelative(l.timestamp)}</td>
                       <td className="px-4 py-2.5 text-sm">
                         <div className="font-mono text-slate-900">{l.sourceIp}</div>
-                        {l.country && <div className="text-[10px] text-slate-500">{l.country}{l.city ? ` · ${l.city}` : ''}</div>}
+                        {l.country && <div className="text-[10px] text-slate-500">{l.country}{l.city ? ` Â· ${l.city}` : ''}</div>}
                       </td>
                       <td className="px-4 py-2.5 text-sm">{l.protocol && <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 ring-1 ring-slate-200">{l.protocol}</span>}</td>
                       <td className="px-4 py-2.5 text-sm text-slate-700">{l.attackType || '-'}</td>
@@ -1128,7 +1129,7 @@ const Honeypot: React.FC = () => {
               </table>
             </div>
             <div className="px-6 py-3 border-t border-slate-200/70 flex items-center justify-between">
-              <span className="text-xs text-slate-500">Page {logPage + 1} · {logs.length} rows on this page</span>
+              <span className="text-xs text-slate-500">Page {logPage + 1} Â· {logs.length} rows on this page</span>
               <div className="flex gap-2">
                 <button disabled={logPage === 0} onClick={() => setLogPage(p => Math.max(0, p - 1))}
                   className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition">Previous</button>
@@ -1155,7 +1156,7 @@ const Honeypot: React.FC = () => {
 /**
  * SVG-based attack-arc overlay (ported from Decoy Layer's WorldAttackerMap).
  *
- * For each spawn: draws a curved arc from attacker → decoy with a leading
+ * For each spawn: draws a curved arc from attacker â†’ decoy with a leading
  * stroke-reveal, glowing packet head, impact ripple at the decoy, and a
  * flash ring over the source country. Uses Leaflet's map projection so
  * everything stays registered to geographic coordinates during pan/zoom.
@@ -1213,7 +1214,7 @@ const AttackArcLayer: React.FC<{
   // layer: prefer MaxMind lat/lon shipped on the event, fall back to canned
   // country coordinates, drop the event when neither is available.
   useEffect(() => {
-    const es = new EventSource('http://localhost:8080/api/honeypot/events');
+    const es = new EventSource('/api/honeypot/events');
     es.addEventListener('attack', (ev: MessageEvent) => {
       try {
         const e = JSON.parse(ev.data) as {
@@ -1465,7 +1466,7 @@ const AttackerModal: React.FC<{ attacker: TopAttacker; events: RecentEvent[]; an
                 <AnonymityBadge a={{ anonymityCategory: anon.category, anonymityLabel: anon.label, anonymityConfidence: anon.confidence, anonymityNote: anon.note }} />
               )}
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">{attacker.country || 'Unknown country'}{attacker.city ? ` · ${attacker.city}` : ''} · {attacker.count.toLocaleString()} events{anon && anon.asnOrg ? ` · ${anon.asnOrg}` : ''}</p>
+            <p className="text-xs text-slate-500 mt-0.5">{attacker.country || 'Unknown country'}{attacker.city ? ` Â· ${attacker.city}` : ''} Â· {attacker.count.toLocaleString()} events{anon && anon.asnOrg ? ` Â· ${anon.asnOrg}` : ''}</p>
           </div>
         </div>
         <button onClick={onClose} className="w-8 h-8 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 flex items-center justify-center transition" aria-label="Close">
@@ -1474,10 +1475,10 @@ const AttackerModal: React.FC<{ attacker: TopAttacker; events: RecentEvent[]; an
       </div>
       <div className="p-6 space-y-4 overflow-y-auto">
         <div className="flex flex-wrap gap-2">
-          <a href={`https://www.abuseipdb.com/check/${attacker.ip}`} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 ring-1 ring-slate-200 px-2.5 py-1.5 rounded-lg transition">AbuseIPDB ↗</a>
-          <a href={`https://www.virustotal.com/gui/ip-address/${attacker.ip}`} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 ring-1 ring-slate-200 px-2.5 py-1.5 rounded-lg transition">VirusTotal ↗</a>
-          <a href={`https://www.shodan.io/host/${attacker.ip}`} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 ring-1 ring-slate-200 px-2.5 py-1.5 rounded-lg transition">Shodan ↗</a>
-          <a href={`https://ipinfo.io/${attacker.ip}`} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 ring-1 ring-slate-200 px-2.5 py-1.5 rounded-lg transition">ipinfo.io ↗</a>
+          <a href={`https://www.abuseipdb.com/check/${attacker.ip}`} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 ring-1 ring-slate-200 px-2.5 py-1.5 rounded-lg transition">AbuseIPDB â†—</a>
+          <a href={`https://www.virustotal.com/gui/ip-address/${attacker.ip}`} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 ring-1 ring-slate-200 px-2.5 py-1.5 rounded-lg transition">VirusTotal â†—</a>
+          <a href={`https://www.shodan.io/host/${attacker.ip}`} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 ring-1 ring-slate-200 px-2.5 py-1.5 rounded-lg transition">Shodan â†—</a>
+          <a href={`https://ipinfo.io/${attacker.ip}`} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 ring-1 ring-slate-200 px-2.5 py-1.5 rounded-lg transition">ipinfo.io â†—</a>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Stat label="Top protocol" value={attacker.topProtocol || '-'} />
@@ -1502,7 +1503,7 @@ const AttackerModal: React.FC<{ attacker: TopAttacker; events: RecentEvent[]; an
                     {e.protocol && <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 ring-1 ring-slate-200">{e.protocol}</span>}
                     <span className="text-xs text-slate-500 ml-auto">{formatRelative(e.timestamp)}</span>
                   </div>
-                  <p className="text-xs text-slate-700">{e.attackType || '-'}{e.description ? ` · ${e.description}` : ''}</p>
+                  <p className="text-xs text-slate-700">{e.attackType || '-'}{e.description ? ` Â· ${e.description}` : ''}</p>
                   {(e.usernameAttempt || e.passwordAttempt) && (
                     <p className="text-xs font-mono text-slate-500 mt-0.5">
                       {e.usernameAttempt && <>u: <span className="text-slate-700">{e.usernameAttempt}</span> </>}

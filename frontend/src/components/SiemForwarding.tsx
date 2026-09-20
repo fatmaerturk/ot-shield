@@ -291,6 +291,10 @@ const SiemForwarding: React.FC = () => {
               <span className="flex-shrink-0 mt-0.5 w-6 h-6 rounded-lg bg-amber-50 text-amber-600 ring-1 ring-amber-200 flex items-center justify-center text-xs font-bold">3</span>
               <span><span className="font-semibold text-slate-800">OT anomalies</span> - the detection engine's findings, tailed every 30s and forwarded once each, carrying MITRE ATT&CK for ICS mapping, Purdue level and risk score.</span>
             </li>
+            <li className="flex gap-3">
+              <span className="flex-shrink-0 mt-0.5 w-6 h-6 rounded-lg bg-amber-50 text-amber-600 ring-1 ring-amber-200 flex items-center justify-center text-xs font-bold">4</span>
+              <span><span className="font-semibold text-slate-800">Internet-exposed decoy hits</span> - every external probe against the exposed OT decoy, tailed in near real time (every ~5s) and forwarded once each, carrying source IP, protocol, origin country and severity.</span>
+            </li>
           </ul>
         </Panel>
       </motion.div>

@@ -41,4 +41,14 @@ public class SiemForwarderController {
     public ResponseEntity<Map<String, Object>> test() {
         return ResponseEntity.ok(service.sendTest());
     }
+
+    /**
+     * One-time backfill of the full internet-exposed decoy attack history to the
+     * SIEM. {@code limit} caps the replay (<= 0 or absent = everything).
+     */
+    @PostMapping("/backfill")
+    public ResponseEntity<Map<String, Object>> backfill(
+            @RequestParam(defaultValue = "0") int limit) {
+        return ResponseEntity.ok(service.backfillHoneypot(limit));
+    }
 }

@@ -17,6 +17,9 @@ import honeypotService, { HoneypotStats, TtpAnalysis, HoneypotLog } from '../ser
 import { alertService } from '../services/alertService';
 import { AlertStatistics, Alert as BackendAlert } from '../types/alert';
 import assetService, { AssetDTO } from '../services/assetService';
+import { PageLoading } from './theme';
+import api from '../services/api';
+import { iec62443Service } from '../services/iec62443Service';
 
 ChartJS.register(
   ArcElement,
@@ -172,6 +175,7 @@ const todayKeyDayLabel = (label: string): string => label;
 
 const ExecutiveDashboard: React.FC = () => {
   const [timeRange, setTimeRange] = useState<'24h' | '7d' | '30d'>('7d');
+  const rangeLabel = timeRange === '24h' ? 'last 24h' : timeRange === '7d' ? 'last 7 days' : 'last 30 days';
 
   /* ---------- Live data from backend ---------- */
   const [honeypotStats, setHoneypotStats] = useState<HoneypotStats | null>(null);
@@ -183,11 +187,16 @@ const ExecutiveDashboard: React.FC = () => {
   const [recentLogs, setRecentLogs] = useState<HoneypotLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  // Real compliance readiness from the NIS2 / IEC 62443 posture endpoints
+  // (null = endpoint unavailable / not yet loaded).
+  const [nis2Score, setNis2Score] = useState<number | null>(null);
+  const [iecScore, setIecScore] = useState<number | null>(null);
 
   /* ---------- Fetch loop ---------- */
   const refresh = useCallback(async () => {
+    const rangeDays = timeRange === '24h' ? 1 : timeRange === '7d' ? 7 : 30;
     const tasks = await Promise.allSettled([
-      honeypotService.getStats(),
+      honeypotService.getStats(rangeDays),
       alertService.getAlertStatistics(),
       alertService.getRecentAlerts(),
       assetService.listAll(500),
@@ -203,9 +212,19 @@ const ExecutiveDashboard: React.FC = () => {
     if (hraRes.status === 'fulfilled') setHighRiskAssets(hraRes.value);
     if (ttpRes.status === 'fulfilled') setTtp(ttpRes.value);
     if (logsRes.status === 'fulfilled') setRecentLogs(logsRes.value);
+
+    // Real compliance posture (best-effort; kept out of the tuple above so its
+    // response types don't widen the others).
+    const [nis2Res, iecRes] = await Promise.allSettled([
+      api.get('/api/compliance/nis2/posture'),
+      iec62443Service.getPosture(),
+    ]);
+    if (nis2Res.status === 'fulfilled') setNis2Score(nis2Res.value?.data?.postureScore?.score ?? null);
+    if (iecRes.status === 'fulfilled') setIecScore(iecRes.value?.overall?.coveragePct ?? null);
+
     setLastUpdated(new Date());
     setLoading(false);
-  }, []);
+  }, [timeRange]);
 
   useEffect(() => {
     refresh();
@@ -217,26 +236,48 @@ const ExecutiveDashboard: React.FC = () => {
 
   // Posture score: derived from blocked-vs-total ratio + critical alert ratio + asset risk distribution
   const postureScore = useMemo(() => {
-    const total = honeypotStats?.totalAttacks ?? 0;
-    const blocked = honeypotStats?.blockedAttacks ?? 0;
-    const blockRate = total > 0 ? (blocked / total) * 100 : 100;
+    // OTShield is a deception platform: it ABSORBS attacks at the decoy layer
+    // rather than blocking them, so blockedAttacks is structurally ~0. Driving
+    // the posture off a block rate therefore pinned the score near 40 no matter
+    // how well the deception worked. Score real-asset residual risk instead:
+    //  - crownJewelSafety: crown-jewel (CRITICAL/HIGH) assets NOT under active attacker interest
+    //  - low critical-incident share
+    //  - monitoring coverage of the asset estate
     const critical = alertStats?.criticalAlerts ?? 0;
     const totalAlerts = alertStats?.totalAlerts ?? 0;
     const criticalRatio = totalAlerts > 0 ? (critical / totalAlerts) * 100 : 0;
-    const score = Math.round(0.6 * blockRate + 0.4 * (100 - criticalRatio));
+
+    const crownJewels = assets.filter((a) => a.criticalityLevel === 'CRITICAL' || a.criticalityLevel === 'HIGH');
+    const highRiskIds = new Set(highRiskAssets.map((a) => a.id));
+    const crownAtRisk = crownJewels.filter((a) => highRiskIds.has(a.id)).length;
+    const crownJewelSafety = crownJewels.length > 0
+      ? Math.max(0, (1 - crownAtRisk / crownJewels.length) * 100)
+      : 100; // no crown jewels under active attacker interest
+
+    const monitored = assets.filter((a) => a.monitoringStatus === 'MONITORED' || a.monitoringStatus === 'PARTIALLY_MONITORED').length;
+    const coverage = assets.length > 0 ? (monitored / assets.length) * 100 : 100;
+
+    const score = Math.round(0.5 * crownJewelSafety + 0.3 * (100 - criticalRatio) + 0.2 * coverage);
     return Math.max(0, Math.min(100, score || 0));
-  }, [honeypotStats, alertStats]);
+  }, [alertStats, assets, highRiskAssets]);
 
-  const residualRiskLevel = useMemo<'HIGH' | 'MODERATE' | 'LOW'>(() => {
-    if (postureScore >= 85) return 'LOW';
-    if (postureScore >= 65) return 'MODERATE';
-    return 'HIGH';
-  }, [postureScore]);
-
+  // Residual risk (0-10, higher = worse): the inverse of the security posture,
+  // nudged up by open critical / high incidents that still need action - so the
+  // score genuinely reflects the "posture & alert mix" the card describes.
   const residualRiskScore = useMemo(() => {
-    // 0-10 scale (inverse of posture)
-    return Math.round((100 - postureScore) / 10 * 10) / 10;
-  }, [postureScore]);
+    const base = (100 - postureScore) / 10; // 0-10 from posture
+    const critical = alertStats?.criticalAlerts ?? 0;
+    const high = alertStats?.highAlerts ?? 0;
+    const alertPressure = Math.min(3, critical * 0.5 + high * 0.2); // up to +3
+    return Math.round(Math.max(0, Math.min(10, base + alertPressure)) * 10) / 10;
+  }, [postureScore, alertStats]);
+
+  // Level is derived from the same score so the badge, header and gauge agree.
+  const residualRiskLevel = useMemo<'HIGH' | 'MODERATE' | 'LOW'>(() => {
+    if (residualRiskScore < 3.5) return 'LOW';
+    if (residualRiskScore < 6.5) return 'MODERATE';
+    return 'HIGH';
+  }, [residualRiskScore]);
 
   // Crown jewels: high-criticality assets
   const crownJewelAssets = useMemo<AssetDTO[]>(() => {
@@ -267,77 +308,76 @@ const ExecutiveDashboard: React.FC = () => {
     return Math.round((noise / total) * 100);
   }, [alertStats]);
 
-  // Coverage by purdue level: % of assets monitored at each level
-  const coverageByLevel = useMemo(() => {
-    const buckets: Record<string, { total: number; monitored: number }> = {
-      LEVEL_0: { total: 0, monitored: 0 },
-      LEVEL_1: { total: 0, monitored: 0 },
-      LEVEL_2: { total: 0, monitored: 0 },
-      LEVEL_3: { total: 0, monitored: 0 },
-    };
+  // Discovered OT assets at each Purdue level (real inventory distribution).
+  // (Was "% monitored per level", but monitoring_status is never set on the
+  // auto-discovered assets, so that chart was permanently 0% / empty.)
+  const assetsByLevel = useMemo(() => {
+    const buckets: Record<string, number> = { LEVEL_0: 0, LEVEL_1: 0, LEVEL_2: 0, LEVEL_3: 0 };
     assets.forEach((a) => {
       const lvl = a.purdueLevel as string | undefined;
-      if (lvl && buckets[lvl]) {
-        buckets[lvl].total++;
-        if (a.monitoringStatus === 'MONITORED' || a.monitoringStatus === 'PARTIALLY_MONITORED') {
-          buckets[lvl].monitored++;
-        }
-      }
+      if (lvl && lvl in buckets) buckets[lvl]++;
     });
-    const pct = (b: { total: number; monitored: number }) =>
-      b.total > 0 ? Math.round((b.monitored / b.total) * 100) : 0;
     return {
-      level0: pct(buckets.LEVEL_0),
-      level1: pct(buckets.LEVEL_1),
-      level2: pct(buckets.LEVEL_2),
-      level3: pct(buckets.LEVEL_3),
+      level0: buckets.LEVEL_0,
+      level1: buckets.LEVEL_1,
+      level2: buckets.LEVEL_2,
+      level3: buckets.LEVEL_3,
     };
   }, [assets]);
 
   // Threat trend: last 7 days of real daily attack counts from the honeypot
   // dailySeries. Only the real total per day - no fabricated stage split.
   const threatTrends = useMemo(() => {
-    const labels = lastNDays(7);
+    // dailySeries is a fixed ~30-day series with the RECENT days at the END.
+    // Mapping weekday labels onto daily[0..6] previously read the OLDEST, all-
+    // zero days -> the chart looked empty. Take the tail that matches the
+    // selected range and label each bar from its own date.
     const daily = honeypotStats?.dailySeries ?? [];
-    return labels.map((label, idx) => ({
-      day: label,
-      total: daily[idx]?.count ?? 0,
-    }));
-  }, [honeypotStats]);
-
-  // MITRE tactics from backend ttp-analysis
-  const mitreTactics = useMemo(() => {
-    if (ttp?.tactics && ttp.tactics.length > 0) {
-      return ttp.tactics.map((t) => ({
-        id: t.id,
-        name: t.name,
-        observed: t.observed ?? 0,
-        coverage: t.coverage ?? 0,
-      }));
-    }
-    // Fallback: build from mitreHeatmap
-    if (ttp?.mitreHeatmap) {
-      const known: Record<string, string> = {
-        TA0108: 'Initial Access',
-        TA0109: 'Execution',
-        TA0102: 'Discovery',
-        TA0111: 'Lateral Movement',
-        TA0103: 'Collection',
-        TA0105: 'Impair Process Control',
+    const n = timeRange === '30d' ? 30 : 7;
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return daily.slice(-n).map((d) => {
+      const dt = d.date ? new Date(d.date + 'T00:00:00') : null;
+      return {
+        day: dt ? (n > 7 ? d.date.slice(5) : dayNames[dt.getDay()]) : (d.date ?? ''),
+        total: d.count ?? 0,
       };
-      return Object.entries(ttp.mitreHeatmap).map(([id, count]) => ({
-        id,
-        name: known[id] ?? id,
-        observed: count,
-        coverage: 0,
-      }));
-    }
-    return [];
+    });
+  }, [honeypotStats, timeRange]);
+
+  // MITRE tactics from backend ttp-analysis. The endpoint returns `mitreTactics`
+  // ({ tactic, eventCount, techniques, uniqueAttackers }); the old code read a
+  // `tactics` / `mitreHeatmap` shape it never actually sent -> chart was empty.
+  // The bar shows each tactic's share of observed activity (real), not a
+  // fabricated "framework coverage".
+  const mitreTactics = useMemo(() => {
+    const list = ttp?.mitreTactics ?? [];
+    if (list.length === 0) return [];
+    const total = list.reduce((s, t) => s + (t.eventCount ?? 0), 0) || 1;
+    const idByName: Record<string, string> = {
+      'Initial Access': 'TA0108', 'Execution': 'TA0104', 'Persistence': 'TA0110',
+      'Privilege Escalation': 'TA0111', 'Evasion': 'TA0103', 'Discovery': 'TA0102',
+      'Lateral Movement': 'TA0109', 'Collection': 'TA0100', 'Command and Control': 'TA0101',
+      'Inhibit Response Function': 'TA0107', 'Impair Process Control': 'TA0106',
+      'Impact': 'TA0105', 'Reconnaissance': 'TA0043',
+    };
+    return list.map((t) => ({
+      id: idByName[t.tactic] ?? '',
+      name: t.tactic,
+      observed: t.eventCount ?? 0,
+      share: Math.round(((t.eventCount ?? 0) / total) * 100),
+    }));
   }, [ttp]);
 
-  // Crown jewels for risk register: take top 5 high-risk assets
+  // Risk register: prefer flagged high-risk assets, then formally CRITICAL/HIGH
+  // assets; if the inventory has neither (auto-discovered assets default to
+  // MEDIUM), fall back to the highest riskScore assets so the register still
+  // reflects the real estate instead of rendering empty.
   const crownJewelsView = useMemo(() => {
-    const list = highRiskAssets.length > 0 ? highRiskAssets : crownJewelAssets;
+    const list = highRiskAssets.length > 0
+      ? highRiskAssets
+      : crownJewelAssets.length > 0
+        ? crownJewelAssets
+        : [...assets].sort((a, b) => (b.riskScore ?? 0) - (a.riskScore ?? 0));
     return list.slice(0, 5).map((a) => ({
       asset: a.name ?? a.hostname ?? a.id,
       zone: a.purdueLevel ? a.purdueLevel.replace('LEVEL_', 'Level ') : 'Unknown',
@@ -345,46 +385,48 @@ const ExecutiveDashboard: React.FC = () => {
       trend: '·',
       detail: a.description || a.assetType || '',
     }));
-  }, [highRiskAssets, crownJewelAssets]);
+  }, [highRiskAssets, crownJewelAssets, assets]);
 
-  // Compliance: derive from asset coverage + alert resolution rate
-  const complianceStatus = useMemo(() => {
-    const totalA = alertStats?.totalAlerts ?? 0;
-    const resolved = alertStats?.resolvedAlerts ?? 0;
-    const resolutionPct = totalA > 0 ? Math.round((resolved / totalA) * 100) : 0;
-    const avgCoverage = Math.round(
-      (coverageByLevel.level0 + coverageByLevel.level1 + coverageByLevel.level2 + coverageByLevel.level3) / 4
-    );
+  // Compliance readiness. NIS2 and IEC 62443 come from their REAL posture
+  // endpoints (/api/compliance/nis2|iec62443/posture). CAF and GDPR have no
+  // assessment source in the platform, so they are shown as "not assessed"
+  // rather than derived from an unrelated proxy (the old heuristic drove NIS2/
+  // IEC off asset coverage - always 0 here - and GDPR off the false-positive
+  // rate, which was meaningless).
+  const complianceStatus = useMemo<Array<{ name: string; value: number | null; gap: string }>>(() => {
     return [
       {
         name: 'NIS2',
-        value: Math.min(100, avgCoverage),
-        gap: avgCoverage < 90 ? 'Asset visibility below 90% target' : 'On track',
+        value: nis2Score,
+        gap: nis2Score == null ? 'Posture unavailable'
+          : nis2Score >= 85 ? 'On track'
+          : nis2Score >= 50 ? 'Improving - close remaining Article 21 gaps'
+          : 'Below target - prioritise Article 21 measures',
       },
       {
         name: 'IEC 62443',
-        value: Math.min(100, Math.round((coverageByLevel.level1 + coverageByLevel.level2) / 2)),
-        gap:
-          coverageByLevel.level1 < 90 || coverageByLevel.level2 < 90
-            ? 'Control/Supervisory zones below SL-2'
-            : 'On track',
+        value: iecScore,
+        gap: iecScore == null ? 'Posture unavailable'
+          : iecScore >= 80 ? 'On track'
+          : `${iecScore}% of requirements met - raise toward the target SL`,
       },
-      {
-        name: 'CAF',
-        value: resolutionPct,
-        gap: resolutionPct < 80 ? `${totalA - resolved} alerts open` : 'Active alerts under control',
-      },
-      {
-        name: 'GDPR',
-        value: 100 - noiseReduction,
-        gap: noiseReduction > 30 ? 'High noise - review data flow' : 'Stable',
-      },
+      // CAF and GDPR are intentionally omitted: the platform has no assessment
+      // engine for them, so showing a value would be fabricated.
     ];
-  }, [alertStats, coverageByLevel, noiseReduction]);
+  }, [nis2Score, iecScore]);
 
-  // Recent alerts mapped to executive view
+  // Recent alerts mapped to executive view. De-duplicate repeated events (e.g.
+  // the same probe firing many times from one IP) so the board sees distinct
+  // incidents rather than the same line four times.
   const executiveAlerts = useMemo(() => {
-    const list = (recentAlerts || []).slice(0, 4);
+    const seen = new Set<string>();
+    const distinct = (recentAlerts || []).filter((a) => {
+      const key = `${a.title ?? ''}|${a.sourceIp ?? a.source ?? ''}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    const list = distinct.slice(0, 4);
     return list.map((a) => ({
       id: a.id,
       title: a.title || 'Security event',
@@ -435,8 +477,8 @@ const ExecutiveDashboard: React.FC = () => {
     labels: ['Level 0 (Field)', 'Level 1 (Control)', 'Level 2 (Supervisory)', 'Level 3 (Operations)'],
     datasets: [
       {
-        label: 'Coverage %',
-        data: [coverageByLevel.level0, coverageByLevel.level1, coverageByLevel.level2, coverageByLevel.level3],
+        label: 'Assets',
+        data: [assetsByLevel.level0, assetsByLevel.level1, assetsByLevel.level2, assetsByLevel.level3],
         backgroundColor: ['#7c3aed', '#a855f7', '#c026d3', '#ec4899'],
         borderRadius: 8,
         borderSkipped: false,
@@ -514,6 +556,14 @@ const ExecutiveDashboard: React.FC = () => {
   };
 
   /* ---------- Render ---------- */
+  if (loading) {
+    return (
+      <div className="relative">
+        <PageLoading label="Loading executive overview…" />
+      </div>
+    );
+  }
+
   return (
     <motion.div
       className="relative"
@@ -538,7 +588,7 @@ const ExecutiveDashboard: React.FC = () => {
               <div className="max-w-2xl">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-sm ring-1 ring-white/20 text-xs font-medium tracking-wide">
                   <Icon.Shield className="w-4 h-4 text-pink-300" />
-                  CISO EXECUTIVE SUMMARY &nbsp;·&nbsp; {windowLabel}
+                  EXECUTIVE OVERVIEW &nbsp;·&nbsp; {windowLabel}
                 </div>
                 <h1 className="mt-4 text-3xl md:text-4xl font-bold leading-tight">
                   OT environment is
@@ -559,7 +609,7 @@ const ExecutiveDashboard: React.FC = () => {
                   <div className="p-3 rounded-xl bg-white/10 ring-1 ring-white/15 backdrop-blur-sm">
                     <div className="text-[10px] uppercase tracking-wider text-violet-200/80">Total attacks</div>
                     <div className="mt-1 text-2xl font-bold">{fmtNum(honeypotStats?.totalAttacks, '0')}</div>
-                    <div className="text-[11px] text-violet-200/80">honeypot all-time</div>
+                    <div className="text-[11px] text-violet-200/80">{rangeLabel}</div>
                   </div>
                   <div className="p-3 rounded-xl bg-white/10 ring-1 ring-white/15 backdrop-blur-sm">
                     <div className="text-[10px] uppercase tracking-wider text-violet-200/80">Unique attackers</div>
@@ -633,7 +683,7 @@ const ExecutiveDashboard: React.FC = () => {
               icon: <Icon.Bolt className="w-5 h-5" />,
               label: 'Attacks Absorbed',
               value: (honeypotStats?.totalAttacks ?? 0).toLocaleString(),
-              benchmark: 'Total interactions on the decoy fabric',
+              benchmark: `Decoy-fabric interactions · ${rangeLabel}`,
               delta: 'Live',
               deltaGood: true,
               from: 'from-violet-500',
@@ -651,11 +701,16 @@ const ExecutiveDashboard: React.FC = () => {
             },
             {
               icon: <Icon.Shield className="w-5 h-5" />,
-              label: 'Block Rate',
-              value: `${honeypotStats?.totalAttacks ? Math.round(((honeypotStats.blockedAttacks ?? 0) / honeypotStats.totalAttacks) * 100) : 0}%`,
-              benchmark: `${(honeypotStats?.blockedAttacks ?? 0).toLocaleString()} of ${(honeypotStats?.totalAttacks ?? 0).toLocaleString()} blocked`,
-              delta: (honeypotStats?.blockedAttacks ?? 0) > 0 ? 'Enforced' : 'Monitor',
-              deltaGood: (honeypotStats?.blockedAttacks ?? 0) > 0,
+              // Was "Block Rate" (always 0% - OTShield absorbs attacks, it does
+              // not block). Reframed to a real, distinct signal: the breadth of
+              // the OT/IT attack surface probed on the decoy fabric.
+              label: 'Protocols Targeted',
+              value: `${Object.keys(honeypotStats?.attacksByProtocol ?? {}).length}`,
+              benchmark: Object.keys(honeypotStats?.attacksByProtocol ?? {}).length > 0
+                ? `ICS/IT protocols probed: ${Object.keys(honeypotStats?.attacksByProtocol ?? {}).join(', ')}`
+                : 'No protocol data yet',
+              delta: 'Observed',
+              deltaGood: true,
               from: 'from-pink-500',
               to: 'to-rose-500',
             },
@@ -710,16 +765,18 @@ const ExecutiveDashboard: React.FC = () => {
               progress: alertStats?.totalAlerts ? ((alertStats.resolvedAlerts ?? 0) / alertStats.totalAlerts) * 100 : 0,
             },
             {
-              label: 'Blocked Attacks',
-              value: fmtNum(honeypotStats?.blockedAttacks, '0'),
-              hint: honeypotStats?.totalAttacks
-                ? `${Math.round(((honeypotStats.blockedAttacks ?? 0) / honeypotStats.totalAttacks) * 100)}% block rate`
+              // OTShield absorbs attacks at the decoy layer instead of blocking
+              // them, so "blocked attacks / block rate" (always 0) understates a
+              // working deception. Reframed as containment: every observed attack
+              // landed on a decoy rather than a real asset.
+              label: 'Containment Rate',
+              value: (honeypotStats?.totalAttacks ?? 0) > 0 ? '100%' : '-',
+              hint: (honeypotStats?.totalAttacks ?? 0) > 0
+                ? `${(honeypotStats?.totalAttacks ?? 0).toLocaleString()} attacks absorbed at the decoy layer`
                 : 'No attack data yet',
               icon: <Icon.Shield className="w-5 h-5" />,
               color: 'pink',
-              progress: honeypotStats?.totalAttacks
-                ? ((honeypotStats.blockedAttacks ?? 0) / honeypotStats.totalAttacks) * 100
-                : 0,
+              progress: (honeypotStats?.totalAttacks ?? 0) > 0 ? 100 : 0,
             },
           ].map((kpi, i) => {
             const gradient: Record<string, string> = {
@@ -840,8 +897,8 @@ const ExecutiveDashboard: React.FC = () => {
           <div className="bg-white rounded-2xl p-6 ring-1 ring-slate-200/70 shadow-sm">
             <div className="flex items-center justify-between mb-5">
               <div>
-                <h3 className="text-base font-semibold text-slate-900">Compliance Readiness (estimate)</h3>
-                <p className="text-xs text-slate-500 mt-1">Estimated from real asset coverage &amp; alert resolution - an indicator, not a formal audit score. See the NIS2 page for the real posture.</p>
+                <h3 className="text-base font-semibold text-slate-900">Compliance Readiness</h3>
+                <p className="text-xs text-slate-500 mt-1">NIS2 and IEC 62443 scores come from the live posture engines. See the NIS2 / IEC pages for the full breakdown.</p>
               </div>
               <Icon.CheckCircle className="w-5 h-5 text-violet-500" />
             </div>
@@ -850,14 +907,18 @@ const ExecutiveDashboard: React.FC = () => {
                 <div key={c.name} className="p-3 rounded-xl bg-slate-50/60 ring-1 ring-slate-200/50">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-sm font-semibold text-slate-800">{c.name}</span>
-                    <span className={`text-sm font-bold ${c.value >= 90 ? 'text-emerald-600' : c.value >= 80 ? 'text-violet-600' : 'text-orange-600'}`}>
-                      {c.value}%
-                    </span>
+                    {c.value == null ? (
+                      <span className="text-xs font-semibold text-slate-400">Not assessed</span>
+                    ) : (
+                      <span className={`text-sm font-bold ${c.value >= 85 ? 'text-emerald-600' : c.value >= 60 ? 'text-violet-600' : 'text-orange-600'}`}>
+                        {c.value}%
+                      </span>
+                    )}
                   </div>
                   <div className="h-2 bg-white rounded-full overflow-hidden ring-1 ring-slate-200/60 mb-2">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-violet-500 via-fuchsia-500 to-pink-500"
-                      style={{ width: `${c.value}%` }}
+                      style={{ width: `${c.value ?? 0}%` }}
                     />
                   </div>
                   <p className="text-[11px] text-slate-500">
@@ -872,8 +933,8 @@ const ExecutiveDashboard: React.FC = () => {
           <div className="bg-white rounded-2xl p-6 ring-1 ring-slate-200/70 shadow-sm">
             <div className="flex items-center justify-between mb-5">
               <div>
-                <h3 className="text-base font-semibold text-slate-900">Visibility Coverage · Purdue Levels</h3>
-                <p className="text-xs text-slate-500 mt-1">% of assets monitored at each level</p>
+                <h3 className="text-base font-semibold text-slate-900">Assets by Purdue Level</h3>
+                <p className="text-xs text-slate-500 mt-1">Discovered OT assets at each Purdue level</p>
               </div>
               <Icon.Layers className="w-5 h-5 text-fuchsia-500" />
             </div>
@@ -934,15 +995,15 @@ const ExecutiveDashboard: React.FC = () => {
                         <span className="text-slate-500">
                           <span className="font-semibold text-slate-800">{t.observed}</span> events
                         </span>
-                        <span className={`font-semibold ${t.coverage >= 90 ? 'text-emerald-600' : t.coverage >= 80 ? 'text-violet-600' : 'text-orange-600'}`}>
-                          {t.coverage}% coverage
+                        <span className="font-semibold text-violet-600">
+                          {t.share}% of activity
                         </span>
                       </div>
                     </div>
                     <div className="h-2 bg-white rounded-full overflow-hidden ring-1 ring-slate-200/60">
                       <div
                         className="h-full rounded-full bg-gradient-to-r from-violet-500 to-pink-500"
-                        style={{ width: `${t.coverage}%` }}
+                        style={{ width: `${t.share}%` }}
                       />
                     </div>
                   </div>
@@ -987,10 +1048,10 @@ const ExecutiveDashboard: React.FC = () => {
                   <span className="text-[11px] text-violet-600 font-semibold">/ 10</span>
                 </div>
               </div>
-              <p className={`mt-2 text-xs font-semibold ${residualRiskScore < 5 ? 'text-emerald-600' : residualRiskScore < 7 ? 'text-amber-600' : 'text-rose-600'}`}>
-                {residualRiskScore < 5
-                  ? 'Within board-approved tolerance (< 5)'
-                  : residualRiskScore < 7
+              <p className={`mt-2 text-xs font-semibold ${residualRiskScore < 3.5 ? 'text-emerald-600' : residualRiskScore < 6.5 ? 'text-amber-600' : 'text-rose-600'}`}>
+                {residualRiskScore < 3.5
+                  ? 'Within board-approved tolerance'
+                  : residualRiskScore < 6.5
                   ? 'Approaching tolerance limit'
                   : 'Above tolerance - action required'}
               </p>
@@ -1020,7 +1081,7 @@ const ExecutiveDashboard: React.FC = () => {
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h3 className="text-base font-semibold text-slate-900">Crown-Jewel Risk Register</h3>
-                <p className="text-xs text-slate-500 mt-1">High-criticality OT assets · live from inventory</p>
+                <p className="text-xs text-slate-500 mt-1">Highest-risk OT assets · live from inventory</p>
               </div>
               <Icon.Lock className="w-5 h-5 text-violet-500" />
             </div>
@@ -1113,8 +1174,8 @@ const ExecutiveDashboard: React.FC = () => {
               icon: <Icon.Alert className="w-4 h-4" />,
             },
             {
-              value: fmtNum(highRiskAssets.length, '0'),
-              label: 'High-risk assets monitored',
+              value: fmtNum(assets.length, '0'),
+              label: 'OT assets tracked',
               icon: <Icon.Lock className="w-4 h-4" />,
             },
             {
@@ -1169,10 +1230,12 @@ const ExecutiveDashboard: React.FC = () => {
                     body: `${fmtNum(honeypotStats?.uniqueIPs, '0')} unique attacker IPs across ${fmtNum(honeypotStats?.uniqueSessions, '0')} sessions, all contained at the honeypot layer.`,
                   },
                   {
-                    stat: `${fmtNum(honeypotStats?.blockedAttacks, '0')}`,
-                    head: 'Blocked at Edge',
-                    body: honeypotStats?.totalAttacks
-                      ? `${Math.round(((honeypotStats.blockedAttacks ?? 0) / honeypotStats.totalAttacks) * 100)}% of inbound attempts dropped before reaching production assets.`
+                    // Was "Blocked at Edge" (always 0 - the platform absorbs,
+                    // it does not block). Reframed to deception containment.
+                    stat: (honeypotStats?.totalAttacks ?? 0) > 0 ? '100%' : '-',
+                    head: 'Contained at Decoy Layer',
+                    body: (honeypotStats?.totalAttacks ?? 0) > 0
+                      ? 'Every observed attack was absorbed on the decoy fabric, away from production systems.'
                       : 'No traffic recorded yet.',
                   },
                   {
@@ -1199,7 +1262,7 @@ const ExecutiveDashboard: React.FC = () => {
         <motion.div variants={item} className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-4 border-t border-slate-200/70">
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <Icon.Shield className="w-4 h-4 text-violet-500" />
-            CISO Executive Summary · OTShield Platform
+            Executive Overview · OTShield Platform
           </div>
           <p className="text-xs text-slate-400">
             Confidential · Board &amp; Risk Committee distribution &nbsp;•&nbsp; Live · auto-refresh 60s

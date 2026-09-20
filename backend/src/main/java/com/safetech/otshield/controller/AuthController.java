@@ -8,6 +8,8 @@ import com.safetech.otshield.repository.UserRepository;
 import com.safetech.otshield.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,8 +29,22 @@ public class AuthController {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
+    // Self-service registration and the debug oracle are OFF by default (secure
+    // for prod). Dev turns them on in application.properties. On a public
+    // deployment, open registration would hand any visitor an authenticated
+    // account, and /debug reveals whether a given password matches - both are
+    // fail-closed here.
+    @Value("${auth.registration.enabled:false}")
+    private boolean registrationEnabled;
+
+    @Value("${auth.debug.enabled:false}")
+    private boolean debugEnabled;
+
     @PostMapping("/register")
     public ResponseEntity<LoginResponse> register(@Valid @RequestBody RegisterRequest request) {
+        if (!registrationEnabled) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         return ResponseEntity.ok(authService.register(request));
     }
 
@@ -39,6 +55,9 @@ public class AuthController {
 
     @PostMapping("/debug")
     public ResponseEntity<Map<String, Object>> debugUser(@RequestBody LoginRequest request) {
+        if (!debugEnabled) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         Map<String, Object> debugInfo = new HashMap<>();
         try {
             User user = userRepository.findByEmail(request.getEmail()).orElse(null);

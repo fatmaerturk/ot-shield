@@ -40,6 +40,12 @@ public class HoneypotLogService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.safetech.otshield.repository.AlertRepository alertRepository;
 
+    /** Used by clearLogs() to cascade-delete the honeypot-derived alerts in the
+     *  same transaction as the logs (native, batched deletes across the alert
+     *  child tables). */
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager entityManager;
+
     public HoneypotLogService(HoneypotLogRepository honeypotLogRepository,
                               BlockingRuleService blockingRuleService,
                               GeoIpService geoIpService) {
@@ -75,7 +81,12 @@ public class HoneypotLogService {
     public static boolean isInternalNoise(HoneypotLog l) {
         if (l == null) return false;
         if ("internal-decoy".equalsIgnoreCase(l.getDecoySource())) return false;
-        return isInternalIp(l.getSourceIp());
+        if (isInternalIp(l.getSourceIp())) return true;
+        // Geo also resolves link-local/CGNAT/reserved ranges that the IP test
+        // above misses to the "Internal (RFC 1918)" pseudo-country - treat those
+        // as noise too, so they never show up as a real country/attacker.
+        String c = l.getCountry();
+        return c != null && c.trim().toLowerCase().startsWith("internal");
     }
 
     /** True for RFC1918 / loopback / Docker-bridge ranges. Null/blank => true (treat as noise). */
@@ -172,10 +183,25 @@ public class HoneypotLogService {
      * the actual lateral-movement signal.
      */
     public Map<String, Object> getStats() {
+        return getStats(null);
+    }
+
+    /**
+     * @param sinceDays when non-null and positive, restrict every statistic to
+     *                  logs from the last N days (used by the dashboard's
+     *                  24h / 7d / 30d selector); null or 0 means all time.
+     */
+    public Map<String, Object> getStats(Integer sinceDays) {
         List<HoneypotLog> rawLogs = honeypotLogRepository.findAll();
         List<HoneypotLog> allLogs = rawLogs.stream()
             .filter(l -> !isInternalNoise(l))
             .collect(Collectors.toList());
+        if (sinceDays != null && sinceDays > 0) {
+            java.time.LocalDateTime cutoff = java.time.LocalDateTime.now().minusDays(sinceDays);
+            allLogs = allLogs.stream()
+                .filter(l -> l.getTimestamp() != null && l.getTimestamp().isAfter(cutoff))
+                .collect(Collectors.toList());
+        }
         Map<String, Object> stats = new HashMap<>();
         stats.put("filteredOutInternalNoise", rawLogs.size() - allLogs.size());
 
@@ -212,6 +238,13 @@ public class HoneypotLogService {
             .filter(c -> c != null && !c.isBlank())
             .collect(Collectors.groupingBy(c -> c, Collectors.counting()));
         stats.put("countryBreakdown", sortDescAndLimit(countryCounts, 20));
+        // True count of distinct real source countries (uncapped, excluding the
+        // "Internal (RFC 1918)" pseudo-country) - the top-20 breakdown above under-
+        // reports this once more than 20 countries have been seen.
+        long distinctCountries = countryCounts.keySet().stream()
+            .filter(c -> !c.trim().toLowerCase().startsWith("internal"))
+            .count();
+        stats.put("distinctCountries", distinctCountries);
 
         // City hotspots
         Map<String, Long> cityCounts = allLogs.stream()
@@ -322,7 +355,39 @@ public class HoneypotLogService {
             .collect(Collectors.toList());
     }
 
+    /**
+     * Clears the honeypot logs AND the alerts derived from them (every alert
+     * tagged {@code honeypot:<id>}). Coupling the two prevents the orphaned-alert
+     * problem: previously a clear + re-ingest deleted the logs but left the old
+     * alerts behind pointing at now-deleted log ids, so the alert count drifted
+     * above the attack count (alerts &gt; attacks). Tripwire / internal-decoy
+     * alerts have no {@code honeypot:<id>} tag and are intentionally preserved.
+     */
+    @org.springframework.transaction.annotation.Transactional
     public void clearLogs() {
+        if (entityManager != null) {
+            @SuppressWarnings("unchecked")
+            List<Object> idRows = entityManager.createNativeQuery(
+                "SELECT DISTINCT alert_id FROM alert_tags WHERE tag LIKE 'honeypot:%'").getResultList();
+            List<String> ids = new ArrayList<>();
+            for (Object o : idRows) { if (o != null) ids.add(String.valueOf(o)); }
+            final int BATCH = 1000;
+            for (int i = 0; i < ids.size(); i += BATCH) {
+                List<String> batch = ids.subList(i, Math.min(i + BATCH, ids.size()));
+                // Delete FK children first, then the alert_tags element-collection
+                // rows, then the alerts themselves.
+                for (String tbl : new String[]{"alert_notifications", "alert_comments",
+                                               "alert_escalations", "case_alerts", "alert_tags"}) {
+                    entityManager.createNativeQuery("DELETE FROM " + tbl + " WHERE alert_id IN (:ids)")
+                        .setParameter("ids", batch).executeUpdate();
+                }
+                entityManager.createNativeQuery("DELETE FROM alerts WHERE id IN (:ids)")
+                    .setParameter("ids", batch).executeUpdate();
+            }
+            if (!ids.isEmpty()) {
+                log.info("clearLogs: removed {} honeypot-derived alerts alongside the logs", ids.size());
+            }
+        }
         honeypotLogRepository.deleteAll();
     }
 

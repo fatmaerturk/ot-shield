@@ -221,11 +221,59 @@ const formatDate = (iso?: string): string => {
   return d.toLocaleString();
 };
 
+// The L2 switch/router this host sits behind (from the honest "gateway" hint the
+// backend records for routed hosts) - NOT the host's own vendor, which is Unknown.
+const uplinkVendor = (a?: AssetDTO): string | undefined => {
+  if (!a) return undefined;
+  const m = (a.description || '').match(/Behind (.+?) L2 uplink/i);
+  if (m) return m[1].trim();
+  const tag = (a.tags || []).find(t => t.toLowerCase().startsWith('gateway:'));
+  if (tag) {
+    return tag.slice(tag.indexOf(':') + 1).replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
+  return undefined;
+};
+
+// Trim corporate/legal descriptor words so a vendor fits on a compact card
+// ("Cisco Systems, Inc" -> "Cisco", "Fujitsu Technology Solutions GmbH" ->
+// "Fujitsu"). The full name stays in the tooltip and the detail panel.
+const shortVendor = (v?: string): string | undefined => {
+  if (!v) return v;
+  const s = v
+    .replace(/[.,]/g, ' ')
+    .replace(
+      /\b(Inc|Incorporated|Corp|Corporation|Company|Co|GmbH|AG|Ltd|Limited|LLC|LLP|PLC|SAS|BV|NV|AB|KG|Pte|Pty|Technology|Technologies|Solutions|Electronics|Elektronik|Systems|International|Intl|Group|Holdings|Communications|Networks|Semiconductor|Semiconductors)\b/gi,
+      ' ',
+    )
+    .replace(/\s+/g, ' ')
+    .trim();
+  return s.length ? s : v.trim();
+};
+
+// Liveness of a discovered asset. For capture-discovered devices online status
+// is NOT monitored (isOnline null) - show when it was last seen in traffic
+// rather than fabricating a green "Online".
+const liveness = (a?: AssetDTO): { label: string; dot: string; title?: string } => {
+  if (a?.isOnline === true) return { label: 'Online', dot: 'bg-green-500' };
+  if (a?.isOnline === false) return { label: 'Offline', dot: 'bg-gray-400' };
+  const seen = a?.lastSeen ? new Date(a.lastSeen) : null;
+  const when = seen && !isNaN(seen.getTime())
+    ? seen.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    : null;
+  return {
+    label: when ? `Seen ${when}` : 'Seen in capture',
+    dot: 'bg-slate-300',
+    title: 'Last observed in captured traffic; live status is not monitored',
+  };
+};
+
 const riskTier = (score?: number): { label: string; color: string } => {
   if (score === undefined || score === null) return { label: 'N/A', color: 'text-gray-400' };
-  if (score >= 75) return { label: 'HIGH', color: 'text-red-600' };
-  if (score >= 50) return { label: 'MEDIUM', color: 'text-orange-500' };
-  if (score >= 25) return { label: 'LOW', color: 'text-yellow-500' };
+  // Bands mirror the backend calculateRiskScore mapping (90=CRITICAL, 70=HIGH, ...).
+  if (score >= 90) return { label: 'CRITICAL', color: 'text-red-600' };
+  if (score >= 70) return { label: 'HIGH', color: 'text-orange-500' };
+  if (score >= 50) return { label: 'MEDIUM', color: 'text-yellow-600' };
+  if (score >= 30) return { label: 'LOW', color: 'text-lime-600' };
   return { label: 'MINIMAL', color: 'text-green-600' };
 };
 
@@ -1073,19 +1121,28 @@ const Assets: React.FC = () => {
                 <AssetIcon asset={a} className="w-12 h-12 mr-3" />
                 <div className="flex-1 min-w-0">
                   <h3 className="font-medium truncate">{a.name}</h3>
-                  <div className="flex items-center text-sm text-gray-600">
-                    <span
-                      className={`h-2 w-2 rounded-full mr-2 ${
-                        a.isOnline ? 'bg-green-500' : 'bg-gray-400'
-                      }`}
-                    />
-                    {a.isOnline ? 'Online' : 'Offline'}
-                  </div>
+                  {(() => {
+                    const live = liveness(a);
+                    return (
+                      <div className="flex items-center text-sm text-gray-600" title={live.title}>
+                        <span className={`h-2 w-2 rounded-full mr-2 ${live.dot}`} />
+                        {live.label}
+                      </div>
+                    );
+                  })()}
                   <div className="mt-1 text-xs text-gray-500 truncate">
                     {[a.manufacturer, a.assetType, purdueLevelShort(a.purdueLevel)]
                       .filter(Boolean)
                       .join(' • ')}
                   </div>
+                  {uplinkVendor(a) && (
+                    <div
+                      className="mt-0.5 text-xs text-gray-400 truncate"
+                      title={`Behind ${uplinkVendor(a)} L2 gateway - not the host's own vendor`}
+                    >
+                      ⤴ via {shortVendor(uplinkVendor(a))}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="mt-2 text-xs flex justify-between">
@@ -1138,12 +1195,15 @@ const Assets: React.FC = () => {
               placeholder="e.g. PLC-Pump-01"
             />
             <Field label="Status">
-              <span
-                className={`h-2 w-2 rounded-full mr-2 inline-block ${
-                  view.isOnline ? 'bg-green-500' : 'bg-gray-400'
-                }`}
-              />
-              {view.isOnline ? 'Online' : 'Offline'}
+              {(() => {
+                const live = liveness(view);
+                return (
+                  <span title={live.title}>
+                    <span className={`h-2 w-2 rounded-full mr-2 inline-block ${live.dot}`} />
+                    {live.label}
+                  </span>
+                );
+              })()}
             </Field>
             <EditableField
               label="Manufacturer"
@@ -1181,6 +1241,16 @@ const Assets: React.FC = () => {
               <span className={`ml-2 font-bold ${r.color}`}>
                 {r.label} ({view.riskScore ?? '-'})
               </span>
+              {typeof view.observedAttackVolume === 'number' && typeof view.baseRiskScore === 'number' && (
+                <div className="text-xs text-gray-400 mt-0.5">
+                  {view.observedAttackVolume > 0 ? (
+                    <>threat-weighted: base {view.baseRiskScore} +{Math.max(0, (view.riskScore ?? 0) - view.baseRiskScore)} from{' '}
+                    {view.observedAttackVolume.toLocaleString()} observed {view.protocol || 'protocol'} attacks</>
+                  ) : (
+                    <>base {view.baseRiskScore} - no observed {view.protocol || 'protocol'} attacks</>
+                  )}
+                </div>
+              )}
             </div>
             <div className="flex space-x-2 mt-4">
               {!isEditing ? (
@@ -1304,6 +1374,14 @@ const Assets: React.FC = () => {
                 onChange={v => updateDraft('macAddress', v)}
                 placeholder="AA:BB:CC:DD:EE:FF"
               />
+              {!isEditing && uplinkVendor(view) && (
+                <Field label="Uplink">
+                  <span title="L2 switch/gateway this host sits behind - not the host's own vendor">
+                    {uplinkVendor(view)}{' '}
+                    <span className="text-xs text-gray-400">(L2 gateway)</span>
+                  </span>
+                </Field>
+              )}
               <Field label="Asset ID">{view.id}</Field>
               <EditableField
                 label="Serial Number"
@@ -1504,9 +1582,10 @@ const Assets: React.FC = () => {
   };
 
   const renderRisk = () => {
-    const high = assets.filter(a => (a.riskScore ?? 0) >= 75).length;
-    const medium = assets.filter(a => (a.riskScore ?? 0) >= 50 && (a.riskScore ?? 0) < 75).length;
-    const critical = assets.filter(a => a.criticalityLevel === 'CRITICAL').length;
+    // Partition by threat-weighted risk score, same bands as riskTier().
+    const critical = assets.filter(a => (a.riskScore ?? 0) >= 90).length;
+    const high = assets.filter(a => (a.riskScore ?? 0) >= 70 && (a.riskScore ?? 0) < 90).length;
+    const medium = assets.filter(a => (a.riskScore ?? 0) >= 50 && (a.riskScore ?? 0) < 70).length;
     const totalVulns = assets.reduce((sum, a) => sum + (a.vulnerabilityCount ?? 0), 0);
 
     const sorted = [...assets].sort((a, b) => {
@@ -1546,13 +1625,13 @@ const Assets: React.FC = () => {
           <h3 className="text-xl font-bold">Risk Analysis</h3>
           <div className="flex items-center gap-2 text-sm">
             <span className="px-3 py-1 rounded bg-red-100 text-red-700 font-medium">
-              {high} high-risk
+              {critical} critical
             </span>
             <span className="px-3 py-1 rounded bg-orange-100 text-orange-700 font-medium">
-              {medium} medium-risk
+              {high} high
             </span>
-            <span className="px-3 py-1 rounded bg-purple-100 text-purple-700 font-medium">
-              {critical} critical assets
+            <span className="px-3 py-1 rounded bg-yellow-100 text-yellow-700 font-medium">
+              {medium} medium
             </span>
             <span className="px-3 py-1 rounded bg-gray-100 text-gray-700 font-medium">
               {totalVulns} total vulns

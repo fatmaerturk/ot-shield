@@ -8,6 +8,7 @@ import com.safetech.otshield.model.AlertStatus;
 import com.safetech.otshield.model.AlertType;
 import com.safetech.otshield.repository.AlertRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -48,15 +49,62 @@ public class AlertsController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "createdAt") String sortBy,
-            @RequestParam(defaultValue = "DESC") String sortDir) {
-        
-        Sort sort = sortDir.equalsIgnoreCase("ASC") ? 
+            @RequestParam(defaultValue = "DESC") String sortDir,
+            @RequestParam(required = false) String severity,
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String q) {
+
+        Sort sort = sortDir.equalsIgnoreCase("ASC") ?
             Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
         Pageable pageable = PageRequest.of(page, size, sort);
-        
-        Page<Alert> alerts = alertRepository.findAll(pageable);
+
+        // All filters are optional. Build a Specification that adds a predicate
+        // only for the filters actually present; absent filters add nothing, so
+        // the same code serves the unfiltered list and any combination of
+        // severity / type / status / free-text search. (A dynamic Specification
+        // avoids the Hibernate null-parameter typing issues that a single JPQL
+        // query with ":param IS NULL" hits when every enum filter is null.)
+        AlertSeverity sev = parseEnum(AlertSeverity.class, severity);
+        AlertType typ = parseEnum(AlertType.class, type);
+        AlertStatus st = parseEnum(AlertStatus.class, status);
+        String query = (q != null && !q.trim().isEmpty()) ? q.trim().toLowerCase() : null;
+
+        List<Specification<Alert>> specs = new ArrayList<>();
+        if (sev != null) specs.add((root, cq, cb) -> cb.equal(root.get("severity"), sev));
+        if (typ != null) specs.add((root, cq, cb) -> cb.equal(root.get("type"), typ));
+        if (st != null)  specs.add((root, cq, cb) -> cb.equal(root.get("status"), st));
+        if (query != null) {
+            String like = "%" + query + "%";
+            specs.add((root, cq, cb) -> cb.or(
+                cb.like(cb.lower(root.<String>get("title")), like),
+                cb.like(cb.lower(root.<String>get("description")), like),
+                cb.like(cb.lower(root.<String>get("source")), like),
+                cb.like(cb.lower(root.<String>get("sourceIp")), like),
+                cb.like(cb.lower(root.<String>get("destinationIp")), like)
+            ));
+        }
+        Specification<Alert> spec = specs.stream().reduce(Specification::and).orElse(null);
+
+        Page<Alert> alerts = alertRepository.findAll(spec, pageable);
         Page<AlertDTO> alertDtos = alerts.map(alertMapper::toDto);
         return ResponseEntity.ok(alertDtos);
+    }
+
+    /** Parse a query-string value into an enum constant, tolerant of case and
+     *  blank/unknown values (returns null, i.e. "no filter", rather than 400). */
+    private static <E extends Enum<E>> E parseEnum(Class<E> enumType, String value) {
+        if (value == null || value.trim().isEmpty()) return null;
+        String v = value.trim();
+        try {
+            return Enum.valueOf(enumType, v);
+        } catch (IllegalArgumentException ignored) {
+            try {
+                return Enum.valueOf(enumType, v.toUpperCase());
+            } catch (IllegalArgumentException ignored2) {
+                return null;
+            }
+        }
     }
 
     /**
@@ -416,18 +464,51 @@ public class AlertsController {
      */
     @GetMapping("/statistics")
     public ResponseEntity<Map<String, Object>> getAlertStatistics() {
-        Map<String, Object> stats = Map.of(
-            "totalAlerts", alertRepository.count(),
-            "newAlerts", alertRepository.countByStatus(AlertStatus.NEW),
-            "acknowledgedAlerts", alertRepository.countByStatus(AlertStatus.ACKNOWLEDGED),
-            "resolvedAlerts", alertRepository.countByStatus(AlertStatus.RESOLVED),
-            "criticalAlerts", alertRepository.countBySeverity(AlertSeverity.CRITICAL),
-            "highAlerts", alertRepository.countBySeverity(AlertSeverity.HIGH),
-            "unassignedAlerts", alertRepository.countByAssignedTo(null),
-            "falsePositives", alertRepository.countByFalsePositive(true)
-        );
-        
+        // Count every sub-category first and the grand total LAST. Each count is
+        // a separate query, and with live alerts arriving between them a total
+        // counted first could end up smaller than a sub-count counted later
+        // (e.g. "unassigned > total"). Counting total last guarantees it is
+        // >= every sub-count taken from an earlier moment.
+        // Full breakdowns in one grouped query each, so the dashboard cards and
+        // charts reflect real totals across ALL alerts (not just the loaded page).
+        Map<String, Long> severity = grouped(alertRepository.countGroupedBySeverity());
+        Map<String, Long> status   = grouped(alertRepository.countGroupedByStatus());
+        Map<String, Long> type     = grouped(alertRepository.countGroupedByType());
+        long unassignedAlerts = alertRepository.countByAssignedTo(null);
+        long falsePositives   = alertRepository.countByFalsePositive(true);
+        long totalAlerts      = alertRepository.count();
+
+        Map<String, Object> stats = new java.util.LinkedHashMap<>();
+        stats.put("totalAlerts", totalAlerts);
+        // Flat keys kept for backward compatibility with existing callers.
+        stats.put("newAlerts", severityOr(status, "NEW"));
+        stats.put("acknowledgedAlerts", severityOr(status, "ACKNOWLEDGED"));
+        stats.put("resolvedAlerts", severityOr(status, "RESOLVED"));
+        stats.put("criticalAlerts", severityOr(severity, "CRITICAL"));
+        stats.put("highAlerts", severityOr(severity, "HIGH"));
+        stats.put("unassignedAlerts", unassignedAlerts);
+        stats.put("falsePositives", falsePositives);
+        // Full breakdowns for the dashboard charts.
+        stats.put("severity", severity);
+        stats.put("status", status);
+        stats.put("type", type);
+
         return ResponseEntity.ok(stats);
+    }
+
+    /** Turns a GROUP BY count result (enum, count) into a name->count map. */
+    private static Map<String, Long> grouped(java.util.List<Object[]> rows) {
+        Map<String, Long> m = new java.util.LinkedHashMap<>();
+        for (Object[] r : rows) {
+            if (r == null || r[0] == null) continue;
+            m.put(r[0].toString(), ((Number) r[1]).longValue());
+        }
+        return m;
+    }
+
+    private static long severityOr(Map<String, Long> m, String key) {
+        Long v = m.get(key);
+        return v == null ? 0L : v;
     }
 
     /**

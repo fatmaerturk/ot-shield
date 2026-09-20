@@ -48,7 +48,7 @@ const TripwireAlarmsBanner: React.FC = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        const r = await fetch('http://localhost:8080/api/honeypot/stats');
+        const r = await fetch('/api/honeypot/stats');
         if (!r.ok) return;
         const d: DashboardStats = await r.json();
         const tripwire = (d.recentEvents || []).filter(
@@ -109,7 +109,7 @@ const TripwireAlarmsBanner: React.FC = () => {
         </div>
         <div className="flex-1">
           <p className="text-sm font-semibold text-slate-900">
-            Tripwire alarms active <span className="text-rose-600">· lateral movement detected</span>
+            Tripwire alarms active <span className="text-rose-600">Â· lateral movement detected</span>
           </p>
           <p className="text-xs text-slate-600">
             <strong className="text-rose-700">{internalCount.toLocaleString()}</strong> internal-decoy event(s)

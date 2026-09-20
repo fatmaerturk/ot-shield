@@ -25,7 +25,7 @@ interface AuthResponse {
 }
 
 const api = axios.create({
-  baseURL: 'http://localhost:8080',
+  baseURL: '',
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json'
@@ -77,20 +77,20 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response?.status === 401) {
-      // Token expired veya geçersiz
+      // Token expired veya geÃ§ersiz
       const refreshToken = localStorage.getItem('refreshToken');
       
       if (refreshToken) {
         try {
           // Token yenileme denemesi
-          const response = await axios.post<AuthResponse>('http://localhost:8080/api/auth/refresh', {
+          const response = await axios.post<AuthResponse>('/api/auth/refresh', {
             refreshToken
           });
           
           if (response.data?.token) {
             localStorage.setItem('token', response.data.token);
             
-            // Orijinal isteği yeni token ile tekrar dene
+            // Orijinal isteÄŸi yeni token ile tekrar dene
             if (error.config.headers) {
               error.config.headers['Authorization'] = `Bearer ${response.data.token}`;
             }

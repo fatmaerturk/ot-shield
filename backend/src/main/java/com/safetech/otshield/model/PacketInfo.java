@@ -30,6 +30,8 @@ public class PacketInfo {
     // Brand and model extracted via deep packet inspection (separate for source and destination)
     private String sourceManufacturer;
     private String destinationManufacturer;
+    private String sourceMac;
+    private String destinationMac;
     private String sourceModel;
     private String destinationModel;
 

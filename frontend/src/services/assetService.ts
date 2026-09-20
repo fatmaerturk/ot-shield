@@ -85,6 +85,10 @@ export interface AssetDTO {
   nextMaintenance?: string;
   criticalityLevel?: CriticalityLevel;
   riskScore?: number;
+  /** Structural risk before attack-volume weighting (Purdue position + role). */
+  baseRiskScore?: number;
+  /** Observed attacks against this asset's OT protocol (real honeypot data). */
+  observedAttackVolume?: number;
   vulnerabilityCount?: number;
   patchLevel?: string;
   backupStatus?: BackupStatus;

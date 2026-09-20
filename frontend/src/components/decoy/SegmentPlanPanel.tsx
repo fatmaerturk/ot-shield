@@ -51,7 +51,9 @@ const SegmentPlanPanel: React.FC = () => {
   return (
     <Panel
       title="Segment placement plan"
-      subtitle="Where a decoy twin should sit - by network segment and Purdue level"
+      subtitle={`Where a decoy twin should sit - by network segment and Purdue level${
+        rows.length ? ` · ${rows.length} segment${rows.length === 1 ? '' : 's'}` : ''
+      }${rows.length > 5 ? ', scroll for more' : ''}`}
       icon={<Icon.Network className="w-5 h-5" />}
     >
       {rows.length === 0 ? (
@@ -59,7 +61,7 @@ const SegmentPlanPanel: React.FC = () => {
           No ICS segments discovered yet. Upload a capture so the inventory has devices to place decoys against.
         </div>
       ) : (
-        <div className="space-y-2.5">
+        <div className="space-y-2.5 max-h-[32rem] overflow-y-auto pr-1">
           {rows.map((s) => (
             <div key={s.subnet} className="rounded-xl p-3 ring-1 bg-white ring-slate-200">
               <div className="flex items-center justify-between gap-2 flex-wrap">

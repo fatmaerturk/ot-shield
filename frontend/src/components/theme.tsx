@@ -193,6 +193,16 @@ export const PageShell: React.FC<{ children: React.ReactNode; className?: string
   </div>
 );
 
+/* ---------- Page loading: consistent full-area spinner while data loads ---------- */
+export const PageLoading: React.FC<{ label?: string }> = ({ label = 'Loading…' }) => (
+  <div className="flex items-center justify-center py-24" role="status" aria-live="polite">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-violet-600 mx-auto" />
+      <p className="mt-4 text-slate-600 text-sm">{label}</p>
+    </div>
+  </div>
+);
+
 /* ---------- Page hero: violet gradient with optional actions ---------- */
 export const PageHero: React.FC<{
   eyebrow?: string;

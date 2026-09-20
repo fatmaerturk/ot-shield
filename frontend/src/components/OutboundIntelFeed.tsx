@@ -18,7 +18,7 @@ const OutboundIntelFeed: React.FC = () => {
   const [downloading, setDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const feedUrl = `${window.location.protocol}//localhost:8080/api/threat-intel/feed`;
+  const feedUrl = `${window.location.origin}/api/threat-intel/feed`;
 
   const refresh = useCallback(async () => {
     try {

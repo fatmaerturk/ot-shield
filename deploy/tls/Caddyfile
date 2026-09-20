@@ -1,0 +1,7 @@
+# Automatic HTTPS for OTShield. Caddy fetches and renews a Let's Encrypt
+# certificate for $OTSHIELD_DOMAIN on its own, and reverse-proxies to the nginx
+# frontend container. See deploy/README.md step 8.
+{$OTSHIELD_DOMAIN} {
+    encode zstd gzip
+    reverse_proxy frontend:80
+}

@@ -1,0 +1,8 @@
+# Keep the Maven build context small; the image builds from source in the
+# maven stage. Do NOT ship local build output, IDE files, or the git dir.
+target
+.git
+.idea
+*.iml
+# geoip .mmdb files are mounted as a volume at runtime, not baked into the image
+geoip

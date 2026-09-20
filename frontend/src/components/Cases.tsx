@@ -6,7 +6,7 @@ import {
   statusTone, priorityTone, severityDot, formatDuration, ageSince,
   CreateCaseRequest, CaseCategory,
 } from '../services/caseService';
-import { PageHero, KpiCard, Panel, Icon, pageContainer, pageItem, theme } from './theme';
+import { PageHero, KpiCard, Panel, Icon, pageContainer, pageItem, theme, PageLoading } from './theme';
 import CaseDetailDrawer from './cases/CaseDetailDrawer';
 
 const STATUS_OPTIONS: Array<CaseStatus | 'ALL'> = [
@@ -98,6 +98,14 @@ const Cases: React.FC = () => {
     ];
   }, [stats]);
 
+  if (loading) {
+    return (
+      <div className="min-h-screen p-6 md:p-8" style={{ background: theme.pageBackground }}>
+        <PageLoading label="Loading cases…" />
+      </div>
+    );
+  }
+
   return (
     <motion.div
       className="min-h-screen p-6 md:p-8"
@@ -105,7 +113,7 @@ const Cases: React.FC = () => {
       variants={pageContainer} initial="hidden" animate="visible"
     >
       <PageHero
-        eyebrow="SOC Workbench"
+        eyebrow="CASE MANAGEMENT"
         icon={<Icon.Layers className="w-4 h-4" />}
         title="Incident & Case Management"
         subtitle="Every correlated alert, IOC, and response action - one investigation file. Track MTTR, keep timelines, close the loop."

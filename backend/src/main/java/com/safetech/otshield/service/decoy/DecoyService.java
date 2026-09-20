@@ -105,7 +105,11 @@ public class DecoyService {
 
         List<HoneypotLog> logs;
         try {
-            logs = honeypotRepo.findTop8000ByOrderByTimestampDesc();
+            // Read the full history (same source the honeypot stats use) so the
+            // attacker list is consistent with totalAttacks/uniqueIPs. The old
+            // top-8000 window silently dropped high-volume historical attackers
+            // (e.g. an FTP botnet doing 20k+ hits) once newer traffic arrived.
+            logs = honeypotRepo.findAllByOrderByTimestampDesc();
         } catch (Exception e) {
             return;
         }
@@ -143,6 +147,7 @@ public class DecoyService {
             LocalDateTime first = null, last = null;
             int worst = 0;
             String country = null;
+            boolean engWrite = false;
             for (HoneypotLog l : hits) {
                 LocalDateTime ts = l.getTimestamp();
                 if (ts != null) {
@@ -152,8 +157,18 @@ public class DecoyService {
                 int rank = sevRank(l.getSeverity());
                 if (rank > worst) worst = rank;
                 if (country == null && l.getCountry() != null && !l.getCountry().isBlank()) country = l.getCountry();
+                String at = l.getAttackType() == null ? "" : l.getAttackType().toLowerCase();
+                if (at.contains("write") || at.contains("coil") || at.contains("exploit") || at.contains("force")) engWrite = true;
             }
-            int threat = Math.min(100, hits.size() * 4 + worst * 15);
+            // Same nature-based scale as the attacker profile, evaluated against the
+            // protocol of the decoy actually hit: an FTP decoy stays low-threat no
+            // matter the hit count, while a Modbus/S7 write attempt scores high. This
+            // is what the decoy card's threat (max over its engagements) reflects.
+            int engCrit = icsCriticality(decoy.getProtocol() == null ? null : decoy.getProtocol().name());
+            int threat = Math.min(100, engCrit
+                    + ((engWrite && engCrit > 0) ? 30 : 0)
+                    + Math.min(12, worst * 3)
+                    + (int) Math.min(10, Math.round(Math.log10(hits.size() + 1) * 3.5)));
             boolean active = last != null && ChronoUnit.MINUTES.between(last, LocalDateTime.now()) < 10;
 
             EngagementDTO e = new EngagementDTO();
@@ -345,10 +360,27 @@ public class DecoyService {
         }
     }
 
+    // OT-threat weight of a single protocol, by how directly abusing it endangers a
+    // physical process. Field controllers that take writes rank highest; building
+    // automation lower; plain IT services (FTP/HTTP/SSH/SNMP/Telnet) carry no OT
+    // weight on their own. Returns 0 for anything not modelled as an ICS protocol.
+    private int icsCriticality(String p) {
+        if (p == null) return 0;
+        String u = p.toUpperCase();
+        if (u.contains("S7") || u.contains("MODBUS")) return 40;          // write-capable field controllers
+        if (u.contains("IEC") || u.contains("DNP3")) return 35;           // telecontrol / RTU
+        if (u.contains("PROFINET") || u.contains("ENIP") || u.contains("CIP")) return 30;
+        if (u.contains("OPC")) return 25;
+        if (u.contains("BACNET")) return 18;                              // building automation
+        return 0;
+    }
+
     private AttackerProfileDTO buildAttacker(String ip, List<HoneypotLog> hits) {
         LocalDateTime first = null, last = null;
         int worst = 0;
         String country = null;
+        java.util.Set<String> protos = new java.util.HashSet<>();
+        boolean writeAttempt = false;
         for (HoneypotLog l : hits) {
             LocalDateTime ts = l.getTimestamp();
             if (ts != null) {
@@ -358,8 +390,28 @@ public class DecoyService {
             int rank = sevRank(l.getSeverity());
             if (rank > worst) worst = rank;
             if (country == null && l.getCountry() != null && !l.getCountry().isBlank()) country = l.getCountry();
+            String p = l.getProtocol() == null ? "" : l.getProtocol().toUpperCase();
+            if (!p.isBlank()) protos.add(p);
+            String at = l.getAttackType() == null ? "" : l.getAttackType().toLowerCase();
+            if (at.contains("write") || at.contains("coil") || at.contains("exploit") || at.contains("force")) {
+                writeAttempt = true;
+            }
         }
-        int threat = Math.min(100, hits.size() * 4 + worst * 15);
+        // Score by ATTACK NATURE, not volume, so three tiers separate cleanly:
+        //   service noise (FTP/SSH/HTTP brute, no ICS)         -> ~10-25
+        //   ICS reconnaissance (reads/scans one protocol)      -> ~30-55
+        //   targeted OT actor (writes, or several ICS protos)  -> ~80-100
+        // The single most critical ICS protocol touched sets the floor; a write or
+        // exploit attempt against a real ICS decoy, and hitting several ICS protocols,
+        // are what push a source into the top tier. Volume is a weak, capped signal so
+        // a loud botnet cannot buy its way up.
+        int crit       = protos.stream().mapToInt(this::icsCriticality).max().orElse(0);
+        long icsProtos = protos.stream().filter(pp -> icsCriticality(pp) > 0).count();
+        int writePts   = (writeAttempt && crit > 0) ? 30 : 0;
+        int breadthPts = (int) Math.min(20, Math.max(0, icsProtos - 1) * 10);
+        int sevPts     = Math.min(12, worst * 3);
+        int volPts     = (int) Math.min(10, Math.round(Math.log10(hits.size() + 1) * 3.5));
+        int threat = Math.min(100, crit + writePts + breadthPts + sevPts + volPts);
         AttackerProfileDTO ap = new AttackerProfileDTO();
         ap.setIp(ip);
         ap.setCountry(country);
@@ -369,7 +421,11 @@ public class DecoyService {
         ap.setEngagementCount(1L);
         ap.setDistinctDecoysHit(1L);
         ap.setThreatScore(threat);
-        ap.setTags(new ArrayList<>(List.of("LIVE", "ICS_SCANNER")));
+        List<String> tags = new ArrayList<>(List.of("LIVE"));
+        tags.add(crit > 0 ? (writeAttempt ? "ICS_MANIPULATION" : "ICS_SCANNER") : "SERVICE_PROBE");
+        if (icsProtos >= 2) tags.add("MULTI_PROTOCOL");
+        if (hits.size() >= 1000) tags.add("HIGH_VOLUME");
+        ap.setTags(tags);
         ap.setThreatIntelSource(LIVE_SOURCE);
         ap.setBlocked(false);
         ap.setQuarantined(false);
@@ -584,142 +640,16 @@ public class DecoyService {
         d.setUptimeSeconds(uptime);
         d.setTotalEngagements((long) total);
         d.setActiveEngagements((long) active);
-        d.setLastEngagementAt(Instant.now().minusSeconds(60L * (5 + new Random().nextInt(45))));
-        d.setThreatScore(40 + new Random().nextInt(50));
+        // Honest defaults: no fabricated activity. Real engagement time and threat
+        // are stamped in from live honeypot telemetry during injectRealEngagements;
+        // a decoy nobody has hit stays at 0 (no attacks == no threat).
+        d.setLastEngagementAt(null);
+        d.setThreatScore(0);
         d.setDescription(desc);
         d.setFacility(facility);
         d.setFacilityX(fx);
         d.setFacilityY(fy);
         return d;
-    }
-
-    private void seedEngagements() {
-        engagements.clear();
-        attackers.clear();
-
-        String[][] attackerSeeds = {
-                {"185.220.101.45", "AS208294", "Quintex GmbH", "DE", "Germany"},
-                {"45.155.205.12", "AS49505", "OOO Network of data-centers Selectel", "RU", "Russia"},
-                {"103.97.176.14", "AS134823", "Hangzhou Alibaba Advertising Co.", "CN", "China"},
-                {"23.95.227.18", "AS36352", "ColoCrossing", "US", "United States"},
-                {"194.180.49.92", "AS200651", "FlokiNET ehf", "IS", "Iceland"},
-                {"5.188.62.140", "AS35017", "Swiftway Sp. z o.o.", "NL", "Netherlands"},
-                {"91.240.118.172", "AS204428", "SS-Net", "BG", "Bulgaria"},
-                {"209.141.40.190", "AS53667", "PONYNET", "US", "United States"},
-        };
-
-        for (String[] a : attackerSeeds) {
-            AttackerProfileDTO ap = new AttackerProfileDTO();
-            ap.setIp(a[0]);
-            ap.setAsn(a[1]);
-            ap.setAsnName(a[2]);
-            ap.setCountry(a[3]);
-            ap.setCountryName(a[4]);
-            ap.setFirstSeen(Instant.now().minus(2 + ThreadLocalRandom.current().nextInt(20), ChronoUnit.DAYS));
-            ap.setLastSeen(Instant.now().minusSeconds(30L * ThreadLocalRandom.current().nextInt(1, 240)));
-            ap.setEngagementCount(0L);
-            ap.setDistinctDecoysHit(0L);
-            ap.setThreatScore(40 + ThreadLocalRandom.current().nextInt(60));
-            ap.setTags(pickTags());
-            ap.setThreatIntelSource("AlienVault OTX");
-            ap.setBlocked(false);
-            ap.setQuarantined(false);
-            attackers.put(ap.getIp(), ap);
-        }
-
-        List<String> decoyIds = new ArrayList<>(instances.keySet());
-        Random r = new Random(42);
-
-        for (int i = 0; i < 32; i++) {
-            DecoyInstanceDTO decoy = instances.get(decoyIds.get(r.nextInt(decoyIds.size())));
-            String[] att = attackerSeeds[r.nextInt(attackerSeeds.length)];
-
-            Instant started = Instant.now().minusSeconds(60L * r.nextInt(24 * 60));
-            int durationMin = 2 + r.nextInt(40);
-            Instant lastAct = started.plusSeconds(60L * durationMin);
-            boolean active = i < 4; // first 4 are still active
-            EngagementStatus status = active ? EngagementStatus.ACTIVE
-                    : (r.nextInt(5) == 0 ? EngagementStatus.IDLE : EngagementStatus.CLOSED);
-            Instant endedAt = active ? null : lastAct;
-
-            EngagementDTO e = new EngagementDTO();
-            e.setId(UUID.randomUUID().toString());
-            e.setDecoyInstanceId(decoy.getId());
-            e.setDecoyName(decoy.getName());
-            e.setProtocol(decoy.getProtocol());
-            e.setAttackerIp(att[0]);
-            e.setAttackerAsn(att[1]);
-            e.setAttackerCountry(att[3]);
-            e.setStartedAt(started);
-            e.setLastActivityAt(active ? Instant.now().minusSeconds(15L + r.nextInt(180)) : lastAct);
-            e.setEndedAt(endedAt);
-            e.setStatus(status);
-            e.setSeverity(pickSeverity(r));
-            e.setThreatScore(50 + r.nextInt(50));
-            int eventCount = 4 + r.nextInt(20);
-            e.setEventCount((long) eventCount);
-            e.setMitreTtps(pickMitre(decoy.getProtocol(), r));
-
-            // populate events (deep payload)
-            List<EngagementEventDTO> events = new ArrayList<>();
-            Instant cursor = started;
-            for (int k = 0; k < eventCount; k++) {
-                cursor = cursor.plusSeconds(5L + r.nextInt(60));
-                if (cursor.isAfter(e.getLastActivityAt())) cursor = e.getLastActivityAt();
-                events.add(synthEvent(e.getId(), decoy.getProtocol(), cursor, k, r));
-            }
-            e.setEvents(events);
-
-            // attach attacker profile reference
-            AttackerProfileDTO ap = attackers.get(att[0]);
-            ap.setEngagementCount(ap.getEngagementCount() + 1);
-            e.setAttackerProfile(ap);
-
-            engagements.put(e.getId(), e);
-        }
-
-        // recompute distinctDecoysHit
-        Map<String, Set<String>> attackerToDecoys = new HashMap<>();
-        for (EngagementDTO e : engagements.values()) {
-            attackerToDecoys.computeIfAbsent(e.getAttackerIp(), k -> new HashSet<>()).add(e.getDecoyInstanceId());
-        }
-        attackerToDecoys.forEach((ip, set) -> {
-            AttackerProfileDTO ap = attackers.get(ip);
-            if (ap != null) ap.setDistinctDecoysHit((long) set.size());
-        });
-    }
-
-    private List<String> pickTags() {
-        List<String> all = List.of("RECONNAISSANCE", "BRUTEFORCE", "PROTOCOL_ABUSE",
-                "TOR_EXIT", "KNOWN_BOTNET", "CREDENTIAL_STUFFING", "ICS_SCANNER");
-        Collections.shuffle(new ArrayList<>(all));
-        int n = 1 + ThreadLocalRandom.current().nextInt(3);
-        return all.subList(0, Math.min(n, all.size()));
-    }
-
-    private Severity pickSeverity(Random r) {
-        int v = r.nextInt(100);
-        if (v < 10) return Severity.CRITICAL;
-        if (v < 35) return Severity.HIGH;
-        if (v < 75) return Severity.MEDIUM;
-        return Severity.LOW;
-    }
-
-    private List<MitreTtpDTO> pickMitre(DecoyProtocol p, Random r) {
-        List<MitreTtpDTO> base = new ArrayList<>();
-        base.add(ttp("Discovery", "T0846", "Remote System Discovery", 80 + r.nextInt(20)));
-        if (r.nextBoolean())
-            base.add(ttp("Discovery", "T0842", "Network Sniffing", 60 + r.nextInt(30)));
-        if (p == DecoyProtocol.MODBUS || p == DecoyProtocol.S7) {
-            base.add(ttp("Impair Process Control", "T0836", "Modify Parameter", 70 + r.nextInt(25)));
-        }
-        if (p == DecoyProtocol.DNP3 && r.nextBoolean()) {
-            base.add(ttp("Inhibit Response Function", "T0816", "Device Restart/Shutdown", 75 + r.nextInt(20)));
-        }
-        if (p == DecoyProtocol.OPC_UA && r.nextBoolean()) {
-            base.add(ttp("Collection", "T0801", "Monitor Process State", 65 + r.nextInt(25)));
-        }
-        return base;
     }
 
     private MitreTtpDTO ttp(String tactic, String id, String name, int conf) {
@@ -730,169 +660,6 @@ public class DecoyService {
         t.setConfidence(conf);
         return t;
     }
-
-    private EngagementEventDTO synthEvent(String engId, DecoyProtocol p, Instant ts, int seq, Random r) {
-        EngagementEventDTO ev = new EngagementEventDTO();
-        ev.setId(UUID.randomUUID().toString());
-        ev.setEngagementId(engId);
-        ev.setTs(ts);
-        ev.setDirection(seq % 2 == 0 ? EventDirection.INBOUND : EventDirection.OUTBOUND);
-        Severity sev = (seq == 3 || seq == 7) ? Severity.HIGH : (r.nextInt(6) == 0 ? Severity.MEDIUM : Severity.LOW);
-        ev.setSeverity(sev);
-        ev.setPayload(synthPayload(p, seq, r));
-        ev.setSummary(ev.getPayload().getProtocolOp() + (ev.getPayload().getAddressRange() != null
-                ? " @ " + ev.getPayload().getAddressRange() : ""));
-        if (sev != Severity.LOW) {
-            ev.setMitre(ttp("Impair Process Control", "T0836", "Modify Parameter", 75));
-        }
-        return ev;
-    }
-
-    private PayloadDeepDTO synthPayload(DecoyProtocol p, int seq, Random r) {
-        PayloadDeepDTO d = new PayloadDeepDTO();
-        d.setTransactionId(1000 + seq);
-        switch (p) {
-            case MODBUS: {
-                boolean write = (seq % 5 == 3);
-                d.setProtocolOp(write ? "MODBUS.WRITE_MULTIPLE_REGISTERS" : "MODBUS.READ_HOLDING_REGISTERS");
-                d.setFunctionCodeHex(write ? "0x10" : "0x03");
-                d.setFunctionCodeName(write ? "Write Multiple Registers" : "Read Holding Registers");
-                d.setUnitId(1);
-                int start = 40001 + r.nextInt(20);
-                int qty = write ? 2 : 10;
-                d.setAddressRange(start + ".." + (start + qty - 1));
-                d.setByteCount(qty * 2);
-                StringBuilder hex = new StringBuilder();
-                List<PayloadFieldDTO> fields = new ArrayList<>();
-                for (int i = 0; i < qty; i++) {
-                    int v = write && i == 0 ? 0xFFFF : r.nextInt(0x1000);
-                    hex.append(String.format("%04X ", v));
-                    PayloadFieldDTO f = new PayloadFieldDTO();
-                    f.setName("HR " + (start + i));
-                    f.setType("REGISTER");
-                    f.setValue(String.valueOf(v));
-                    f.setRawHex(String.format("0x%04X", v));
-                    f.setUnit(i == 0 ? "RPM" : i == 1 ? "°C" : null);
-                    if (write && i == 0) {
-                        f.setFlagged(true);
-                        f.setAnomalyReason("Out-of-range setpoint write to pump speed register");
-                        d.setAnomalyFlags(List.of("UNAUTHORIZED_WRITE", "OUT_OF_RANGE"));
-                    } else {
-                        f.setFlagged(false);
-                    }
-                    fields.add(f);
-                }
-                d.setRawHex(hex.toString().trim());
-                d.setRawAscii(toAscii(d.getRawHex()));
-                d.setFields(fields);
-                break;
-            }
-            case S7: {
-                boolean write = (seq % 6 == 4);
-                d.setProtocolOp(write ? "S7.WRITE_VAR" : "S7.READ_VAR");
-                d.setFunctionCodeHex(write ? "0x05" : "0x04");
-                d.setFunctionCodeName(write ? "Write Variable" : "Read Variable");
-                d.setUnitId(2);
-                d.setAddressRange("DB1.DBW10..DB1.DBW18");
-                List<PayloadFieldDTO> fields = new ArrayList<>();
-                fields.add(field("DB1.DBW10", "DB", String.valueOf(1500 + r.nextInt(50)), "0x05DC", "rpm", false, null));
-                fields.add(field("DB1.DBW12", "DB", String.valueOf(72 + r.nextInt(8)),    "0x004A", "°C",  false, null));
-                fields.add(field("DB1.DBW14", "DB", write ? "1" : "0", "0x0001", null, write,
-                        write ? "Manual override bit set on critical interlock" : null));
-                fields.add(field("DB1.DBW16", "DB", String.valueOf(r.nextInt(100)),       "0x0040", "%",   false, null));
-                d.setFields(fields);
-                d.setRawHex("32 01 00 00 00 00 00 0E 00 00 04 01 12 0A 10 02 00 04 00 01 84 00 00 50");
-                d.setRawAscii(toAscii(d.getRawHex()));
-                if (write) d.setAnomalyFlags(List.of("INTERLOCK_OVERRIDE"));
-                break;
-            }
-            case DNP3: {
-                boolean restart = (seq == 7);
-                d.setProtocolOp(restart ? "DNP3.COLD_RESTART" : "DNP3.READ_CLASS_0123");
-                d.setFunctionCodeHex(restart ? "0x0D" : "0x01");
-                d.setFunctionCodeName(restart ? "Cold Restart" : "Read");
-                d.setUnitId(10);
-                d.setAddressRange(restart ? "DEVICE" : "Class 0,1,2,3 / Index 0..15");
-                List<PayloadFieldDTO> fields = new ArrayList<>();
-                if (restart) {
-                    fields.add(field("Object 12 Var 1 Index 0", "OBJECT", "Cold Restart", "0C 01", null, true,
-                            "Cold restart command issued to substation RTU"));
-                    d.setAnomalyFlags(List.of("DEVICE_DISRUPTION", "OUT_OF_HOURS"));
-                } else {
-                    fields.add(field("Class 0 Static Data", "OBJECT", "16 points", null, null, false, null));
-                    fields.add(field("Class 1 Events",      "OBJECT", "3 events",  null, null, false, null));
-                    fields.add(field("Class 2 Events",      "OBJECT", "0 events",  null, null, false, null));
-                }
-                d.setFields(fields);
-                d.setRawHex(restart ? "05 64 0B C4 0A 00 01 00 1B E2 C0 C1 0D" : "05 64 0E C4 0A 00 01 00 6F 0F C0 C1 01 3C 02 06 3C 03 06 3C 04 06");
-                d.setRawAscii(toAscii(d.getRawHex()));
-                break;
-            }
-            case ETHERNET_IP: {
-                d.setProtocolOp("ENIP.SEND_RR_DATA");
-                d.setFunctionCodeHex("0x6F");
-                d.setFunctionCodeName("Send RR Data (CIP)");
-                d.setUnitId(0);
-                d.setAddressRange("Class 0x6B Instance 1");
-                List<PayloadFieldDTO> fields = new ArrayList<>();
-                fields.add(field("Identity Vendor ID", "ATTRIBUTE", "1 (Rockwell)", "0x0001", null, false, null));
-                fields.add(field("Identity Product Code", "ATTRIBUTE", "94", "0x005E", null, false, null));
-                fields.add(field("Identity Revision", "ATTRIBUTE", "32.11", null, null, false, null));
-                fields.add(field("Identity Status", "ATTRIBUTE", "0x0030", "0x0030", null, false, null));
-                d.setFields(fields);
-                d.setRawHex("6F 00 18 00 04 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 02 00 00 00 00 00 B2 00 08 00");
-                d.setRawAscii(toAscii(d.getRawHex()));
-                break;
-            }
-            case OPC_UA: {
-                boolean browse = (seq % 4 == 0);
-                d.setProtocolOp(browse ? "OPCUA.BROWSE" : "OPCUA.READ");
-                d.setFunctionCodeName(browse ? "Browse Service" : "Read Service");
-                d.setUnitId(0);
-                d.setAddressRange("ns=2;s=BatchReactor.Recipe");
-                List<PayloadFieldDTO> fields = new ArrayList<>();
-                fields.add(field("ns=2;s=BatchReactor.Temperature", "NODE", "82.4", null, "°C", false, null));
-                fields.add(field("ns=2;s=BatchReactor.Pressure",    "NODE", "1.32", null, "bar", false, null));
-                fields.add(field("ns=2;s=BatchReactor.RecipeId",    "NODE", "RX-204", null, null, !browse,
-                        !browse ? "Read of recipe identifier from unauthenticated session" : null));
-                d.setFields(fields);
-                d.setRawHex("4D 53 47 46 78 00 00 00 01 00 00 00 ...");
-                d.setRawAscii("MSGF .. HEL");
-                if (!browse) d.setAnomalyFlags(List.of("UNAUTHENTICATED_READ"));
-                break;
-            }
-        }
-        return d;
-    }
-
-    private PayloadFieldDTO field(String name, String type, String value, String hex, String unit,
-                                  boolean flagged, String reason) {
-        PayloadFieldDTO f = new PayloadFieldDTO();
-        f.setName(name);
-        f.setType(type);
-        f.setValue(value);
-        f.setRawHex(hex);
-        f.setUnit(unit);
-        f.setFlagged(flagged);
-        f.setAnomalyReason(reason);
-        return f;
-    }
-
-    private String toAscii(String hex) {
-        StringBuilder sb = new StringBuilder();
-        for (String b : hex.split(" ")) {
-            if (b.length() < 2) continue;
-            try {
-                int v = Integer.parseInt(b, 16);
-                sb.append(v >= 32 && v < 127 ? (char) v : '.');
-            } catch (NumberFormatException ignored) {
-                sb.append('.');
-            }
-        }
-        return sb.toString();
-    }
-
-    // -------- Public API used by the controller --------
 
     public List<DecoyInstanceDTO> listInstances() {
         return new ArrayList<>(instances.values());
@@ -913,6 +680,7 @@ public class DecoyService {
                 .collect(Collectors.toList());
     }
 
+    // Returns an engagement summary without the deep per-event payloads, for list views.
     private EngagementDTO stripDetails(EngagementDTO src) {
         EngagementDTO copy = new EngagementDTO();
         copy.setId(src.getId());

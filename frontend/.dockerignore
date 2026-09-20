@@ -1,0 +1,9 @@
+# Never copy the host's (Windows-built) node_modules into the Linux image;
+# `npm ci` installs fresh inside the container. Keeps the build context small.
+node_modules
+build
+.env
+.env.local
+.env.development.local
+npm-debug.log*
+.DS_Store

@@ -101,6 +101,11 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
     @Query("SELECT a FROM Asset a WHERE a.riskScore >= :minRiskScore ORDER BY a.riskScore DESC")
     List<Asset> findAssetsWithHighRiskScore(@Param("minRiskScore") Integer minRiskScore);
 
+    /** Distinct OT protocols spoken by inventoried assets, used as the reference
+     *  set when normalising attack-volume-weighted risk. */
+    @Query("SELECT DISTINCT a.protocol FROM Asset a WHERE a.protocol IS NOT NULL")
+    List<String> findDistinctProtocols();
+
     /**
      * Find assets with vulnerabilities
      */

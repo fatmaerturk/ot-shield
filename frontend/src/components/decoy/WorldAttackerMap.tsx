@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { MapContainer, TileLayer, CircleMarker, Tooltip, useMap, SVGOverlay } from 'react-leaflet';
+import { CARTO_DARK_URL, CARTO_SUBDOMAINS, CARTO_ATTRIBUTION } from '../../lib/basemap';
 import { Engagement, DecoyInstance } from '../../services/decoyService';
 
 /**
@@ -476,9 +477,9 @@ const WorldAttackerMap: React.FC<Props> = ({
           attributionControl={false}
         >
           <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-            subdomains={['a', 'b', 'c', 'd']}
-            attribution='&copy; OpenStreetMap &copy; CARTO'
+            url={CARTO_DARK_URL}
+            subdomains={CARTO_SUBDOMAINS}
+            attribution={CARTO_ATTRIBUTION}
           />
 
           {/* Day / night terminator */}

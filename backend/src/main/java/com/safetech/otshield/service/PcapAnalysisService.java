@@ -71,6 +71,22 @@ public class PcapAnalysisService {
     // exchange (e.g. MODBUS FC43), so the asset gets the real identity regardless
     // of which packet first triggered its discovery.
     private final Map<String, String[]> runIpDeviceId = new HashMap<>();
+    // Per-run map of device IP -> the Ethernet source MAC seen for it, and the
+    // set of router/gateway MACs (one MAC forwarding for many IPs). The OUI of a
+    // router MAC must NOT be attributed as the vendor of the hosts behind it.
+    private final Map<String, String> runIpToMac = new HashMap<>();
+    private final Set<String> runRouterMacs = new HashSet<>();
+    // Per-run map of a behind-the-gateway IP -> the OUI vendor of the router/switch
+    // MAC that carries its traffic (e.g. "Cisco Systems, Inc"). Recorded as an
+    // "uplink/gateway" hint, NOT as the host's own vendor (which stays Unknown).
+    private final Map<String, String> runIpGatewayVendor = new HashMap<>();
+    // Per-run map of MAC -> its preferred (routable, non-link-local) IP, so an
+    // fe80:: link-local address is folded into the same device's primary IP
+    // instead of becoming a duplicate asset.
+    private final Map<String, String> runMacPrimaryIp = new HashMap<>();
+    // A MAC that is the source for more than this many distinct IPs is treated as
+    // a forwarding router/switch, not a single host.
+    private static final int ROUTER_MAC_IP_THRESHOLD = 4;
 
     // Protocol-to-manufacturer and model mappings for deep packet inspection
     private static final Map<String, String> PROTOCOL_MANUFACTURER_MAP = new HashMap<>();
@@ -637,10 +653,19 @@ public class PcapAnalysisService {
             arpInfo.setSourceLevel("ARPLive");
             arpInfo.setDestinationLevel("ARPLive");
             arpInfo.setCommunicationType("ARP Capture");
-            arpInfo.setSourceManufacturer("ARP");
-            arpInfo.setDestinationManufacturer("ARP");
-            arpInfo.setSourceModel("ARP");
-            arpInfo.setDestinationModel("ARP");
+            // ARP is L2 (never routed), so the sender hardware address is the
+            // host's REAL MAC. Resolve its vendor by OUI instead of stamping the
+            // literal "ARP", and keep the MACs so router detection sees them too.
+            String arpSrcMac = arpPacket.getHeader().getSrcHardwareAddr().toString().toUpperCase();
+            String arpDstMac = arpPacket.getHeader().getDstHardwareAddr().toString().toUpperCase();
+            arpInfo.setSourceMac(arpSrcMac);
+            arpInfo.setDestinationMac(arpDstMac);
+            String arpSrcOUI = arpSrcMac.length() >= 8 ? arpSrcMac.substring(0, 8) : arpSrcMac;
+            String arpDstOUI = arpDstMac.length() >= 8 ? arpDstMac.substring(0, 8) : arpDstMac;
+            arpInfo.setSourceManufacturer(ouiMap.getOrDefault(arpSrcOUI, "Unknown"));
+            arpInfo.setDestinationManufacturer(ouiMap.getOrDefault(arpDstOUI, "Unknown"));
+            arpInfo.setSourceModel("Generic Device");
+            arpInfo.setDestinationModel("Generic Device");
             return arpInfo;
         }
 
@@ -916,7 +941,13 @@ public class PcapAnalysisService {
             String dstMac = eth.getHeader().getDstAddr().toString().toUpperCase();
             String srcOUI = srcMac.length() >= 8 ? srcMac.substring(0, 8) : srcMac;
             String dstOUI = dstMac.length() >= 8 ? dstMac.substring(0, 8) : dstMac;
-            
+
+            // Keep the raw MACs so a later pass can spot router/gateway MACs that
+            // forward for many IPs (routed frames carry the last-hop router's MAC,
+            // not the origin host's - so its OUI must not become the host's vendor).
+            packetInfo.setSourceMac(srcMac);
+            packetInfo.setDestinationMac(dstMac);
+
             // Set manufacturers from OUI lookup
             packetInfo.setSourceManufacturer(ouiMap.getOrDefault(srcOUI, "Unknown"));
             packetInfo.setDestinationManufacturer(ouiMap.getOrDefault(dstOUI, "Unknown"));
@@ -1039,7 +1070,7 @@ public class PcapAnalysisService {
                 }
                 // IEC 60870-5-104 on port 2404
                 else if ((srcPort == 2404 || dstPort == 2404) && tcpPacket.getPayload() != null) {
-                    String iecModel = "IEC 60870-5-104 Device";
+                    String iecModel = "IEC 60870-5-104 device"; // match PROTOCOL_MODEL_MAP casing
                     if (srcPort == 2404) {
                         srcModel = iecModel;
                     }
@@ -1252,6 +1283,59 @@ public class PcapAnalysisService {
             if (dv != null || dm != null) runIpDeviceId.putIfAbsent(p.getSourceIp(), new String[]{dv, dm});
         }
 
+        // Pre-pass 3: bind each IP to its Ethernet source MAC and flag router MACs.
+        // In a capture taken behind an L3 device, every routed frame's source MAC is
+        // the last-hop router's, so a single MAC appears as the source for dozens of
+        // IPs. Attributing that MAC's OUI (e.g. Cisco) to all those hosts is wrong -
+        // we flag such MACs so the OUI vendor guess is dropped for the hosts behind
+        // them (their true vendor is simply unknown from the wire).
+        runIpToMac.clear();
+        runRouterMacs.clear();
+        Map<String, Set<String>> macToIps = new HashMap<>();
+        for (PacketInfo p : packets) {
+            // Source side: srcMac <-> srcIp
+            String sMac = p.getSourceMac(), sIp = p.getSourceIp();
+            if (sMac != null && !sMac.isEmpty() && sIp != null && !sIp.isEmpty()) {
+                runIpToMac.putIfAbsent(sIp, sMac);
+                macToIps.computeIfAbsent(sMac, k -> new HashSet<>()).add(sIp);
+            }
+            // Destination side: on a routed frame the dstMac is the next-hop
+            // router too, so include it to catch hosts only ever seen as targets.
+            String dMac = p.getDestinationMac(), dIp = p.getDestinationIp();
+            if (dMac != null && !dMac.isEmpty() && dIp != null && !dIp.isEmpty()) {
+                runIpToMac.putIfAbsent(dIp, dMac);
+                macToIps.computeIfAbsent(dMac, k -> new HashSet<>()).add(dIp);
+            }
+        }
+        for (Map.Entry<String, Set<String>> e : macToIps.entrySet()) {
+            if (e.getValue().size() > ROUTER_MAC_IP_THRESHOLD) runRouterMacs.add(e.getKey());
+        }
+        // For each non-router MAC, pick a routable IP as the device's primary, so
+        // an fe80:: link-local seen on the same NIC folds into it (no duplicate).
+        runMacPrimaryIp.clear();
+        for (Map.Entry<String, Set<String>> e : macToIps.entrySet()) {
+            if (runRouterMacs.contains(e.getKey())) continue;
+            for (String candidate : e.getValue()) {
+                if (!isLinkLocalV6(candidate)) { runMacPrimaryIp.put(e.getKey(), candidate); break; }
+            }
+        }
+        // Record the uplink/gateway vendor for each host behind a router MAC, from
+        // that MAC's OUI - a topology hint (which switch aggregates the host),
+        // kept separate from the host's own (Unknown) vendor.
+        runIpGatewayVendor.clear();
+        for (Map.Entry<String, String> e : runIpToMac.entrySet()) {
+            String mac = e.getValue();
+            if (!runRouterMacs.contains(mac)) continue;
+            String oui = mac.length() >= 8 ? mac.substring(0, 8) : mac;
+            String gwVendor = ouiMap.get(oui);
+            if (gwVendor != null && !gwVendor.isEmpty()) runIpGatewayVendor.put(e.getKey(), gwVendor);
+        }
+        if (!runRouterMacs.isEmpty()) {
+            logger.info("Identified {} router/gateway MAC(s) forwarding for many IPs; "
+                    + "their OUI vendor will not be attributed to the hosts behind them",
+                    runRouterMacs.size());
+        }
+
         List<AssetDTO> newAssets = new ArrayList<>();
 
         for (PacketInfo packet : packets) {
@@ -1275,14 +1359,59 @@ public class PcapAnalysisService {
     /**
      * Detect asset from packet information
      */
-    private void detectAssetFromPacket(PacketInfo packet, String ipAddress, String manufacturer, 
+    /**
+     * True for addresses that are not individual hosts and must never become
+     * assets: IPv4 multicast/reserved (224.0.0.0/4 and up), the limited broadcast
+     * 255.255.255.255, /24-style subnet broadcasts (.255), IPv6 multicast
+     * (ff00::/8) and the unspecified/zero address.
+     */
+    private boolean isNonHostAddress(String ip) {
+        if (ip == null || ip.isEmpty()) return true;
+        String s = ip.trim().toLowerCase();
+        if (s.equals("0.0.0.0") || s.equals("::")) return true;
+        if (s.replace(":", "").replace("0", "").isEmpty()) return true; // all-zero IPv6
+        if (s.startsWith("ff")) return true;                             // IPv6 multicast
+        if (s.indexOf('.') > 0 && s.indexOf(':') < 0) {                  // IPv4
+            try {
+                int first = Integer.parseInt(s.substring(0, s.indexOf('.')));
+                if (first >= 224) return true;                           // multicast + reserved/broadcast
+            } catch (NumberFormatException ignore) { /* not dotted-decimal */ }
+            if (s.endsWith(".255")) return true;                         // /24 subnet broadcast
+        }
+        return false;
+    }
+
+    /** True for an IPv6 link-local address (fe80::/10). */
+    private boolean isLinkLocalV6(String ip) {
+        if (ip == null) return false;
+        String s = ip.trim().toLowerCase();
+        return s.startsWith("fe8") || s.startsWith("fe9") || s.startsWith("fea") || s.startsWith("feb");
+    }
+
+    private void detectAssetFromPacket(PacketInfo packet, String ipAddress, String manufacturer,
                                      String model, String level, List<AssetDTO> newAssets) {
         
         // Skip if IP is null, empty, or already detected
         if (ipAddress == null || ipAddress.isEmpty() || detectedIpAddresses.contains(ipAddress)) {
             return;
         }
-        
+
+        // Skip addresses that are not individual hosts (multicast, broadcast,
+        // unspecified/zero) - these are group/link addresses, not devices.
+        if (isNonHostAddress(ipAddress)) {
+            return;
+        }
+
+        // Fold an fe80:: link-local address into the same NIC's routable IP so the
+        // device is not counted twice (dedup by the MAC seen on both).
+        if (isLinkLocalV6(ipAddress)) {
+            String mac = runIpToMac.get(ipAddress);
+            String primary = mac == null ? null : runMacPrimaryIp.get(mac);
+            if (primary != null && !primary.equals(ipAddress)) {
+                return;
+            }
+        }
+
         // Skip private IPs for external assets (but allow internal asset detection)
         if (isPrivateIp(ipAddress) && !isValidInternalAsset(ipAddress, manufacturer, model)) {
             return;
@@ -1302,6 +1431,15 @@ public class PcapAnalysisService {
             return;
         }
         
+        // Drop the OUI vendor guess when this IP's frames ride a router/gateway
+        // MAC (routed traffic carries the last-hop router's MAC, not the host's).
+        // A real device-identity vendor (MODBUS FC43, CDP, ...) still wins inside
+        // createAssetFromPacketInfo; this only clears the misleading OUI guess.
+        String macForIp = runIpToMac.get(ipAddress);
+        if (macForIp != null && runRouterMacs.contains(macForIp)) {
+            manufacturer = "Unknown";
+        }
+
         // Create new asset
         AssetDTO asset = createAssetFromPacketInfo(ipAddress, manufacturer, model, level, packet);
         
@@ -1349,8 +1487,12 @@ public class PcapAnalysisService {
         // packet's transport (often just "TCP").
         asset.setProtocol(runIpProtocol.getOrDefault(ipAddress, packet.getProtocol()));
         
-        // Asset type and category based on manufacturer and model
-        Asset.AssetType assetType = determineAssetType(manufacturer, model, packet.getProtocol());
+        // Asset type and category based on manufacturer, model and the ICS
+        // protocol the device actually speaks (icsProto). Using the triggering
+        // packet's transport (often "TCP"/"UDP") here misclassified IEC-104/Modbus
+        // devices as OTHER whenever discovery fired on a handshake packet before
+        // the industrial protocol was seen.
+        Asset.AssetType assetType = determineAssetType(manufacturer, model, icsProto);
         Asset.AssetCategory assetCategory = determineAssetCategory(assetType, level);
         // Purdue level: prefer an explicit LEVEL_X string from the dissector;
         // otherwise infer from the IP subnet so the OTShield demo lab
@@ -1378,7 +1520,10 @@ public class PcapAnalysisService {
         
         // Default values
         asset.setIsActive(true);
-        asset.setIsOnline(true);
+        // Liveness is NOT assessed for a device discovered from a capture file -
+        // we saw it in past traffic (lastSeen), not a live heartbeat. Leave online
+        // status unknown (null) rather than fabricating "Online".
+        asset.setIsOnline(null);
         asset.setMonitoringStatus(Asset.MonitoringStatus.NOT_MONITORED);
         asset.setBackupStatus(Asset.BackupStatus.NOT_CONFIGURED);
         asset.setVulnerabilityCount(0);
@@ -1394,8 +1539,17 @@ public class PcapAnalysisService {
         tags.add(assetType.name().toLowerCase());
         tags.add(purdueLevel.name().toLowerCase());
         tags.add("auto-detected");
+        // Uplink/gateway hint: which switch/router this host sits behind. Recorded
+        // separately from the (Unknown) host vendor - honest topology context, not
+        // a device-brand claim. Mirrors how Wireshark shows the L2 MAC vendor.
+        String gwVendor = runIpGatewayVendor.get(ipAddress);
+        if (gwVendor != null && !gwVendor.isEmpty()) {
+            tags.add("gateway:" + gwVendor.toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("(^-|-$)", ""));
+            String desc = asset.getDescription();
+            asset.setDescription((desc == null ? "" : desc + " ") + "Behind " + gwVendor + " L2 uplink.");
+        }
         asset.setTags(tags);
-        
+
         return asset;
     }
 
@@ -1419,15 +1573,17 @@ public class PcapAnalysisService {
      * Generate asset name from IP and manufacturer/model
      */
     private String generateAssetName(String ipAddress, String manufacturer, String model) {
-        if (manufacturer != null && !manufacturer.equals("Unknown")) {
-            if (model != null && !model.equals("Unknown")) {
-                return String.format("%s-%s-%s", manufacturer, model, ipAddress.replace(".", "-"));
-            } else {
-                return String.format("%s-Device-%s", manufacturer, ipAddress.replace(".", "-"));
-            }
-        } else {
-            return String.format("Unknown-Device-%s", ipAddress.replace(".", "-"));
-        }
+        String ip = ipAddress.replace(".", "-");
+        boolean hasVendor = manufacturer != null && !manufacturer.equals("Unknown");
+        boolean hasModel = model != null && !model.isEmpty() && !model.equals("Unknown")
+                && !model.equalsIgnoreCase("Generic Device");
+        if (hasVendor && hasModel) return String.format("%s-%s-%s", manufacturer, model, ip);
+        if (hasVendor)             return String.format("%s-Device-%s", manufacturer, ip);
+        // Vendor unknown (e.g. host behind a router) but the wire tells us the
+        // role - surface it so the asset reads "Unknown-IEC 60870-5-104 device-x"
+        // rather than a bare "Unknown-Device".
+        if (hasModel)              return String.format("Unknown-%s-%s", model, ip);
+        return String.format("Unknown-Device-%s", ip);
     }
 
     /**
@@ -1506,13 +1662,24 @@ public class PcapAnalysisService {
             }
         }
         
-        // Protocol-based detection
+        // Protocol-based detection. ICS protocols map to field/control devices.
+        // Uses contains() so name variants ("IEC 60870-5-104", "S7Comm",
+        // "EtherNet/IP", ...) match instead of falling through to OTHER.
         if (protocol != null) {
-            switch (protocol.toUpperCase()) {
-                case "MODBUS":
-                case "DNP3":
-                case "IEC104":
-                    return Asset.AssetType.PLC;
+            String p = protocol.toUpperCase();
+            if (p.contains("IEC") && (p.contains("104") || p.contains("101") || p.contains("60870"))) {
+                return Asset.AssetType.RTU;   // IEC 60870-5-101/104 telecontrol -> RTU
+            }
+            if (p.contains("DNP3")) return Asset.AssetType.RTU;    // DNP3 telecontrol -> RTU
+            if (p.contains("MODBUS")) return Asset.AssetType.PLC;
+            if (p.contains("S7")) return Asset.AssetType.PLC;      // S7Comm (Siemens PLC)
+            if (p.contains("ENIP") || p.contains("ETHERNET/IP") || p.contains("ETHERNET_IP") || p.contains("CIP")) {
+                return Asset.AssetType.PLC;   // EtherNet/IP (Rockwell)
+            }
+            if (p.contains("PROFINET")) return Asset.AssetType.PLC;
+            if (p.contains("BACNET")) return Asset.AssetType.PLC;  // building controller
+            if (p.contains("OPC")) return Asset.AssetType.SCADA;   // OPC UA/DA
+            switch (p) {
                 case "HTTP":
                 case "HTTPS":
                     return Asset.AssetType.APPLICATION;
@@ -1636,6 +1803,14 @@ public class PcapAnalysisService {
             if (norm.startsWith("LEVEL") || norm.equals("DMZ") || norm.equals("ENTERPRISE")) {
                 return mapToPurdueLevel(level);
             }
+            // Also parse the "L0/L1/L2/L3 (...)" zone-label format that the asset
+            // DESCRIPTION uses, so the stored Purdue level matches the description
+            // instead of falling through to the LEVEL_3 default (which produced
+            // "purdueLevel LEVEL_3 but description says L1 (Control)" mismatches).
+            if (norm.startsWith("L0")) return Asset.PurdueLevel.LEVEL_0;
+            if (norm.startsWith("L1")) return Asset.PurdueLevel.LEVEL_1;
+            if (norm.startsWith("L2")) return Asset.PurdueLevel.LEVEL_2;
+            if (norm.startsWith("L3")) return Asset.PurdueLevel.LEVEL_3;
         }
         // Fall back to the lab's IP-subnet heuristic.
         Asset.PurdueLevel fromIp = levelFromIpSubnet(ipAddress);

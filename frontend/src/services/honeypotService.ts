@@ -26,7 +26,7 @@ export interface HoneypotStats {
   recentAttacks24h?: number;
   blockedAttacks?: number;
   hourlySeries?: Array<{ hour: string; count: number }>;
-  dailySeries?: Array<{ day: string; count: number }>;
+  dailySeries?: Array<{ date: string; count: number }>;
   recentEvents?: Array<{
     id?: string | number;
     sourceIp?: string;
@@ -70,6 +70,13 @@ export interface TtpAnalysis {
     observed: number;
     coverage?: number;
   }>;
+  // Actual shape returned by /api/honeypot/ttp-analysis.
+  mitreTactics?: Array<{
+    tactic: string;
+    eventCount: number;
+    techniques?: string[];
+    uniqueAttackers?: number;
+  }>;
   toolFingerprints?: Array<{ name: string; count: number }>;
   killChains?: Array<{ sourceIp: string; steps: any[] }>;
   geographic?: Array<{ country: string; count: number }>;
@@ -79,8 +86,8 @@ export interface TtpAnalysis {
 }
 
 export const honeypotService = {
-  getStats: async (): Promise<HoneypotStats> => {
-    const res = await api.get<HoneypotStats>('/api/honeypot/stats');
+  getStats: async (days?: number): Promise<HoneypotStats> => {
+    const res = await api.get<HoneypotStats>('/api/honeypot/stats', days ? { params: { days } } : undefined);
     return res.data ?? {};
   },
 

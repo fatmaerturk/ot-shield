@@ -51,7 +51,7 @@ function itemVisibleIn(mode: AppMode, vis?: NavVisibility): boolean {
 
 const NAV: NavItem[] = [
   {
-    label: 'Executive',
+    label: 'Executive Overview',
     path: '/executive',
     icon: <Icon.Shield className="w-4 h-4" />,
     emphasis: true,
@@ -64,7 +64,7 @@ const NAV: NavItem[] = [
     match: (p) => p === '/dashboard' || p === '/assets' || p === '/network-topology',
     children: [
       {
-        label: 'Network Dashboard',
+        label: 'Traffic Analysis',
         path: '/dashboard',
         description: 'PCAP capture & live traffic analysis',
         icon: <Icon.Activity className="w-4 h-4" />,

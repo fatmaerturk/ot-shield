@@ -5,7 +5,7 @@ import {
   KillChainPhase, TimelineSource,
   KILL_CHAIN_ORDER, PHASE_LABEL,
 } from '../services/attackerService';
-import { PageHero, KpiCard, Panel, Icon, pageContainer, pageItem } from './theme';
+import { PageHero, KpiCard, Panel, Icon, pageContainer, pageItem, PageLoading } from './theme';
 
 // ---------- small visual helpers ----------
 
@@ -127,6 +127,14 @@ const AttackerCampaigns: React.FC = () => {
     attackers.forEach((a) => { best = Math.max(best, a.reachedPhases?.length ?? 0); });
     return best;
   }, [attackers]);
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <PageLoading label="Loading attack campaigns…" />
+      </div>
+    );
+  }
 
   return (
     <motion.div variants={pageContainer} initial="hidden" animate="visible" className="space-y-6">

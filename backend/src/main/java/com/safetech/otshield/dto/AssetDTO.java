@@ -47,6 +47,10 @@ public class AssetDTO {
     private LocalDateTime nextMaintenance;
     private Asset.CriticalityLevel criticalityLevel;
     private Integer riskScore;
+    /** Structural risk before attack-volume weighting (Purdue position + device role). */
+    private Integer baseRiskScore;
+    /** Observed attacks against this asset's OT protocol (real honeypot data). */
+    private Long observedAttackVolume;
     private Integer vulnerabilityCount;
     private String patchLevel;
     private Asset.BackupStatus backupStatus;

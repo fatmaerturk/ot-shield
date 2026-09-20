@@ -7,7 +7,7 @@ import { AssetDTO } from '../../services/assetService';
  * as an industrial controller, not a desktop. Pure inline SVG - no image files.
  */
 
-type Cat = 'controller' | 'hmi' | 'scada' | 'network' | 'sensor' | 'workstation';
+type Cat = 'controller' | 'rtu' | 'hmi' | 'scada' | 'network' | 'sensor' | 'workstation' | 'unknown';
 
 const categoryOf = (a?: AssetDTO): Cat => {
   const t = (a?.assetType || '').toLowerCase();
@@ -19,18 +19,22 @@ const categoryOf = (a?: AssetDTO): Cat => {
       || name.includes('router') || name.includes('switch') || name.includes('firewall')) return 'network';
   if (a?.purdueLevel === 'LEVEL_0' || t.includes('sensor') || t.includes('actuator')) return 'sensor';
   if (t.includes('workstation') || t.includes('endpoint')) return 'workstation';
-  if (t.includes('plc') || t.includes('rtu') || proto) return 'controller';
-  // Default: assets discovered on the OT wire are field controllers, not PCs.
-  return 'controller';
+  if (t.includes('rtu')) return 'rtu';            // remote terminal unit (telecontrol) - own glyph
+  if (t.includes('plc')) return 'controller';
+  if (proto) return 'controller';                 // has an OT protocol -> field controller
+  // No recognizable type or protocol: draw a neutral device, not a guessed controller.
+  return 'unknown';
 };
 
 const PAL: Record<Cat, { bg: string; fg: string; ac: string }> = {
   controller: { bg: '#EAEDFB', fg: '#4338CA', ac: '#A5B4FC' },
+  rtu: { bg: '#CFFAFE', fg: '#0E7490', ac: '#67E8F9' },
   hmi: { bg: '#DFF4EC', fg: '#0E7C5E', ac: '#6EE7B7' },
   scada: { bg: '#F1EAFC', fg: '#6D28D9', ac: '#C4B5FD' },
   network: { bg: '#E3EFFB', fg: '#1D4ED8', ac: '#93C5FD' },
   sensor: { bg: '#FBEFD8', fg: '#B45309', ac: '#FBBF24' },
   workstation: { bg: '#ECEEF2', fg: '#475569', ac: '#CBD5E1' },
+  unknown: { bg: '#F1F0EE', fg: '#78716C', ac: '#D6D3D1' },
 };
 
 const Glyph: React.FC<{ cat: Cat; fg: string; ac: string }> = ({ cat, fg, ac }) => {
@@ -46,6 +50,19 @@ const Glyph: React.FC<{ cat: Cat; fg: string; ac: string }> = ({ cat, fg, ac }) 
           <circle cx="6.6" cy="11.2" r="1.15" fill={ac} />
           <rect x="9.6" y="10.1" width="8.4" height="1.9" rx="0.95" fill={ac} />
           <rect x="9.6" y="14" width="8.4" height="1.9" rx="0.95" fill={ac} opacity="0.55" />
+        </>
+      );
+    case 'rtu':
+      return (
+        <>
+          <path d="M12 2 L12 6.4" stroke={fg} strokeWidth="1.4" strokeLinecap="round" />
+          <circle cx="12" cy="2.2" r="1.15" fill={ac} />
+          <path d="M8.4 4.6 a5 5 0 0 1 7.2 0" stroke={ac} strokeWidth="1.3" strokeLinecap="round" fill="none" opacity="0.7" />
+          <rect x="4.5" y="6.6" width="15" height="14" rx="2.3" fill={fg} />
+          <rect x="6.7" y="9" width="10.6" height="3" rx="1" fill={ac} />
+          <circle cx="7.8" cy="15.6" r="1.1" fill={ac} />
+          <circle cx="11.1" cy="15.6" r="1.1" fill={ac} opacity="0.6" />
+          <rect x="13.1" y="14.7" width="4.4" height="1.9" rx="0.9" fill={ac} opacity="0.55" />
         </>
       );
     case 'hmi':
@@ -97,6 +114,14 @@ const Glyph: React.FC<{ cat: Cat; fg: string; ac: string }> = ({ cat, fg, ac }) 
           <rect x="5" y="5.8" width="14" height="8" rx="1.1" fill={ac} />
           <rect x="9.6" y="16" width="4.8" height="2.4" fill={fg} />
           <rect x="6.8" y="18.2" width="10.4" height="1.9" rx="0.95" fill={fg} />
+        </>
+      );
+    case 'unknown':
+      return (
+        <>
+          <rect x="4" y="4" width="16" height="16" rx="3.2" fill={fg} />
+          <path d="M9.5 9.5 a2.6 2.6 0 1 1 3.4 2.48 c-0.95 0.36 -1.35 0.95 -1.35 1.95 v0.35" stroke={ac} strokeWidth="1.7" strokeLinecap="round" fill="none" />
+          <circle cx="11.55" cy="16.7" r="1.15" fill={ac} />
         </>
       );
   }

@@ -66,7 +66,7 @@ const cardVariants: Variants = {
 // attacker origins). Mirrors the larger table in Honeypot.tsx but kept
 // local so this component is self-contained.
 const COUNTRY_ISO: Record<string, string> = {
-  'Türkiye': 'TR', 'Turkey': 'TR',
+  'TÃ¼rkiye': 'TR', 'Turkey': 'TR',
   'United States': 'US', 'United States of America': 'US', 'USA': 'US',
   'United Kingdom': 'GB', 'UK': 'GB', 'Great Britain': 'GB',
   'China': 'CN', 'Russia': 'RU', 'Russian Federation': 'RU',
@@ -99,7 +99,7 @@ const Flag: React.FC<{ country: string | null | undefined; size?: number; classN
 }) => {
   const iso = isoFor(country);
   if (!iso) {
-    return <span aria-hidden="true" className={className} style={{ fontSize: size }}>🌐</span>;
+    return <span aria-hidden="true" className={className} style={{ fontSize: size }}>ðŸŒ</span>;
   }
   const w = Math.round(size * 1.4);
   return (
@@ -176,7 +176,7 @@ const AttackerWatchlist: React.FC = () => {
     let cancelled = false;
     const load = async () => {
       try {
-        const r = await fetch('http://localhost:8080/api/honeypot/ttp-analysis');
+        const r = await fetch('/api/honeypot/ttp-analysis');
         if (!r.ok) {
           if (!cancelled) {
             setError(`Backend returned HTTP ${r.status}`);
@@ -255,7 +255,7 @@ const AttackerWatchlist: React.FC = () => {
           transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
           className="w-12 h-12 mx-auto mb-3 rounded-full border-4 border-violet-200 border-t-violet-600"
         />
-        <p className="text-sm text-slate-500">Loading attacker watchlist…</p>
+        <p className="text-sm text-slate-500">Loading attacker watchlistâ€¦</p>
       </div>
     );
   }
@@ -519,7 +519,7 @@ const AttackerWatchlist: React.FC = () => {
 
                     {/* Expand affordance */}
                     <div className="mt-3 flex items-center justify-center text-[10px] uppercase font-semibold tracking-wider text-violet-600">
-                      {expanded ? '▲ Hide details' : '▼ Show kill chain'}
+                      {expanded ? 'â–² Hide details' : 'â–¼ Show kill chain'}
                     </div>
                   </div>
 
@@ -539,7 +539,7 @@ const AttackerWatchlist: React.FC = () => {
                           </p>
                           {!chain || chain.steps.length === 0 ? (
                             <p className="text-xs text-slate-400">
-                              Not enough events to reconstruct a kill chain (need ≥3 distinct
+                              Not enough events to reconstruct a kill chain (need â‰¥3 distinct
                               tactics).
                             </p>
                           ) : (
@@ -580,7 +580,7 @@ const AttackerWatchlist: React.FC = () => {
                                         {step.technique}
                                       </p>
                                       <p className="text-[10px] text-slate-500 mt-0.5">
-                                        {step.protocol ?? '-'} · {step.attackType ?? '-'}
+                                        {step.protocol ?? '-'} Â· {step.attackType ?? '-'}
                                       </p>
                                     </div>
                                   </motion.li>

@@ -9,7 +9,7 @@ import AttackerList from './threatintel/AttackerList';
 import TtpMatrixCanvas from './threatintel/TtpMatrixCanvas';
 import CampaignPanel from './threatintel/CampaignPanel';
 import IocExportDrawer from './threatintel/IocExportDrawer';
-import { Icon, PageHero } from './theme';
+import { Icon, PageHero, PageLoading } from './theme';
 
 const ThreatIntelAttackers: React.FC = () => {
   const [attackers, setAttackers] = useState<AttackerIntelSummary[]>([]);
@@ -221,7 +221,7 @@ const ThreatIntelAttackers: React.FC = () => {
               </span>
             </div>
             {loadingList
-              ? <div className="text-center text-sm text-slate-400 py-8">Loading attackers…</div>
+              ? <PageLoading label="Loading attackers…" />
               : <AttackerList items={attackers} selectedIp={selectedIp} onSelect={setSelectedIp} />
             }
           </div>

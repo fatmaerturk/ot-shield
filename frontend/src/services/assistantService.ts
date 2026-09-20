@@ -133,7 +133,7 @@ export interface AssistantHealth {
   knowledgeBaseSize: number;
 }
 
-const BASE_URL = 'http://localhost:8080';
+const BASE_URL = '';
 
 /**
  * Streams a chat answer. Resolves (void) when the stream is complete; any
@@ -207,7 +207,7 @@ function handleFrame(frame: string, opts: AssistantChatOptions) {
     } else if (line.startsWith('data:')) {
       // NOTE: Spring's SseEmitter writes `data:` + content with NO separator
       // space, so the SSE-spec "strip one leading space" would eat a token's
-      // own leading space (Ollama word-pieces are ' attacker', ' technique', …)
+      // own leading space (Ollama word-pieces are ' attacker', ' technique', â€¦)
       // and glue words together. Keep the payload verbatim.
       dataParts.push(line.slice(5));
     }

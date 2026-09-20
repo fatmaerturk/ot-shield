@@ -86,8 +86,9 @@ public class HoneypotController {
     }
 
     @GetMapping("/stats")
-    public ResponseEntity<Map<String, Object>> getStats() {
-        Map<String, Object> stats = honeypotLogService.getStats();
+    public ResponseEntity<Map<String, Object>> getStats(
+            @RequestParam(required = false) Integer days) {
+        Map<String, Object> stats = honeypotLogService.getStats(days);
         return ResponseEntity.ok(stats);
     }
 

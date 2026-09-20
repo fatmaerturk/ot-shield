@@ -181,7 +181,7 @@ const ThreatIntelligence: React.FC = () => {
 
   // WebSocket for live threat updates
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:8080/ws/threats');
+    const ws = new WebSocket(`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/threats`);
     ws.onmessage = (e) => {
       const newThreat: Threat = JSON.parse(e.data);
       setThreats(prev => [newThreat, ...prev]);

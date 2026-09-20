@@ -128,7 +128,7 @@ const EMPTY_REPORT: TTPReport = {
 };
 
 const COUNTRY_ISO: Record<string, string> = {
-  'Türkiye': 'TR', 'Turkey': 'TR',
+  'TÃ¼rkiye': 'TR', 'Turkey': 'TR',
   'United States': 'US', 'United States of America': 'US', 'USA': 'US',
   'United Kingdom': 'GB', 'UK': 'GB', 'Great Britain': 'GB',
   'China': 'CN', 'Russia': 'RU', 'Russian Federation': 'RU',
@@ -161,7 +161,7 @@ const Flag: React.FC<{ country: string | null | undefined; size?: number; classN
 }) => {
   const iso = isoFor(country);
   if (!iso) {
-    return <span aria-hidden="true" className={className} style={{ fontSize: size }}>🌐</span>;
+    return <span aria-hidden="true" className={className} style={{ fontSize: size }}>ðŸŒ</span>;
   }
   const w = Math.round(size * 1.4);
   return (
@@ -189,7 +189,7 @@ const tierStyle = (tier: string) => {
   }
 };
 
-// ─── animated number - counts up from 0 to target on mount ──────────────
+// â”€â”€â”€ animated number - counts up from 0 to target on mount â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const AnimatedNumber: React.FC<{ value: number; duration?: number }> = ({
   value,
   duration = 900,
@@ -217,7 +217,7 @@ const AnimatedNumber: React.FC<{ value: number; duration?: number }> = ({
   return <>{display.toLocaleString()}</>;
 };
 
-// ─── animation variants ─────────────────────────────────────────────────
+// â”€â”€â”€ animation variants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const containerVariants: Variants = {
   hidden: { opacity: 0 },
   visible: {
@@ -250,7 +250,7 @@ const TTPIntelTab: React.FC = () => {
     let cancelled = false;
     const load = async () => {
       try {
-        const r = await fetch('http://localhost:8080/api/honeypot/ttp-analysis');
+        const r = await fetch('/api/honeypot/ttp-analysis');
         if (!r.ok) {
           if (!cancelled) {
             setError(`Backend returned HTTP ${r.status}`);
@@ -321,7 +321,7 @@ const TTPIntelTab: React.FC = () => {
           transition={{ duration: 1.6, repeat: Infinity }}
           className="text-sm text-slate-500"
         >
-          Computing TTP analysis…
+          Computing TTP analysisâ€¦
         </motion.p>
       </div>
     );
@@ -347,7 +347,7 @@ const TTPIntelTab: React.FC = () => {
       initial="hidden"
       animate="visible"
     >
-      {/* ───── Summary strip ───── */}
+      {/* â”€â”€â”€â”€â”€ Summary strip â”€â”€â”€â”€â”€ */}
       <motion.div
         variants={cardVariants}
         className="grid grid-cols-2 md:grid-cols-4 gap-3"
@@ -355,7 +355,7 @@ const TTPIntelTab: React.FC = () => {
         {[
           { label: 'Total events analyzed', value: report.totalEvents },
           { label: 'Unique attackers', value: report.uniqueAttackers },
-          { label: 'Profiled (≥2 events)', value: totalProfiles },
+          { label: 'Profiled (â‰¥2 events)', value: totalProfiles },
           { label: 'Advanced tier', value: sophCounts.ADVANCED },
         ].map((s, i) => (
           <motion.div
@@ -374,7 +374,7 @@ const TTPIntelTab: React.FC = () => {
         ))}
       </motion.div>
 
-      {/* ───── 1. Sophistication breakdown ───── */}
+      {/* â”€â”€â”€â”€â”€ 1. Sophistication breakdown â”€â”€â”€â”€â”€ */}
       <motion.div
         variants={cardVariants}
         className="bg-white rounded-2xl ring-1 ring-slate-200/70 shadow-sm p-6"
@@ -445,7 +445,7 @@ const TTPIntelTab: React.FC = () => {
         </motion.div>
       </motion.div>
 
-      {/* ───── 2. MITRE ATT&CK ICS Tactic Heatmap ───── */}
+      {/* â”€â”€â”€â”€â”€ 2. MITRE ATT&CK ICS Tactic Heatmap â”€â”€â”€â”€â”€ */}
       <motion.div
         variants={cardVariants}
         className="bg-white rounded-2xl ring-1 ring-slate-200/70 shadow-sm p-6"
@@ -490,7 +490,7 @@ const TTPIntelTab: React.FC = () => {
                     />
                   </div>
                   <div className="absolute inset-0 flex items-center px-2 text-[11px] font-semibold text-slate-700 pointer-events-none">
-                    {(t.techniques ?? []).slice(0, 2).join(' · ')}
+                    {(t.techniques ?? []).slice(0, 2).join(' Â· ')}
                   </div>
                 </div>
                 <div className="col-span-2 text-right text-sm tabular-nums text-slate-700">
@@ -507,7 +507,7 @@ const TTPIntelTab: React.FC = () => {
         </div>
       </motion.div>
 
-      {/* ───── 3. Tool / Wordlist Fingerprints ───── */}
+      {/* â”€â”€â”€â”€â”€ 3. Tool / Wordlist Fingerprints â”€â”€â”€â”€â”€ */}
       <motion.div
         variants={cardVariants}
         className="grid grid-cols-1 lg:grid-cols-2 gap-6"
@@ -596,7 +596,7 @@ const TTPIntelTab: React.FC = () => {
         </motion.div>
       </motion.div>
 
-      {/* ───── 4. Top Attacker Profiles Table ───── */}
+      {/* â”€â”€â”€â”€â”€ 4. Top Attacker Profiles Table â”€â”€â”€â”€â”€ */}
       <motion.div
         variants={cardVariants}
         className="bg-white rounded-2xl ring-1 ring-slate-200/70 shadow-sm overflow-hidden"
@@ -699,7 +699,7 @@ const TTPIntelTab: React.FC = () => {
         )}
       </motion.div>
 
-      {/* ───── 5. Kill Chain Timeline ───── */}
+      {/* â”€â”€â”€â”€â”€ 5. Kill Chain Timeline â”€â”€â”€â”€â”€ */}
       <motion.div
         variants={cardVariants}
         className="bg-white rounded-2xl ring-1 ring-slate-200/70 shadow-sm p-6"
@@ -727,7 +727,7 @@ const TTPIntelTab: React.FC = () => {
         </div>
         {!selectedChain ? (
           <p className="text-xs text-slate-500 py-6 text-center">
-            No multi-step kill chains detected yet - need ≥3 events per attacker.
+            No multi-step kill chains detected yet - need â‰¥3 events per attacker.
           </p>
         ) : (
           <div className="relative">
@@ -769,7 +769,7 @@ const TTPIntelTab: React.FC = () => {
                       </div>
                       <p className="text-xs text-violet-700 mt-0.5">{step.technique}</p>
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        {step.protocol ?? '-'} · {step.attackType ?? '-'}
+                        {step.protocol ?? '-'} Â· {step.attackType ?? '-'}
                       </p>
                     </div>
                   </motion.li>
@@ -780,7 +780,7 @@ const TTPIntelTab: React.FC = () => {
         )}
       </motion.div>
 
-      {/* ───── 6. Geographic Distribution ───── */}
+      {/* â”€â”€â”€â”€â”€ 6. Geographic Distribution â”€â”€â”€â”€â”€ */}
       <motion.div
         variants={cardVariants}
         className="bg-white rounded-2xl ring-1 ring-slate-200/70 shadow-sm p-6"
@@ -848,7 +848,7 @@ const TTPIntelTab: React.FC = () => {
         )}
       </motion.div>
 
-      {/* ───── 7a. Credential Intelligence ───── */}
+      {/* â”€â”€â”€â”€â”€ 7a. Credential Intelligence â”€â”€â”€â”€â”€ */}
       <motion.div
         variants={cardVariants}
         className="bg-white rounded-2xl ring-1 ring-slate-200/70 shadow-sm p-6"
@@ -956,7 +956,7 @@ const TTPIntelTab: React.FC = () => {
         )}
       </motion.div>
 
-      {/* ───── 7b. Behavioral Anomalies ───── */}
+      {/* â”€â”€â”€â”€â”€ 7b. Behavioral Anomalies â”€â”€â”€â”€â”€ */}
       <motion.div
         variants={containerVariants}
         className="grid grid-cols-1 lg:grid-cols-3 gap-4"

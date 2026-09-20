@@ -4,6 +4,13 @@
     {
       "name": "landing",
       "url": "http://localhost:8099"
+    },
+    {
+      "name": "frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "cwd": "frontend",
+      "port": 3000
     }
   ]
 }

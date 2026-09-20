@@ -375,7 +375,7 @@ export type DecoyStreamMessage =
  * Returns a function to close the socket.
  */
 export function subscribeDecoyStream(onMessage: (msg: DecoyStreamMessage) => void, onError?: (err: Event) => void): () => void {
-  const url = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + 'localhost:8080/ws/decoy/stream';
+  const url = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws/decoy/stream';
   const ws = new WebSocket(url);
   ws.onmessage = (ev) => {
     try { onMessage(JSON.parse(ev.data)); } catch { /* ignore */ }

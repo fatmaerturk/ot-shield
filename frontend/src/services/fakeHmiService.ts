@@ -131,7 +131,7 @@ export function subscribeFakeHmiStream(
 ): () => void {
   const url =
     (window.location.protocol === 'https:' ? 'wss://' : 'ws://') +
-    'localhost:8080/ws/deception/hmi-stream';
+    window.location.host + '/ws/deception/hmi-stream';
   const ws = new WebSocket(url);
   ws.onmessage = (ev) => {
     try { onMessage(JSON.parse(ev.data)); } catch { /* ignore */ }

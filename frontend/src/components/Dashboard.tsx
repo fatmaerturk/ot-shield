@@ -555,7 +555,7 @@ const Dashboard: React.FC = () => {
           errorMessage += error.response.statusText || 'Server error';
         }
       } else if (error.request) {
-        errorMessage += 'Could not connect to server. Please make sure backend is running on http://localhost:8080';
+        errorMessage += 'Could not connect to server. Please make sure backend is running.';
       } else {
         errorMessage += error.message || 'Unknown error';
       }
@@ -935,19 +935,20 @@ const Dashboard: React.FC = () => {
     Promise.all(
       ipsToGeolocate
         // Remove 'count' from destructuring as it's not on PacketInfo
-        .map(({ sourceIp, protocol }) => 
-          fetch(`https://ipapi.co/${sourceIp}/json/`) // Using ipapi.co
-            .then(res => res.json())
-            .then((data: any) => {
-              if (data && !data.error && data.latitude != null && data.longitude != null) {
-                 // Pass protocol along if needed, or fetch it again if necessary
-                 return { ip: sourceIp, protocol, lat: data.latitude, lon: data.longitude };
-              } else {
-                 return null;
+        .map(({ sourceIp, protocol }) =>
+          // Offline geolocation via the backend (MaxMind GeoLite2). Previously
+          // this called ipapi.co directly, leaking source IPs to a third party
+          // and breaking the product's offline / air-gap promise.
+          api.get(`/api/geo/${sourceIp}`)
+            .then((res: any) => {
+              const data = res.data;
+              if (data && data.lat != null && data.lon != null) {
+                 return { ip: sourceIp, protocol, lat: data.lat, lon: data.lon };
               }
+              return null;
             })
             .catch((error) => {
-                console.error(`[LiveTraffic] Geolocation FETCH ERROR for ${sourceIp}:`, error);
+                console.error(`[LiveTraffic] Geolocation error for ${sourceIp}:`, error);
                 return null;
             })
         )
@@ -2126,7 +2127,7 @@ const Dashboard: React.FC = () => {
       <PageHero
         eyebrow="NETWORK ANALYSIS"
         icon={<Icon.Network className="w-3.5 h-3.5" />}
-        title="OT Network Dashboard"
+        title="OT Traffic Analysis"
         subtitle="Capture, analyze and investigate traffic across your industrial environment. Purdue-aware flow inspection, DPI drill-down and live IOA detection from one pane."
         stats={[
           { label: 'Captured packets', value: safePacketInfos.length.toLocaleString(), sub: `${kpiStats.protocolCount} protocol(s) seen` },

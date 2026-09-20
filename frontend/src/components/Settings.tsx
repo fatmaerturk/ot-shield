@@ -199,22 +199,22 @@ const Settings: React.FC = () => {
     };
     setSettings(defaults);
 
-    fetch('http://localhost:8080/api/settings', { headers: authHeaders() })
+    fetch('/api/settings', { headers: authHeaders() })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d && setSettings((s) => ({ ...defaults, ...s, ...d })))
       .catch(() => {});
 
-    fetch('http://localhost:8080/api/settings/system-status', { headers: authHeaders() })
+    fetch('/api/settings/system-status', { headers: authHeaders() })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d && setSystemStatus(d))
       .catch(() => {});
 
-    fetch('http://localhost:8080/api/settings/tunnel-status', { headers: authHeaders() })
+    fetch('/api/settings/tunnel-status', { headers: authHeaders() })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d && setTunnel(d))
       .catch(() => {});
 
-    fetch('http://localhost:8080/api/settings/audit-log?limit=200', { headers: authHeaders() })
+    fetch('/api/settings/audit-log?limit=200', { headers: authHeaders() })
       .then((r) => (r.ok ? r.json() : []))
       .then((d) => Array.isArray(d) && setAudit(d))
       .catch(() => {});
@@ -232,13 +232,13 @@ const Settings: React.FC = () => {
         .finally(() => setUsersLoading(false));
     }
     if (tab === 'audit') {
-      fetch('http://localhost:8080/api/settings/audit-log?limit=200', { headers: authHeaders() }).then(r => r.json()).then(setAudit).catch(() => {});
+      fetch('/api/settings/audit-log?limit=200', { headers: authHeaders() }).then(r => r.json()).then(setAudit).catch(() => {});
     }
     if (tab === 'system') {
-      fetch('http://localhost:8080/api/settings/system-status', { headers: authHeaders() }).then(r => r.json()).then(setSystemStatus).catch(() => {});
+      fetch('/api/settings/system-status', { headers: authHeaders() }).then(r => r.json()).then(setSystemStatus).catch(() => {});
     }
     if (tab === 'tunnel') {
-      fetch('http://localhost:8080/api/settings/tunnel-status', { headers: authHeaders() }).then(r => r.json()).then(setTunnel).catch(() => {});
+      fetch('/api/settings/tunnel-status', { headers: authHeaders() }).then(r => r.json()).then(setTunnel).catch(() => {});
     }
   }, [tab]);
 
@@ -275,7 +275,7 @@ const Settings: React.FC = () => {
     applySideEffects(key, value);
     if (savingTimer !== null) window.clearTimeout(savingTimer);
     const t = window.setTimeout(() => {
-      fetch('http://localhost:8080/api/settings', {
+      fetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ [key]: value }),
@@ -286,7 +286,7 @@ const Settings: React.FC = () => {
 
   const rotateToken = async () => {
     if (!window.confirm('Rotate the honeypot ingest token? Your forwarder will stop ingesting until you update OTSHIELD_INGEST_TOKEN env var.')) return;
-    const r = await fetch('http://localhost:8080/api/settings/rotate-token', { method: 'POST', headers: authHeaders() });
+    const r = await fetch('/api/settings/rotate-token', { method: 'POST', headers: authHeaders() });
     if (r.ok) {
       const d = await r.json();
       setSettings((s) => ({ ...s, ingestToken: d.newToken }));
@@ -399,7 +399,7 @@ const Settings: React.FC = () => {
             </p>
           </div>
           {savedAt && (Date.now() - savedAt < 2500) && (
-            <Pill tone="emerald">✓ Saved</Pill>
+            <Pill tone="emerald">âœ“ Saved</Pill>
           )}
         </div>
       </motion.div>
@@ -441,7 +441,7 @@ const Settings: React.FC = () => {
             className="space-y-6"
           >
 
-              {/* ───── PROFILE ───── */}
+              {/* â”€â”€â”€â”€â”€ PROFILE â”€â”€â”€â”€â”€ */}
               {tab === 'profile' && (
                 <>
                   <Card title="Your profile" description="Your account on this workspace.">
@@ -478,14 +478,14 @@ const Settings: React.FC = () => {
                 </>
               )}
 
-              {/* ───── APPEARANCE ───── */}
+              {/* â”€â”€â”€â”€â”€ APPEARANCE â”€â”€â”€â”€â”€ */}
               {tab === 'appearance' && (
                 <Card title="Appearance" description="Personalize how the dashboard looks and feels.">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <Select label="Theme" value={settings.theme ?? 'light'} onChange={(v) => updateSetting('theme', v)}
                       options={[{ value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }, { value: 'system', label: 'System' }]} />
                     <Select label="Language" value={settings.language ?? 'en'} onChange={(v) => updateSetting('language', v)}
-                      options={[{ value: 'en', label: 'English' }, { value: 'tr', label: 'Türkçe' }]} />
+                      options={[{ value: 'en', label: 'English' }, { value: 'tr', label: 'TÃ¼rkÃ§e' }]} />
                     <Select label="Date format" value={settings.dateFormat ?? 'ISO'} onChange={(v) => updateSetting('dateFormat', v)}
                       options={[
                         { value: 'ISO', label: 'ISO (2026-04-28 14:30)' },
@@ -503,12 +503,12 @@ const Settings: React.FC = () => {
                 </Card>
               )}
 
-              {/* ───── USERS ───── */}
+              {/* â”€â”€â”€â”€â”€ USERS â”€â”€â”€â”€â”€ */}
               {tab === 'users' && (
                 <Card title="Users" description="Manage everyone with access to this workspace.">
                   <div className="flex items-center gap-2 mb-4">
                     <input
-                      placeholder="Search by name, email, role…"
+                      placeholder="Search by name, email, roleâ€¦"
                       value={search} onChange={(e) => setSearch(e.target.value)}
                       className="flex-1 text-sm px-3 py-2 rounded-lg ring-1 ring-slate-200 focus:ring-2 focus:ring-violet-300 outline-none"
                     />
@@ -517,7 +517,7 @@ const Settings: React.FC = () => {
                     </button>
                   </div>
                   {usersLoading ? (
-                    <p className="text-xs text-slate-500 py-4">Loading users…</p>
+                    <p className="text-xs text-slate-500 py-4">Loading usersâ€¦</p>
                   ) : filteredUsers.length === 0 ? (
                     <p className="text-xs text-slate-500 py-4">No users.</p>
                   ) : (
@@ -554,7 +554,7 @@ const Settings: React.FC = () => {
                                   ) : (
                                     <button onClick={() => suspendUser(u.id!)} className="text-[11px] text-amber-700 hover:text-amber-900 font-semibold">Suspend</button>
                                   )}
-                                  <span className="text-slate-300">·</span>
+                                  <span className="text-slate-300">Â·</span>
                                   <button onClick={() => deleteUser(u.id!)} className="text-[11px] text-rose-700 hover:text-rose-900 font-semibold">Delete</button>
                                 </div>
                               </td>
@@ -567,7 +567,7 @@ const Settings: React.FC = () => {
                 </Card>
               )}
 
-              {/* ───── ROLES ───── */}
+              {/* â”€â”€â”€â”€â”€ ROLES â”€â”€â”€â”€â”€ */}
               {tab === 'roles' && (
                 <Card title="Roles & permissions" description="Built-in roles and the permissions they grant.">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -597,7 +597,7 @@ const Settings: React.FC = () => {
                 </Card>
               )}
 
-              {/* ───── API KEYS ───── */}
+              {/* â”€â”€â”€â”€â”€ API KEYS â”€â”€â”€â”€â”€ */}
               {tab === 'apikeys' && (
                 <Card title="API Keys" description="Tokens used by external agents (forwarder, integrations) to push data to OTShield.">
                   <div className="space-y-4">
@@ -616,14 +616,14 @@ const Settings: React.FC = () => {
                       </div>
                     </div>
                     <p className="text-[11px] text-slate-500">
-                      ⚠️ Rotating the token will break ingestion until the forwarder is updated with the new value
+                      âš ï¸ Rotating the token will break ingestion until the forwarder is updated with the new value
                       (<code>OTSHIELD_INGEST_TOKEN</code> env var).
                     </p>
                   </div>
                 </Card>
               )}
 
-              {/* ───── ALERTS ───── */}
+              {/* â”€â”€â”€â”€â”€ ALERTS â”€â”€â”€â”€â”€ */}
               {tab === 'alerts' && (
                 <>
                   <Card title="Alert thresholds" description="Decide which honeypot events become alerts.">
@@ -644,7 +644,7 @@ const Settings: React.FC = () => {
                 </>
               )}
 
-              {/* ───── TUNNEL ───── */}
+              {/* â”€â”€â”€â”€â”€ TUNNEL â”€â”€â”€â”€â”€ */}
               {tab === 'tunnel' && (
                 <>
                   <Card title="Cloudflare tunnel" description="Public ingest endpoint reachable by the GCP forwarder.">
@@ -664,12 +664,12 @@ const Settings: React.FC = () => {
                 </>
               )}
 
-              {/* ───── AUDIT LOG ───── */}
+              {/* â”€â”€â”€â”€â”€ AUDIT LOG â”€â”€â”€â”€â”€ */}
               {tab === 'audit' && (
                 <Card title="Audit log" description="Every settings change, login, and alert action is recorded here.">
                   <div className="flex items-center gap-2 mb-3">
                     <input
-                      placeholder="Search by actor, action, target…"
+                      placeholder="Search by actor, action, targetâ€¦"
                       value={auditFilter} onChange={(e) => setAuditFilter(e.target.value)}
                       className="flex-1 text-sm px-3 py-2 rounded-lg ring-1 ring-slate-200 focus:ring-2 focus:ring-violet-300 outline-none"
                     />
@@ -710,7 +710,7 @@ const Settings: React.FC = () => {
                 </Card>
               )}
 
-              {/* ───── SYSTEM ───── */}
+              {/* â”€â”€â”€â”€â”€ SYSTEM â”€â”€â”€â”€â”€ */}
               {tab === 'system' && (
                 <>
                   <Card title="System status" description="Backend health and resource usage.">
@@ -752,7 +752,7 @@ const Settings: React.FC = () => {
                         description="Delete all collected attacker telemetry. Alerts and audit log are preserved."
                         confirm="DELETE LOGS"
                         onConfirm={async () => {
-                          await fetch('http://localhost:8080/api/honeypot/logs/clear', { method: 'POST' });
+                          await fetch('/api/honeypot/logs/clear', { method: 'POST' });
                           alert('Honeypot logs cleared.');
                         }}
                       />
@@ -814,7 +814,7 @@ const Settings: React.FC = () => {
   );
 };
 
-// ───── small primitives ──────────────────────────────────────────────
+// â”€â”€â”€â”€â”€ small primitives â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const Field: React.FC<{ label: string; value: string }> = ({ label, value }) => (
   <div>
     <p className="text-[10px] uppercase font-bold tracking-wider text-slate-500">{label}</p>
@@ -902,7 +902,7 @@ const DangerRow: React.FC<{ title: string; description: string; confirm: string;
       </div>
       {phase === 'idle' ? (
         <button onClick={() => setPhase('confirm')} className="px-3 py-1.5 rounded-lg bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700">
-          Run…
+          Runâ€¦
         </button>
       ) : (
         <div className="flex items-center gap-2">

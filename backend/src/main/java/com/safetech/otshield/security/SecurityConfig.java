@@ -18,6 +18,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import jakarta.servlet.http.HttpServletResponse;
 
 import java.util.Arrays;
 
@@ -69,6 +70,20 @@ public class SecurityConfig {
             // JWT to every request via an axios interceptor.
             .anyRequest()
             .authenticated()
+            .and()
+            // Unauthenticated requests (missing / expired / invalid JWT) must
+            // return 401, not Spring's default 403. The frontend's axios
+            // interceptor refreshes the token or redirects to /login on 401;
+            // a 403 was being swallowed, so an expired session showed up as a
+            // silent "Could not load ... is the backend running?" instead. Role
+            // denials for an authenticated user still fall through to 403.
+            .exceptionHandling()
+            .authenticationEntryPoint((request, response, authException) -> {
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.setContentType("application/json");
+                response.getWriter().write(
+                    "{\"status\":401,\"error\":\"Unauthorized\",\"path\":\"" + request.getRequestURI() + "\"}");
+            })
             .and()
             .sessionManagement()
             .sessionCreationPolicy(SessionCreationPolicy.STATELESS)

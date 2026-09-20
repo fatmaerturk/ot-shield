@@ -220,6 +220,18 @@ interface AuditEntry {
 
 const Alerts: React.FC = () => {
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  // Real server-side totals across ALL alerts (severity/status/type breakdowns),
+  // so the cards and charts reflect the full dataset, not just the loaded page.
+  const [stats, setStats] = useState<{
+    totalAlerts?: number;
+    criticalAlerts?: number;
+    highAlerts?: number;
+    unassignedAlerts?: number;
+    falsePositives?: number;
+    severity?: Record<string, number>;
+    status?: Record<string, number>;
+    type?: Record<string, number>;
+  } | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
 
@@ -232,6 +244,15 @@ const Alerts: React.FC = () => {
 
   // Search state
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Debounced search term used for server-side filtering (one request per pause,
+  // not per keystroke). The immediate searchQuery still filters the loaded page
+  // instantly for responsive feedback.
+  const [debouncedSearch, setDebouncedSearch] = useState<string>('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 400);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   // Bulk operations state
   const [selectedAlerts, setSelectedAlerts] = useState<string[]>([]);
@@ -342,18 +363,21 @@ const Alerts: React.FC = () => {
     ALERTS_CHART_PALETTE.emerald,
   ];
 
-  // Chart data preparation
+  // Chart data preparation. Counts come from the server-side statistics
+  // breakdown (real totals across ALL alerts), falling back to the loaded page
+  // only until statistics arrive.
+  const sevCount = (k: string) =>
+    stats?.severity?.[k] ?? alerts.filter(a => a.severity === k).length;
+  const statusCount = (k: string) =>
+    stats?.status?.[k] ?? alerts.filter(a => a.status === k).length;
+  const typeCount = (k: string) =>
+    stats?.type?.[k] ?? alerts.filter(a => a.type === k).length;
+
   const severityChartData = useMemo(() => ({
     labels: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'],
     datasets: [{
       label: 'Alert Count',
-      data: [
-        alerts.filter(a => a.severity === 'CRITICAL').length,
-        alerts.filter(a => a.severity === 'HIGH').length,
-        alerts.filter(a => a.severity === 'MEDIUM').length,
-        alerts.filter(a => a.severity === 'LOW').length,
-        alerts.filter(a => a.severity === 'INFO').length,
-      ],
+      data: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'].map(sevCount),
       backgroundColor: [
         ALERTS_CHART_PALETTE.critical,
         ALERTS_CHART_PALETTE.high,
@@ -366,45 +390,13 @@ const Alerts: React.FC = () => {
       maxBarThickness: 28,
     }],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [alerts]);
+  }), [alerts, stats]);
 
   const typeChartData = useMemo(() => ({
     labels: ['ANOMALY', 'IOA', 'HONEYPOT', 'THREAT_INTELLIGENCE', 'INTRUSION_DETECTION', 'PORT_SCAN', 'BRUTE_FORCE', 'DDoS_ATTACK', 'MALWARE_DETECTION', 'PHISHING_ATTACK', 'SQL_INJECTION', 'XSS_ATTACK', 'CSRF_ATTACK', 'PATH_TRAVERSAL', 'COMMAND_INJECTION', 'FAILED_LOGIN', 'UNAUTHORIZED_ACCESS', 'PRIVILEGE_ESCALATION', 'ACCOUNT_LOCKOUT', 'SUSPICIOUS_LOGIN', 'FILE_INTEGRITY', 'PROCESS_MONITORING', 'REGISTRY_CHANGE', 'SERVICE_CHANGE', 'HONEYPOT_TRIGGER', 'HONEYPOT_INTERACTION', 'HONEYPOT_EXPLOIT', 'COMPLIANCE_VIOLATION', 'DATA_LEAKAGE', 'ANOMALY_DETECTION', 'CUSTOM_RULE'],
     datasets: [{
       label: 'Alert Count',
-      data: [
-        alerts.filter(a => a.type === 'ANOMALY').length,
-        alerts.filter(a => a.type === 'IOA').length,
-        alerts.filter(a => a.type === 'HONEYPOT').length,
-        alerts.filter(a => a.type === 'THREAT_INTELLIGENCE').length,
-        alerts.filter(a => a.type === 'INTRUSION_DETECTION').length,
-        alerts.filter(a => a.type === 'PORT_SCAN').length,
-        alerts.filter(a => a.type === 'BRUTE_FORCE').length,
-        alerts.filter(a => a.type === 'DDoS_ATTACK').length,
-        alerts.filter(a => a.type === 'MALWARE_DETECTION').length,
-        alerts.filter(a => a.type === 'PHISHING_ATTACK').length,
-        alerts.filter(a => a.type === 'SQL_INJECTION').length,
-        alerts.filter(a => a.type === 'XSS_ATTACK').length,
-        alerts.filter(a => a.type === 'CSRF_ATTACK').length,
-        alerts.filter(a => a.type === 'PATH_TRAVERSAL').length,
-        alerts.filter(a => a.type === 'COMMAND_INJECTION').length,
-        alerts.filter(a => a.type === 'FAILED_LOGIN').length,
-        alerts.filter(a => a.type === 'UNAUTHORIZED_ACCESS').length,
-        alerts.filter(a => a.type === 'PRIVILEGE_ESCALATION').length,
-        alerts.filter(a => a.type === 'ACCOUNT_LOCKOUT').length,
-        alerts.filter(a => a.type === 'SUSPICIOUS_LOGIN').length,
-        alerts.filter(a => a.type === 'FILE_INTEGRITY').length,
-        alerts.filter(a => a.type === 'PROCESS_MONITORING').length,
-        alerts.filter(a => a.type === 'REGISTRY_CHANGE').length,
-        alerts.filter(a => a.type === 'SERVICE_CHANGE').length,
-        alerts.filter(a => a.type === 'HONEYPOT_TRIGGER').length,
-        alerts.filter(a => a.type === 'HONEYPOT_INTERACTION').length,
-        alerts.filter(a => a.type === 'HONEYPOT_EXPLOIT').length,
-        alerts.filter(a => a.type === 'COMPLIANCE_VIOLATION').length,
-        alerts.filter(a => a.type === 'DATA_LEAKAGE').length,
-        alerts.filter(a => a.type === 'ANOMALY_DETECTION').length,
-        alerts.filter(a => a.type === 'CUSTOM_RULE').length,
-      ],
+      data: ['ANOMALY', 'IOA', 'HONEYPOT', 'THREAT_INTELLIGENCE', 'INTRUSION_DETECTION', 'PORT_SCAN', 'BRUTE_FORCE', 'DDoS_ATTACK', 'MALWARE_DETECTION', 'PHISHING_ATTACK', 'SQL_INJECTION', 'XSS_ATTACK', 'CSRF_ATTACK', 'PATH_TRAVERSAL', 'COMMAND_INJECTION', 'FAILED_LOGIN', 'UNAUTHORIZED_ACCESS', 'PRIVILEGE_ESCALATION', 'ACCOUNT_LOCKOUT', 'SUSPICIOUS_LOGIN', 'FILE_INTEGRITY', 'PROCESS_MONITORING', 'REGISTRY_CHANGE', 'SERVICE_CHANGE', 'HONEYPOT_TRIGGER', 'HONEYPOT_INTERACTION', 'HONEYPOT_EXPLOIT', 'COMPLIANCE_VIOLATION', 'DATA_LEAKAGE', 'ANOMALY_DETECTION', 'CUSTOM_RULE'].map(typeCount),
       // Thirty-one alert types rotated through the six-colour brand
       // ramp. Previously this had a full "indigo → pure black" gradient
       // with pastel greys that made the chart unreadable; a modulo
@@ -416,21 +408,13 @@ const Alerts: React.FC = () => {
       hoverOffset: 6,
     }],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [alerts]);
+  }), [alerts, stats]);
 
   const statusChartData = useMemo(() => ({
     labels: ['NEW', 'ACKNOWLEDGED', 'IN_PROGRESS', 'ESCALATED', 'RESOLVED', 'CLOSED', 'FALSE_POSITIVE'],
     datasets: [{
       label: 'Alert Count',
-      data: [
-        alerts.filter(a => a.status === 'NEW').length,
-        alerts.filter(a => a.status === 'ACKNOWLEDGED').length,
-        alerts.filter(a => a.status === 'IN_PROGRESS').length,
-        alerts.filter(a => a.status === 'ESCALATED').length,
-        alerts.filter(a => a.status === 'RESOLVED').length,
-        alerts.filter(a => a.status === 'CLOSED').length,
-        alerts.filter(a => a.status === 'FALSE_POSITIVE').length,
-      ],
+      data: ['NEW', 'ACKNOWLEDGED', 'IN_PROGRESS', 'ESCALATED', 'RESOLVED', 'CLOSED', 'FALSE_POSITIVE'].map(statusCount),
       // Mirrors statusBadgeColor so the same status means the same
       // colour in the table badge and in the chart.
       backgroundColor: [
@@ -447,7 +431,7 @@ const Alerts: React.FC = () => {
       maxBarThickness: 28,
     }],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [alerts]);
+  }), [alerts, stats]);
 
   // Alert Trend Chart Data
   const trendChartData = useMemo(() => {
@@ -559,15 +543,11 @@ const Alerts: React.FC = () => {
     return sorted;
   }, [filteredAlerts, sortConfig]);
 
-  // Pagination state and derived page
+  // Server-side pagination: the backend returns one page of alerts at a time.
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(20);
-  const paginatedAlerts = useMemo(() => {
-    if (!Array.isArray(filteredAlerts)) return [];
-    const start = (currentPage - 1) * pageSize;
-    return filteredAlerts.slice(start, start + pageSize);
-  }, [filteredAlerts, currentPage, pageSize]);
-  const totalPages = Math.max(1, Math.ceil((Array.isArray(filteredAlerts) ? filteredAlerts.length : 0) / pageSize));
+  const [pageSize] = useState<number>(50);
+  const [totalElements, setTotalElements] = useState<number>(0);
+  const totalPages = Math.max(1, Math.ceil(totalElements / pageSize));
 
   // Fetch alerts (and fire Slack webhook for new Critical alerts on backend)
   const fetchAlerts = async () => {
@@ -577,7 +557,18 @@ const Alerts: React.FC = () => {
       let backendAlerts: any[] = [];
       try {
         console.log('FetchAlerts: Attempting to fetch from /api/alerts...');
-        const backendResponse = await api.get('/api/alerts');
+        const backendResponse = await api.get('/api/alerts', {
+          params: {
+            page: currentPage - 1,
+            size: pageSize,
+            sortBy: 'createdAt',
+            sortDir: 'DESC',
+            ...(filters.severity ? { severity: filters.severity } : {}),
+            ...(filters.type ? { type: filters.type } : {}),
+            ...(filters.status ? { status: filters.status } : {}),
+            ...(debouncedSearch ? { q: debouncedSearch } : {}),
+          }
+        });
         console.log('FetchAlerts: Backend response received:', backendResponse);
         console.log('FetchAlerts: Response status:', backendResponse.status);
         console.log('FetchAlerts: Response data:', backendResponse.data);
@@ -589,11 +580,15 @@ const Alerts: React.FC = () => {
           // Paginated response
           console.log('FetchAlerts: Detected paginated response');
           backendAlerts = backendResponse.data.content;
+          setTotalElements(typeof backendResponse.data.totalElements === 'number'
+            ? backendResponse.data.totalElements
+            : backendAlerts.length);
           console.log('FetchAlerts: Extracted content from paginated response:', backendAlerts);
         } else if (Array.isArray(backendResponse.data)) {
           // Direct array response
           console.log('FetchAlerts: Detected direct array response');
           backendAlerts = backendResponse.data;
+          setTotalElements(backendAlerts.length);
           console.log('FetchAlerts: Using direct array response:', backendAlerts);
         } else {
           console.log('FetchAlerts: No valid data structure found, setting empty array');
@@ -631,13 +626,22 @@ const Alerts: React.FC = () => {
       }));
       console.log('FetchAlerts: IOA alerts created:', ioaAlertsFormatted);
 
-      // Combine backend and IOA alerts
-      const combinedAlerts = [...backendAlerts, ...ioaAlertsFormatted];
+      // Combine backend alerts with local IOA alerts. IOAs live only in
+      // localStorage and are not part of the server-paginated set, so they are
+      // shown only on the first page to avoid repeating them on every page.
+      const combinedAlerts = currentPage === 1
+        ? [...backendAlerts, ...ioaAlertsFormatted]
+        : backendAlerts;
       console.log('FetchAlerts: Final combined alerts:', combinedAlerts);
       console.log('FetchAlerts: Combined alerts length:', combinedAlerts.length);
 
       setAlerts(combinedAlerts);
       setError('');
+      // Real totals for the cards/charts (best-effort; page stays usable if it fails).
+      try {
+        const s = await api.get('/api/alerts/statistics');
+        if (s?.data && typeof s.data === 'object') setStats(s.data);
+      } catch { /* keep last-known stats */ }
     } catch (error) {
       console.error('Error fetching alerts:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1086,24 +1090,11 @@ const Alerts: React.FC = () => {
         }
       }
       
-      // If all proxies failed, use development fallback immediately
-      console.log(`All VirusTotal proxies failed for ${ip}, using development fallback`);
-      const devFallback = getDevelopmentThreatData(ip, 'VirusTotal');
-      if (devFallback) {
-        return devFallback;
-      }
-      
+      // All VirusTotal proxies failed - no reputation data available
       return null;
       
     } catch (error) {
       console.log(`VirusTotal enrichment failed for ${ip}:`, error);
-      
-      // Final fallback to development data
-      const devFallback = getDevelopmentThreatData(ip, 'VirusTotal');
-      if (devFallback) {
-        console.log(`Using VirusTotal development fallback for ${ip} (catch block)`);
-        return devFallback;
-      }
       
       return null;
     }
@@ -1189,24 +1180,11 @@ const Alerts: React.FC = () => {
         }
       }
       
-      // If all proxies failed, use development fallback immediately
-      console.log(`All AbuseIPDB proxies failed for ${ip}, using development fallback`);
-      const devFallback = getDevelopmentThreatData(ip, 'AbuseIPDB');
-      if (devFallback) {
-        return devFallback;
-      }
-      
+      // All AbuseIPDB proxies failed - no reputation data available
       return null;
       
     } catch (error) {
       console.log(`AbuseIPDB enrichment failed for ${ip}:`, error);
-      
-      // Try development fallback as last resort
-      const devFallback = getDevelopmentThreatData(ip, 'AbuseIPDB');
-      if (devFallback) {
-        console.log(`Using AbuseIPDB development fallback for ${ip} (catch block)`);
-        return devFallback;
-      }
       
       return null;
     }
@@ -1240,15 +1218,32 @@ const Alerts: React.FC = () => {
         };
       }
 
-      // Try multiple geolocation services with CORS handling
-      const geolocationServices = [
-        { name: 'api.codetabs.com + ipapi.co', url: `https://api.codetabs.com/v1/proxy?quest=https://ipapi.co/${ip}/json/` },
-        { name: 'cors.bridged.cc + ipapi.co', url: `https://cors.bridged.cc/https://ipapi.co/${ip}/json/` },
-        { name: 'thingproxy + ipapi.co', url: `https://thingproxy.freeboard.io/fetch/https://ipapi.co/${ip}/json/` },
-        { name: 'api.codetabs.com + ip-api.com', url: `https://api.codetabs.com/v1/proxy?quest=https://ip-api.com/json/${ip}` },
-        { name: 'cors.bridged.cc + ip-api.com', url: `https://cors.bridged.cc/https://ip-api.com/json/${ip}` },
-        { name: 'thingproxy + ip-api.com', url: `https://thingproxy.freeboard.io/fetch/https://ip-api.com/json/${ip}` }
-      ];
+      // Offline geolocation via the backend (MaxMind GeoLite2). Previously this
+      // tried ipapi.co / ip-api.com through public CORS proxies, which leaked
+      // the IP to third parties and mostly failed (the proxies are dead). The
+      // external-service loop below is retained but never runs (empty list).
+      try {
+        const res = await api.get(`/api/geo/${ip}`);
+        const data = res.data || {};
+        if (data.lat != null || data.lon != null || data.country || data.city) {
+          return {
+            source: 'IP Geolocation (offline / MaxMind)',
+            country: data.country || getCountryFromIP(ip),
+            countryName: data.country || getCountryFromIP(ip),
+            region: data.city || 'Unknown',
+            city: data.city || 'Unknown',
+            latitude: data.lat ?? null,
+            longitude: data.lon ?? null,
+            timezone: 'UTC',
+            org: 'Unknown',
+            asn: 'Unknown',
+          };
+        }
+      } catch (geoErr) {
+        console.log(`Backend geolocation failed for ${ip}:`, geoErr);
+      }
+
+      const geolocationServices: Array<{ name: string; url: string }> = [];
 
 
       
@@ -1374,14 +1369,7 @@ const Alerts: React.FC = () => {
         }
       }
       
-      // If all services failed, try development fallback
-      const devFallback = getDevelopmentFallbackData(ip);
-      if (devFallback) {
-        console.log(`Using development fallback for ${ip}`);
-        return devFallback;
-      }
-      
-      // Return basic location data based on IP type for public IPs that failed
+      // All geolocation services failed - return basic location data for the IP
       return {
         source: 'IP Geolocation (Fallback)',
         country: getCountryFromIP(ip),
@@ -1399,14 +1387,7 @@ const Alerts: React.FC = () => {
     } catch (error) {
       console.log(`IP Geolocation enrichment failed for ${ip}:`, error);
       
-      // Try to get development fallback data as last resort
-      const devFallback = getDevelopmentFallbackData(ip);
-      if (devFallback) {
-        console.log(`Using development fallback for ${ip} (catch block)`);
-        return devFallback;
-      }
-      
-      // Return basic location data based on IP type for public IPs that failed
+      // Return basic location data based on IP type for the IP
       return {
         source: 'IP Geolocation (Fallback)',
         country: getCountryFromIP(ip),
@@ -1468,24 +1449,7 @@ const Alerts: React.FC = () => {
     } catch (error) {
       console.log(`Local threat data not available for ${ip}:`, error);
       
-      // In development mode, provide enhanced fallback data
-      if (isDevelopment()) {
-        const ipHash = ip.split('.').reduce((acc, octet) => acc + parseInt(octet), 0);
-        const isLocal = ip.startsWith('192.168.') || ip.startsWith('10.') || 
-                       (ip.startsWith('172.') && parseInt(ip.split('.')[1]) >= 16 && parseInt(ip.split('.')[1]) <= 31);
-        
-        return {
-          source: 'Local Database (Development Fallback)',
-          isLocal,
-          network: getNetworkInfo(ip),
-          threatLevel: isLocal ? 'Low' : ['Low', 'Medium', 'High'][ipHash % 3],
-          lastSeen: new Date().toISOString(),
-          tags: isLocal ? ['internal', 'trusted'] : ['external', 'monitored'],
-          confidence: isLocal ? 95 : 70 + (ipHash % 30)
-        };
-      }
-      
-      // Return basic local data for production
+      // Return basic local data (real network classification only)
       return {
         source: 'Local Database (Fallback)',
         isLocal: ip.startsWith('192.168.') || ip.startsWith('10.') || 
@@ -1824,127 +1788,6 @@ const Alerts: React.FC = () => {
     }
   };
 
-  // Check if we're in development environment
-  const isDevelopment = () => {
-    return window.location.hostname === 'localhost' || 
-           window.location.hostname === '127.0.0.1' || 
-           window.location.port === '3000';
-  };
-
-  // Get development fallback data for public IPs
-  const getDevelopmentFallbackData = (ip: string) => {
-    if (isDevelopment()) {
-      // Generate deterministic but varied mock data based on IP
-      const ipHash = ip.split('.').reduce((acc, octet) => acc + parseInt(octet), 0);
-      const mockCountries = ['US', 'DE', 'FR', 'GB', 'JP', 'CA', 'AU', 'BR', 'IN', 'CN'];
-      const mockCities = ['New York', 'Berlin', 'Paris', 'London', 'Tokyo', 'Toronto', 'Sydney', 'São Paulo', 'Mumbai', 'Beijing'];
-      const mockISPs = ['Comcast', 'Deutsche Telekom', 'Orange', 'BT', 'NTT', 'Rogers', 'Telstra', 'Vivo', 'BSNL', 'China Telecom'];
-      
-      const countryIndex = ipHash % mockCountries.length;
-      const cityIndex = (ipHash + 1) % mockCities.length;
-      const ispIndex = (ipHash + 2) % mockISPs.length;
-      
-      return {
-        source: 'IP Geolocation (Development Mode)',
-        country: mockCountries[countryIndex],
-        countryName: getCountryName(mockCountries[countryIndex]),
-        region: `${mockCities[cityIndex]} Region`,
-        city: mockCities[cityIndex],
-        latitude: 40 + (ipHash % 20) - 10, // Random latitude around 40
-        longitude: -74 + (ipHash % 20) - 10, // Random longitude around -74
-        timezone: 'UTC-5',
-        org: mockISPs[ispIndex],
-        asn: `AS${1000 + (ipHash % 9000)}`,
-        note: `Development mode: ${ip} - Mock data for testing purposes`
-      };
-    }
-    return null;
-  };
-
-  // Helper function to get country names
-  const getCountryName = (countryCode: string): string => {
-    const countryNames: { [key: string]: string } = {
-      'US': 'United States', 'DE': 'Germany', 'FR': 'France', 'GB': 'United Kingdom',
-      'JP': 'Japan', 'CA': 'Canada', 'AU': 'Australia', 'BR': 'Brazil', 'IN': 'India', 'CN': 'China'
-    };
-    return countryNames[countryCode] || countryCode;
-  };
-
-  // Get development fallback data for threat intelligence APIs
-  const getDevelopmentThreatData = (ip: string, source: 'VirusTotal' | 'AbuseIPDB') => {
-    if (!isDevelopment()) return null;
-    
-    // Generate deterministic mock data based on IP
-    const ipHash = ip.split('.').reduce((acc, octet) => acc + parseInt(octet), 0);
-    
-    if (source === 'VirusTotal') {
-      const mockPositives = (ipHash % 10) + 1; // 1-10 positives
-      const mockTotal = 50 + (ipHash % 50); // 50-99 total
-      
-      return {
-        source: 'VirusTotal (Development Mode)',
-        positives: mockPositives,
-        total: mockTotal,
-        categories: { 'malware': 'malicious', 'phishing': 'malicious' },
-        country: getCountryName('US'),
-        as_owner: 'Mock ISP Corporation',
-        last_analysis_stats: { malicious: mockPositives, suspicious: 2, harmless: mockTotal - mockPositives - 2 }
-      };
-    } else if (source === 'AbuseIPDB') {
-      const mockScore = (ipHash % 100); // 0-99 abuse score
-      
-      // Check if this is a private IP
-      if (ip.startsWith('192.168.') || ip.startsWith('10.') || 
-          (ip.startsWith('172.') && parseInt(ip.split('.')[1]) >= 16 && parseInt(ip.split('.')[1]) <= 31) ||
-          ip === '127.0.0.1' || ip === '::1') {
-        // For private IPs, return consistent local network data
-        const mockData = {
-          source: 'AbuseIPDB (Development Mode - Private IP)',
-          abuseConfidenceScore: mockScore,
-          countryCode: 'Private Network',
-          countryName: 'Private Network',
-          city: 'Private Network',
-          isp: 'Local Network',
-          domain: 'local-network',
-          totalReports: 0,
-          numDistinctUsers: 0,
-          lastReportedAt: new Date().toISOString()
-        };
-        
-        console.log(`🔄 Development fallback AbuseIPDB data for PRIVATE IP ${ip}:`, mockData);
-        return mockData;
-      }
-      
-      // Generate varied mock location data for public IPs
-      const mockCountries = ['US', 'DE', 'FR', 'GB', 'CA', 'AU', 'JP', 'BR', 'IN', 'RU'];
-      const mockCities = ['New York', 'Berlin', 'Paris', 'London', 'Toronto', 'Sydney', 'Tokyo', 'São Paulo', 'Mumbai', 'Moscow'];
-      const mockISPs = ['Comcast', 'Deutsche Telekom', 'Orange', 'BT', 'Rogers', 'Telstra', 'NTT', 'Vivo', 'BSNL', 'Rostelecom'];
-      
-      const countryIndex = ipHash % mockCountries.length;
-      const mockCountryCode = mockCountries[countryIndex];
-      const mockCity = mockCities[countryIndex];
-      const mockISP = mockISPs[countryIndex];
-      
-      const mockData = {
-        source: 'AbuseIPDB (Development Mode)',
-        abuseConfidenceScore: mockScore,
-        countryCode: mockCountryCode,
-        countryName: getCountryName(mockCountryCode),
-        city: mockCity,
-        isp: mockISP,
-        domain: 'mock-domain.com',
-        totalReports: mockScore > 50 ? (ipHash % 20) + 1 : 0,
-        numDistinctUsers: mockScore > 50 ? (ipHash % 10) + 1 : 0,
-        lastReportedAt: new Date().toISOString()
-      };
-      
-      console.log(`🔄 Development fallback AbuseIPDB data for PUBLIC IP ${ip}:`, mockData);
-      return mockData;
-    }
-    
-    return null;
-  };
-
   // Enhanced error handling and user feedback
   const getEnrichmentErrorInfo = (error: any, service: string): string => {
     if (error.name === 'AbortError') {
@@ -2117,10 +1960,17 @@ const Alerts: React.FC = () => {
 
 
 
-  // Initial fetch of alerts when component mounts
+  // Reset to the first page whenever the filter criteria change, so a filter
+  // applied while deep in the list doesn't leave us on an out-of-range page.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters.severity, filters.type, filters.status, debouncedSearch]);
+
+  // Fetch alerts on mount and whenever the page, page size, or filters change.
   useEffect(() => {
     fetchAlerts();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, pageSize, filters.severity, filters.type, filters.status, debouncedSearch]);
 
   // Listen for localStorage changes to automatically refresh when new IOAs are detected
   useEffect(() => {
@@ -2161,9 +2011,9 @@ const Alerts: React.FC = () => {
         icon={<Icon.Alert className="w-3.5 h-3.5" />}
         title={
           <span>
-            Alerts &amp; incident triage
+            Security Alerts
             <span className="block text-violet-100/90 font-medium text-lg md:text-xl mt-2">
-              High-confidence signals from the deception layer, ranked by severity.
+              High-confidence signals from the deception layer, ranked by severity - triage and resolve.
             </span>
           </span>
         }
@@ -2185,7 +2035,7 @@ const Alerts: React.FC = () => {
             <div key={row.sev} className="relative overflow-hidden bg-white rounded-2xl p-4 ring-1 ring-slate-200/70 shadow-sm">
               <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${row.gradient}`} />
               <div className={`text-3xl font-bold ${row.textColor}`}>
-                {alerts.filter(a => a.severity === row.sev).length}
+                {sevCount(row.sev)}
               </div>
               <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold mt-1">{row.label}</div>
             </div>
@@ -2198,7 +2048,7 @@ const Alerts: React.FC = () => {
           <div className="relative overflow-hidden bg-white rounded-2xl p-4 ring-1 ring-slate-200/70 shadow-sm">
             <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-fuchsia-500 to-pink-500" />
             <div className="text-3xl font-bold text-fuchsia-700">
-              {alerts.filter(a => {
+              {stats?.unassignedAlerts ?? alerts.filter(a => {
                 const owner = (a as unknown as { assignedTo?: string | null }).assignedTo;
                 return !owner || owner === 'Unassigned';
               }).length}
@@ -2617,10 +2467,10 @@ const Alerts: React.FC = () => {
           </div>
 
           {/* Pagination */}
-          {filteredAlerts.length > 0 && (
+          {totalElements > 0 && (
             <div className="mt-4 flex items-center justify-between">
               <div className="text-sm text-slate-700">
-                Showing {Math.min((currentPage - 1) * pageSize + 1, filteredAlerts.length)} to {Math.min(currentPage * pageSize, filteredAlerts.length)} of {filteredAlerts.length} results
+                Showing {Math.min((currentPage - 1) * pageSize + 1, totalElements)} to {Math.min(currentPage * pageSize, totalElements)} of {totalElements.toLocaleString()} alerts
               </div>
               <div className="flex items-center space-x-2">
                           <button
@@ -2631,11 +2481,11 @@ const Alerts: React.FC = () => {
                   Previous
                           </button>
                 <span className="text-sm text-slate-700">
-                  Page {currentPage} of {Math.ceil(filteredAlerts.length / pageSize)}
+                  Page {currentPage.toLocaleString()} of {totalPages.toLocaleString()}
                 </span>
                 <button
-                  onClick={() => setCurrentPage(Math.min(Math.ceil(filteredAlerts.length / pageSize), currentPage + 1))}
-                  disabled={currentPage >= Math.ceil(filteredAlerts.length / pageSize)}
+                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                  disabled={currentPage >= totalPages}
                   className="px-3 py-1 border border-slate-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
                 >
                   Next
@@ -2968,11 +2818,6 @@ const Alerts: React.FC = () => {
                                   {data.ipReputation.toUpperCase()}
                                 </span>
                                 <span className="text-sm text-slate-600">Score: {data.threatScore}</span>
-                                {data.source && data.source.includes('Development Mode') && (
-                                  <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">
-                                    🔄 Dev Fallback
-                                  </span>
-                                )}
                               </div>
                             </div>
                             
@@ -2981,16 +2826,10 @@ const Alerts: React.FC = () => {
                                 <span className="text-slate-500">Location:</span>
                                 <p className="font-medium">{data.city}, {data.country}</p>
                                 <p className="text-xs text-slate-400">Debug: city="{data.city}", country="{data.country}"</p>
-                                {data.source && data.source.includes('Development Mode') && (
-                                  <p className="text-xs text-amber-600">🔄 Dev fallback data</p>
-                                )}
                               </div>
                               <div>
                                 <span className="text-slate-500">ISP:</span>
                                 <p className="font-medium">{data.isp}</p>
-                                {data.source && data.source.includes('Development Mode') && (
-                                  <p className="text-xs text-amber-600">🔄 Dev fallback data</p>
-                                )}
                               </div>
                               <div>
                                 <span className="text-slate-500">Last Seen:</span>
@@ -3079,16 +2918,7 @@ const Alerts: React.FC = () => {
                 <div className="mt-2 text-xs text-violet-600">
                   <p><strong>Note:</strong> Both VirusTotal and AbuseIPDB APIs are now active! Full threat intelligence and reputation data will be provided.</p>
                   <p><strong>CORS Note:</strong> Geolocation uses multiple reliable proxy services with timeout handling.</p>
-                  <p><strong>Fallback:</strong> If all proxies fail, development fallback data will be provided.</p>
                   <p><strong>Timeout:</strong> Each service has a 5-second timeout to prevent long waits.</p>
-                  {isDevelopment() && (
-                    <div className="mt-2 p-2 bg-amber-50 ring-1 ring-amber-200 rounded">
-                      <p className="text-amber-700"><strong>🔄 Development Mode Active:</strong></p>
-                      <p className="text-amber-700">• Enhanced fallback data will be provided when APIs fail</p>
-                      <p className="text-amber-700">• Mock threat intelligence data for testing</p>
-                      <p className="text-amber-700">• Realistic geolocation fallbacks</p>
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -3134,20 +2964,8 @@ const Alerts: React.FC = () => {
                   <h4 className="text-sm font-medium text-violet-700 mb-2">📊 Enrichment Summary</h4>
                   <div className="text-xs text-violet-700 space-y-1">
                     <p><strong>Total IPs Enriched:</strong> {enrichmentData.size}</p>
-                    <p><strong>Development Mode:</strong> {isDevelopment() ? '✅ Active' : '❌ Inactive'}</p>
-                    {isDevelopment() && (
-                      <p><strong>Fallback Data:</strong> Available for testing when APIs fail</p>
-                    )}
                     <p><strong>Data Sources:</strong> VirusTotal, AbuseIPDB, IP Geolocation, Local Database</p>
                   </div>
-                  {isDevelopment() && (
-                    <div className="mt-2 p-2 bg-amber-50 ring-1 ring-amber-200 rounded">
-                      <p className="text-amber-700 text-xs"><strong>💡 Development Note:</strong></p>
-                      <p className="text-amber-700 text-xs">• Yellow "🔄 Dev Fallback" badges indicate mock data for testing</p>
-                      <p className="text-amber-700 text-xs">• This allows you to test the UI without external API dependencies</p>
-                      <p className="text-amber-700 text-xs">• In production, real threat intelligence data will be used</p>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
@@ -3161,11 +2979,11 @@ const Alerts: React.FC = () => {
                  <div className="bg-white p-6 rounded-lg shadow-md">
                    <h3 className="text-lg font-semibold text-slate-800 mb-4">Alert Severity Distribution</h3>
                    <div className="flex items-center justify-between mb-4">
-                     <span className="text-sm text-slate-600">Total Alerts: {alerts.length}</span>
-                     <span className="text-sm text-slate-600">Critical: {alerts.filter(a => a.severity === 'CRITICAL').length}</span>
-                     <span className="text-sm text-slate-600">High: {alerts.filter(a => a.severity === 'HIGH').length}</span>
-                     <span className="text-sm text-slate-600">Medium: {alerts.filter(a => a.severity === 'MEDIUM').length}</span>
-                     <span className="text-sm text-slate-600">Low: {alerts.filter(a => a.severity === 'LOW').length}</span>
+                     <span className="text-sm text-slate-600">Total Alerts: {(stats?.totalAlerts ?? alerts.length).toLocaleString()}</span>
+                     <span className="text-sm text-slate-600">Critical: {sevCount('CRITICAL').toLocaleString()}</span>
+                     <span className="text-sm text-slate-600">High: {sevCount('HIGH').toLocaleString()}</span>
+                     <span className="text-sm text-slate-600">Medium: {sevCount('MEDIUM').toLocaleString()}</span>
+                     <span className="text-sm text-slate-600">Low: {sevCount('LOW').toLocaleString()}</span>
                    </div>
                    <div className="h-64 w-full">
                      <Bar 
@@ -3265,11 +3083,11 @@ const Alerts: React.FC = () => {
                  <div className="bg-white p-6 rounded-lg shadow-md">
                    <h3 className="text-lg font-semibold text-slate-800 mb-4">Alert Type Distribution</h3>
                    <div className="flex items-center justify-between mb-4">
-                     <span className="text-sm text-slate-600">Total Alerts: {alerts.length}</span>
-                     <span className="text-sm text-slate-600">Anomaly: {alerts.filter(a => a.type === 'ANOMALY').length}</span>
-                     <span className="text-sm text-slate-600">IOA: {alerts.filter(a => a.type === 'IOA').length}</span>
-                     <span className="text-sm text-slate-600">Honeypot: {alerts.filter(a => a.type === 'HONEYPOT').length}</span>
-                     <span className="text-sm text-slate-600">Threat Intelligence: {alerts.filter(a => a.type === 'THREAT_INTELLIGENCE').length}</span>
+                     <span className="text-sm text-slate-600">Total Alerts: {(stats?.totalAlerts ?? alerts.length).toLocaleString()}</span>
+                     <span className="text-sm text-slate-600">Anomaly: {typeCount('ANOMALY').toLocaleString()}</span>
+                     <span className="text-sm text-slate-600">IOA: {typeCount('IOA').toLocaleString()}</span>
+                     <span className="text-sm text-slate-600">Honeypot: {typeCount('HONEYPOT').toLocaleString()}</span>
+                     <span className="text-sm text-slate-600">Threat Intelligence: {typeCount('THREAT_INTELLIGENCE').toLocaleString()}</span>
                    </div>
                    <div className="h-64 w-full">
                      <Doughnut 
@@ -3333,11 +3151,11 @@ const Alerts: React.FC = () => {
                  <div className="bg-white p-6 rounded-lg shadow-md">
                    <h3 className="text-lg font-semibold text-slate-800 mb-4">Alert Status Distribution</h3>
                    <div className="flex items-center justify-between mb-4">
-                     <span className="text-sm text-slate-600">Total Alerts: {alerts.length}</span>
-                     <span className="text-sm text-slate-600">New: {alerts.filter(a => a.status === 'NEW').length}</span>
-                     <span className="text-sm text-slate-600">Acknowledged: {alerts.filter(a => a.status === 'ACKNOWLEDGED').length}</span>
-                     <span className="text-sm text-slate-600">In Progress: {alerts.filter(a => a.status === 'IN_PROGRESS').length}</span>
-                     <span className="text-sm text-slate-600">Escalated: {alerts.filter(a => a.status === 'ESCALATED').length}</span>
+                     <span className="text-sm text-slate-600">Total Alerts: {(stats?.totalAlerts ?? alerts.length).toLocaleString()}</span>
+                     <span className="text-sm text-slate-600">New: {statusCount('NEW').toLocaleString()}</span>
+                     <span className="text-sm text-slate-600">Acknowledged: {statusCount('ACKNOWLEDGED').toLocaleString()}</span>
+                     <span className="text-sm text-slate-600">In Progress: {statusCount('IN_PROGRESS').toLocaleString()}</span>
+                     <span className="text-sm text-slate-600">Escalated: {statusCount('ESCALATED').toLocaleString()}</span>
                      <span className="text-sm text-slate-600">Resolved: {alerts.filter(a => a.status === 'RESOLVED').length}</span>
                      <span className="text-sm text-slate-600">Closed: {alerts.filter(a => a.status === 'CLOSED').length}</span>
                      <span className="text-sm text-slate-600">False Positive: {alerts.filter(a => a.status === 'FALSE_POSITIVE').length}</span>

@@ -13,3 +13,9 @@
 /honeypot/target
 /honeypot/target
 /backend/target
+
+# Production secrets (never commit)
+.env
+/.env
+.env.prod
+*.dump

@@ -7,6 +7,7 @@ import com.safetech.otshield.model.AlertType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -16,7 +17,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface AlertRepository extends JpaRepository<Alert, String> {
+public interface AlertRepository extends JpaRepository<Alert, String>, JpaSpecificationExecutor<Alert> {
     
     // Basic finders
     Optional<Alert> findById(String id);
@@ -97,6 +98,17 @@ public interface AlertRepository extends JpaRepository<Alert, String> {
     long countByAcknowledged(Boolean acknowledged);
     long countByEscalated(Boolean escalated);
     long countByFalsePositive(Boolean falsePositive);
+
+    // Grouped counts for the statistics endpoint - full breakdown in one query
+    // each, so the Alerts dashboard reflects real totals (not a loaded page).
+    @Query("SELECT a.severity, COUNT(a) FROM Alert a GROUP BY a.severity")
+    List<Object[]> countGroupedBySeverity();
+
+    @Query("SELECT a.status, COUNT(a) FROM Alert a GROUP BY a.status")
+    List<Object[]> countGroupedByStatus();
+
+    @Query("SELECT a.type, COUNT(a) FROM Alert a GROUP BY a.type")
+    List<Object[]> countGroupedByType();
     
     @Query("SELECT COUNT(a) FROM Alert a WHERE a.createdAt >= :startDate")
     long countByCreatedAtAfter(@Param("startDate") LocalDateTime startDate);

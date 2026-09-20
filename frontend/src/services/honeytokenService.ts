@@ -45,7 +45,7 @@ export interface HoneytokenStats {
  * Host a planted beacon calls home to. Defaults to the local backend; when
  * planting for real, the operator swaps this for their public / tunnel host.
  */
-export const BEACON_BASE = 'http://localhost:8080';
+export const BEACON_BASE = window.location.origin;
 
 export const honeytokenService = {
   list: (): Promise<Honeytoken[]> =>

@@ -16,11 +16,18 @@ module.exports = function setupProxy(app) {
     })
   );
 
-  // NOTE: Backend WebSocket proxy was on /ws, but that path collides with
-  // CRA's own hot-reload WebSocket (webpack-dev-server also uses /ws).
-  // Result: infinite 404/403 loop from backend.
-  // If/when we need a backend WS stream, expose it under a non-/ws path
-  // (e.g. /api/stream) and proxy that here.
+  // Backend WebSocket streams. Match the SPECIFIC backend paths only, never
+  // bare "/ws" - webpack-dev-server's own hot-reload socket lives at "/ws", and
+  // proxying that to the backend causes a 404/403 reconnect loop. In prod nginx
+  // proxies all of /ws/ (there is no HMR socket there).
+  app.use(
+    createProxyMiddleware(['/ws/threats', '/ws/decoy', '/ws/deception'], {
+      target,
+      changeOrigin: true,
+      ws: true,
+      logLevel: 'warn',
+    })
+  );
 
   // Console proxy
   app.use(

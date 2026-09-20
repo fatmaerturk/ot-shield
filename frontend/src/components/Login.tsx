@@ -502,15 +502,20 @@ const Login: React.FC = () => {
             </motion.div>
           </form>
 
-          <motion.p variants={formItem} className="mt-8 text-center text-sm text-gray-500">
-            Need access?{' '}
-            <a
-              href="/register"
-              className="font-medium text-violet-600 hover:text-fuchsia-600 transition-colors"
-            >
-              Request analyst credentials
-            </a>
-          </motion.p>
+          {/* Self-service signup is dev-only. In a production build (NODE_ENV
+              === 'production') the backend disables /api/auth/register, so this
+              link is hidden and admins provision accounts instead. */}
+          {process.env.NODE_ENV === 'development' && (
+            <motion.p variants={formItem} className="mt-8 text-center text-sm text-gray-500">
+              Need access?{' '}
+              <a
+                href="/register"
+                className="font-medium text-violet-600 hover:text-fuchsia-600 transition-colors"
+              >
+                Request analyst credentials
+              </a>
+            </motion.p>
+          )}
         </motion.div>
       </main>
     </div>

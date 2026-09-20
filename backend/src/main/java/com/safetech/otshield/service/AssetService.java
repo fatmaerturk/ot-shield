@@ -34,6 +34,11 @@ public class AssetService {
 
     private final AssetRepository assetRepository;
     private final AssetMapper assetMapper;
+    private final com.safetech.otshield.repository.HoneypotLogRepository honeypotLogRepository;
+
+    /** Max uplift (points) added to an asset's structural risk when its OT
+     *  protocol is the most-attacked one in the inventory. */
+    private static final int THREAT_WEIGHT_MAX = 20;
 
     /**
      * Create a new asset
@@ -76,8 +81,9 @@ public class AssetService {
     @Transactional(readOnly = true)
     public Optional<AssetDTO> getAssetById(String id) {
         log.debug("Fetching asset by ID: {}", id);
-        return assetRepository.findById(id)
-                .map(assetMapper::toDto);
+        Optional<AssetDTO> dto = assetRepository.findById(id).map(assetMapper::toDto);
+        dto.ifPresent(d -> weightByThreat(java.util.Collections.singletonList(d)));
+        return dto;
     }
 
     /**
@@ -110,20 +116,83 @@ public class AssetService {
                 .map(assetMapper::toDto);
     }
 
+    // ------------------------------------------------------------------
+    // Attack-volume-weighted risk (real honeypot data)
+    // ------------------------------------------------------------------
+
+    /** Collapse a protocol label to a canonical key so asset protocols
+     *  ("IEC 60870-5-104") and honeypot labels ("MODBUS", "S7COMM") line up. */
+    private String canonProtocol(String p) {
+        if (p == null) return "";
+        String u = p.toUpperCase();
+        if (u.contains("MODBUS")) return "MODBUS";
+        if (u.contains("S7")) return "S7COMM";
+        if (u.contains("IEC")) return "IEC104";
+        if (u.contains("DNP3")) return "DNP3";
+        if (u.contains("BACNET")) return "BACNET";
+        if (u.contains("ENIP") || u.contains("ETHERNET") || u.contains("CIP")) return "ENIP";
+        if (u.contains("PROFINET")) return "PROFINET";
+        if (u.contains("OPC")) return "OPC";
+        if (u.contains("FTP")) return "FTP";
+        if (u.contains("HTTP")) return "HTTP";
+        if (u.contains("SNMP")) return "SNMP";
+        return u.trim();
+    }
+
+    /** Canonical protocol -> observed attack count, from real honeypot logs. */
+    private Map<String, Long> attackVolumeByProtocol() {
+        Map<String, Long> m = new HashMap<>();
+        for (Object[] row : honeypotLogRepository.countByProtocol()) {
+            if (row == null || row.length < 2 || row[0] == null || row[1] == null) continue;
+            m.merge(canonProtocol(String.valueOf(row[0])), ((Number) row[1]).longValue(), Long::sum);
+        }
+        return m;
+    }
+
+    /**
+     * Enrich each DTO's risk with the real attack pressure on its OT protocol.
+     * The structural score is preserved in {@code baseRiskScore}; the uplift is
+     * proportional to how heavily that protocol is attacked relative to the
+     * busiest protocol the inventory actually speaks. A protocol with no
+     * observed attacks (e.g. IEC-104 here) gets no uplift - honest, not zeroed.
+     */
+    private void weightByThreat(List<AssetDTO> dtos) {
+        if (dtos == null || dtos.isEmpty()) return;
+        Map<String, Long> vol = attackVolumeByProtocol();
+        if (vol.isEmpty()) return;
+
+        long maxRef = 0L;
+        for (String proto : assetRepository.findDistinctProtocols()) {
+            maxRef = Math.max(maxRef, vol.getOrDefault(canonProtocol(proto), 0L));
+        }
+        if (maxRef <= 0) return;
+
+        for (AssetDTO d : dtos) {
+            long attacks = vol.getOrDefault(canonProtocol(d.getProtocol()), 0L);
+            int base = d.getRiskScore() == null ? 0 : d.getRiskScore();
+            d.setBaseRiskScore(base);
+            d.setObservedAttackVolume(attacks);
+            int bump = (int) Math.round(THREAT_WEIGHT_MAX * ((double) attacks / maxRef));
+            d.setRiskScore(Math.min(100, base + bump));
+        }
+    }
+
     /**
      * Get all assets with pagination
      */
     @Transactional(readOnly = true)
     public Page<AssetDTO> getAllAssets(int page, int size, String sortBy, String sortDir) {
-        log.debug("Fetching all assets with pagination: page={}, size={}, sortBy={}, sortDir={}", 
+        log.debug("Fetching all assets with pagination: page={}, size={}, sortBy={}, sortDir={}",
                  page, size, sortBy, sortDir);
-        
-        Sort sort = sortDir.equalsIgnoreCase("ASC") ? 
+
+        Sort sort = sortDir.equalsIgnoreCase("ASC") ?
             Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
         Pageable pageable = PageRequest.of(page, size, sort);
-        
+
         Page<Asset> assets = assetRepository.findAll(pageable);
-        return assets.map(assetMapper::toDto);
+        Page<AssetDTO> dtoPage = assets.map(assetMapper::toDto);
+        weightByThreat(dtoPage.getContent());
+        return dtoPage;
     }
 
     /**
@@ -141,8 +210,10 @@ public class AssetService {
         Pageable pageable = PageRequest.of(page, size, Sort.by("name").ascending());
         Page<Asset> assets = assetRepository.findAssetsWithFilters(
                 name, ipAddress, assetType, purdueLevel, criticalityLevel, isActive, pageable);
-        
-        return assets.map(assetMapper::toDto);
+
+        Page<AssetDTO> dtoPage = assets.map(assetMapper::toDto);
+        weightByThreat(dtoPage.getContent());
+        return dtoPage;
     }
 
     /**
@@ -476,8 +547,9 @@ public class AssetService {
                 Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
         
         Pageable pageable = PageRequest.of(page, size, sort);
-        return assetRepository.findAll(pageable)
-                .map(assetMapper::toDto);
+        Page<AssetDTO> dtoPage = assetRepository.findAll(pageable).map(assetMapper::toDto);
+        weightByThreat(dtoPage.getContent());
+        return dtoPage;
     }
 
     /**
@@ -518,8 +590,11 @@ public class AssetService {
             }
         }
         
-        return assetRepository.findAssetsWithFilters(name, ipAddress, type, level, criticality, isActive, pageable)
+        Page<AssetDTO> dtoPage = assetRepository
+                .findAssetsWithFilters(name, ipAddress, type, level, criticality, isActive, pageable)
                 .map(assetMapper::toDto);
+        weightByThreat(dtoPage.getContent());
+        return dtoPage;
     }
 
     /**
