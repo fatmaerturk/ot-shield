@@ -5,3 +5,11 @@
     encode zstd gzip
     reverse_proxy frontend:80
 }
+
+# Splunk web UI on its own subdomain. Caddy fetches a Let's Encrypt cert for
+# $SPLUNK_DOMAIN once its DNS A record points here. Splunk serves plain HTTP on
+# 8000 inside the compose network; Caddy terminates TLS at the edge.
+{$SPLUNK_DOMAIN} {
+    encode zstd gzip
+    reverse_proxy splunk:8000
+}

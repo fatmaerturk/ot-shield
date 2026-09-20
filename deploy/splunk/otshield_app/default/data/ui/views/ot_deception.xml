@@ -1,0 +1,226 @@
+<form version="1.1" theme="dark">
+  <label>OTShield - Live</label>
+  <description>Live OT deception and anomaly telemetry from OTShield, mapped to MITRE ATT&amp;CK for ICS. Auto-refreshes every 10s.</description>
+
+  <!-- ===================== KPI ROW ===================== -->
+  <row>
+    <panel>
+      <single>
+        <title>OT events (24h)</title>
+        <search>
+          <query>index=main sourcetype=cef | stats count</query>
+          <earliest>-24h@h</earliest><latest>now</latest>
+          <refresh>10s</refresh><refreshType>delay</refreshType>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x6a5acd","0x6a5acd"]</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Breach signals</title>
+        <search>
+          <query>index=main sourcetype=cef
+| rex "CEF:0\|[^|]*\|[^|]*\|[^|]*\|(?&lt;sig&gt;[^|]*)\|"
+| eval is_breach=if(sig=="OT-SIEM-TEST",0,1) | search is_breach=1 | stats count</query>
+          <earliest>-24h@h</earliest><latest>now</latest>
+          <refresh>10s</refresh><refreshType>delay</refreshType>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[0,1]</option>
+        <option name="useColors">1</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Highest risk score</title>
+        <search>
+          <query>index=main sourcetype=cef | rex "otRiskScore=(?&lt;risk&gt;[0-9.]+)"
+| stats max(risk) as m | eval m=coalesce(round(m,0),0)</query>
+          <earliest>-24h@h</earliest><latest>now</latest>
+          <refresh>10s</refresh><refreshType>delay</refreshType>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[40,80]</option>
+        <option name="useColors">1</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>High / critical (sev &gt;= 8)</title>
+        <search>
+          <query>index=main sourcetype=cef
+| rex "CEF:0\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|(?&lt;sev&gt;[^|]*)\|"
+| eval sev=tonumber(sev) | where sev&gt;=8 | stats count</query>
+          <earliest>-24h@h</earliest><latest>now</latest>
+          <refresh>10s</refresh><refreshType>delay</refreshType>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x53a051","0xdc4e41"]</option>
+        <option name="rangeValues">[0]</option>
+        <option name="useColors">1</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>ICS techniques seen</title>
+        <search>
+          <query>index=main sourcetype=cef
+| rex "otMitreTechnique=(?&lt;technique&gt;.+?)(?=\s+[a-zA-Z]+=|$)"
+| where isnotnull(technique) | stats dc(technique)</query>
+          <earliest>-24h@h</earliest><latest>now</latest>
+          <refresh>10s</refresh><refreshType>delay</refreshType>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x1182f3","0x1182f3"]</option>
+        <option name="useColors">1</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+  </row>
+
+  <!-- ===================== MITRE ATT&CK for ICS HEATMAP ===================== -->
+  <row>
+    <panel>
+      <title>MITRE ATT&amp;CK for ICS - kill-chain coverage (observed on the deception fabric)</title>
+      <table>
+        <search>
+          <query>index=main sourcetype=cef
+| rex "otMitreTactic=(?&lt;tactic&gt;.+?)(?=\s+[a-zA-Z]+=|$)"
+| rex "otMitreTechnique=(?&lt;technique&gt;.+?)(?=\s+[a-zA-Z]+=|$)"
+| rex "otRiskScore=(?&lt;risk&gt;[0-9.]+)"
+| where isnotnull(tactic)
+| stats count as Events, dc(technique) as Techniques, max(risk) as Risk by tactic
+| append
+    [| makeresults
+     | eval tactic="Initial Access,Execution,Persistence,Privilege Escalation,Evasion,Discovery,Lateral Movement,Collection,Command and Control,Inhibit Response Function,Impair Process Control,Impact"
+     | makemv delim="," tactic | mvexpand tactic
+     | eval Events=0, Techniques=0, Risk=0]
+| stats sum(Events) as Events, max(Techniques) as Techniques, max(Risk) as Risk by tactic
+| eval Risk=if(Risk=0,null(),round(Risk,0))
+| eval order=case(tactic=="Initial Access",1,tactic=="Execution",2,tactic=="Persistence",3,tactic=="Privilege Escalation",4,tactic=="Evasion",5,tactic=="Discovery",6,tactic=="Lateral Movement",7,tactic=="Collection",8,tactic=="Command and Control",9,tactic=="Inhibit Response Function",10,tactic=="Impair Process Control",11,tactic=="Impact",12,true(),13)
+| sort order | fields - order
+| rename tactic as "ATT&amp;CK for ICS Tactic"</query>
+          <earliest>-24h@h</earliest><latest>now</latest>
+          <refresh>10s</refresh><refreshType>delay</refreshType>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">12</option>
+        <format type="color" field="Events">
+          <colorPalette type="minMidMax" minColor="#152a4e" midColor="#F8BE34" maxColor="#DC4E41"></colorPalette>
+          <scale type="minMidMax" minValue="0" midValue="1" maxValue="4"></scale>
+        </format>
+        <format type="color" field="Risk">
+          <colorPalette type="minMidMax" minColor="#53A051" midColor="#F8BE34" maxColor="#DC4E41"></colorPalette>
+          <scale type="minMidMax" minValue="0" midValue="50" maxValue="100"></scale>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ===================== TECHNIQUE BREAKDOWN + SEVERITY MIX ===================== -->
+  <row>
+    <panel>
+      <chart>
+        <title>ICS techniques by event volume</title>
+        <search>
+          <query>index=main sourcetype=cef
+| rex "otMitreTechnique=(?&lt;technique&gt;.+?)(?=\s+[a-zA-Z]+=|$)"
+| where isnotnull(technique)
+| stats count as Events by technique | sort -Events</query>
+          <earliest>-24h@h</earliest><latest>now</latest>
+          <refresh>10s</refresh><refreshType>delay</refreshType>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.fieldColors">{"Events":0xDC4E41}</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.visibility">collapsed</option>
+        <option name="drilldown">none</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>Event severity mix</title>
+        <search>
+          <query>index=main sourcetype=cef
+| rex "CEF:0\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|(?&lt;sev&gt;[^|]*)\|"
+| eval sev=tonumber(sev)
+| eval Severity=case(sev&gt;=9,"CRITICAL",sev&gt;=7,"HIGH",sev&gt;=4,"MEDIUM",true(),"LOW")
+| stats count by Severity</query>
+          <earliest>-24h@h</earliest><latest>now</latest>
+          <refresh>10s</refresh><refreshType>delay</refreshType>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.seriesColors">[0xDC4E41,0xF1813F,0xF8BE34,0x53A051]</option>
+        <option name="drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- ===================== TIMELINE ===================== -->
+  <row>
+    <panel>
+      <chart>
+        <title>OT events over time by type</title>
+        <search>
+          <query>index=main sourcetype=cef
+| rex "CEF:0\|[^|]*\|[^|]*\|[^|]*\|(?&lt;sig&gt;[^|]*)\|"
+| timechart span=1m count by sig</query>
+          <earliest>-24h@h</earliest><latest>now</latest>
+          <refresh>10s</refresh><refreshType>delay</refreshType>
+        </search>
+        <option name="charting.chart">area</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- ===================== LIVE STREAM ===================== -->
+  <row>
+    <panel>
+      <table>
+        <title>Live OT deception &amp; anomaly stream</title>
+        <search>
+          <query>index=main sourcetype=cef
+| rex "CEF:0\|[^|]*\|[^|]*\|[^|]*\|(?&lt;sig&gt;[^|]*)\|(?&lt;cname&gt;[^|]*)\|(?&lt;sev&gt;[^|]*)\|"
+| rex "\bsrc=(?&lt;src&gt;\S+)"
+| rex "\bproto=(?&lt;proto&gt;\S+)"
+| rex "\bdhost=(?&lt;dhost&gt;.+?)(?=\s+[a-zA-Z]+=|$)"
+| rex "otMitreTactic=(?&lt;tactic&gt;.+?)(?=\s+[a-zA-Z]+=|$)"
+| rex "otMitreTechnique=(?&lt;technique&gt;.+?)(?=\s+[a-zA-Z]+=|$)"
+| rex "otRiskScore=(?&lt;risk&gt;[0-9.]+)"
+| eval sev=tonumber(sev)
+| eval Severity=case(sev&gt;=9,"CRITICAL",sev&gt;=7,"HIGH",sev&gt;=4,"MEDIUM",true(),"LOW")
+| sort -_time
+| table _time sig cname Severity src dhost proto tactic technique risk
+| rename sig as "Signature", cname as "Event", src as "Source IP", dhost as "Target asset", proto as "Protocol", tactic as "MITRE tactic", technique as "MITRE technique", risk as "Risk"</query>
+          <earliest>-24h@h</earliest><latest>now</latest>
+          <refresh>10s</refresh><refreshType>delay</refreshType>
+        </search>
+        <option name="count">25</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="Severity">
+          <colorPalette type="map">{"CRITICAL":#DC4E41,"HIGH":#F1813F,"MEDIUM":#F8BE34,"LOW":#53A051}</colorPalette>
+        </format>
+        <format type="color" field="Risk">
+          <colorPalette type="minMidMax" maxColor="#DC4E41" midColor="#F8BE34" minColor="#53A051"></colorPalette>
+          <scale type="minMidMax" maxValue="100" midValue="50" minValue="0"></scale>
+        </format>
+      </table>
+    </panel>
+  </row>
+</form>

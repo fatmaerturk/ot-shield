@@ -49,6 +49,16 @@ services:
       # MaxMind GeoLite2 dbs are not in git (license); mounted from the host below.
       GEOIP_DATABASE_PATH: /app/geoip/GeoLite2-City.mmdb
       GEOIP_ASN_DATABASE_PATH: /app/geoip/GeoLite2-ASN.mmdb
+      # SIEM forwarding: push live honeypot/breach CEF to the in-network Splunk
+      # container. Overrides the prod default (off) via Spring relaxed binding
+      # (SIEM_FORWARD_HOST -> siem.forward.host). UDP is fire-and-forget, so the
+      # backend does not need to wait for Splunk to be up.
+      SIEM_FORWARD_ENABLED: "true"
+      SIEM_FORWARD_HOST: splunk
+      SIEM_FORWARD_PORT: "1514"
+      SIEM_FORWARD_PROTOCOL: UDP
+      SIEM_FORWARD_FORMAT: CEF
+      SIEM_FORWARD_MIN_SEVERITY: LOW
     volumes:
       # Copy backend/geoip/*.mmdb to the VM (they are git-ignored). Geo/ASN
       # enrichment degrades gracefully if absent, so this is optional.
@@ -62,6 +72,26 @@ services:
     restart: unless-stopped
     volumes:
       - ollama_data:/root/.ollama
+
+  # Splunk demo target. OTShield forwards live CEF here (UDP 1514) and the
+  # timeline re-sync backfills the honeypot history via HEC (8088). The CEF
+  # parsing + the "OTShield - Live" dashboard ship as the mounted otshield_app.
+  # Web UI (8000) is fronted by Caddy at ${SPLUNK_DOMAIN}; no port is published
+  # to the host, so nothing is exposed except through Caddy.
+  splunk:
+    image: splunk/splunk:latest
+    restart: unless-stopped
+    environment:
+      SPLUNK_START_ARGS: --accept-license
+      SPLUNK_GENERAL_TERMS: --accept-sgt-current-at-splunk-com
+      SPLUNK_PASSWORD: ${SPLUNK_PASSWORD}
+      # Pre-provisions HEC (port 8088) with this token on first boot, so the
+      # re-sync script can POST without a manual token-create step.
+      SPLUNK_HEC_TOKEN: ${SPLUNK_HEC_TOKEN}
+    volumes:
+      - splunk_var:/opt/splunk/var
+      - splunk_etc:/opt/splunk/etc
+      - ./deploy/splunk/otshield_app:/opt/splunk/etc/apps/otshield_app
 
   frontend:
     build:
@@ -79,11 +109,14 @@ services:
     restart: unless-stopped
     depends_on:
       - frontend
+      - splunk
     ports:
       - "80:80"
       - "443:443"
     environment:
       OTSHIELD_DOMAIN: ${OTSHIELD_DOMAIN}
+      # Subdomain for the Splunk web UI (needs a DNS A record -> the static IP).
+      SPLUNK_DOMAIN: ${SPLUNK_DOMAIN}
     volumes:
       - ./deploy/tls/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -94,3 +127,5 @@ volumes:
   caddy_data:
   caddy_config:
   ollama_data:
+  splunk_var:
+  splunk_etc:

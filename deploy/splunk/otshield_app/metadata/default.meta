@@ -1,0 +1,7 @@
+# Make the app's knowledge objects globally visible (dashboard, props, transforms).
+[]
+access = read : [ * ], write : [ admin ]
+export = system
+
+[views]
+export = system
