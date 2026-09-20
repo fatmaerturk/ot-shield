@@ -207,7 +207,7 @@ function handleFrame(frame: string, opts: AssistantChatOptions) {
     } else if (line.startsWith('data:')) {
       // NOTE: Spring's SseEmitter writes `data:` + content with NO separator
       // space, so the SSE-spec "strip one leading space" would eat a token's
-      // own leading space (Ollama word-pieces are ' attacker', ' technique', â€¦)
+      // own leading space (Ollama word-pieces are ' attacker', ' technique', …)
       // and glue words together. Keep the payload verbatim.
       dataParts.push(line.slice(5));
     }

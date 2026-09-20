@@ -190,7 +190,7 @@ const NIS2Compliance: React.FC = () => {
           transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
           className="w-12 h-12 mx-auto mb-3 rounded-full border-4 border-violet-200 border-t-violet-600"
         />
-        <p className="text-sm text-slate-500">Loading NIS2 compliance postureâ€¦</p>
+        <p className="text-sm text-slate-500">Loading NIS2 compliance posture…</p>
       </div>
     );
   }
@@ -217,12 +217,12 @@ const NIS2Compliance: React.FC = () => {
         <div className="relative flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 ring-1 ring-white/20 text-xs font-semibold tracking-wider backdrop-blur-sm mb-4">
-              EU 2022/2555 Â· NIS2 DIRECTIVE
+              EU 2022/2555 · NIS2 DIRECTIVE
             </div>
             <h1 className="text-3xl md:text-4xl font-bold leading-tight">
               NIS2 Compliance Posture
               <span className="block text-violet-100/90 font-medium text-lg md:text-xl mt-2">
-                {data.organization.name} Â· {data.organization.sector}
+                {data.organization.name} · {data.organization.sector}
               </span>
               <span className="block mt-3 text-sm text-violet-100/70">
                 Live posture computed from honeypot telemetry, alerts, and incident timelines.
@@ -239,7 +239,7 @@ const NIS2Compliance: React.FC = () => {
                 {data.postureScore.classification}
                 {data.postureScore.trendDelta !== 0 && (
                   <span className={`ml-2 ${data.postureScore.trendDelta < 0 ? 'text-rose-300' : 'text-emerald-300'}`}>
-                    {data.postureScore.trendDelta > 0 ? 'â–²' : 'â–¼'} {Math.abs(data.postureScore.trendDelta)}%
+                    {data.postureScore.trendDelta > 0 ? '▲' : '▼'} {Math.abs(data.postureScore.trendDelta)}%
                   </span>
                 )}
               </p>
@@ -338,7 +338,7 @@ const NIS2Compliance: React.FC = () => {
                           {m.status.replace('_', ' ')}
                         </span>
                       </div>
-                      <div className="flex-shrink-0 text-violet-600 text-xs font-semibold">{isExpanded ? 'â–²' : 'â–¼'}</div>
+                      <div className="flex-shrink-0 text-violet-600 text-xs font-semibold">{isExpanded ? '▲' : '▼'}</div>
                     </div>
                     <AnimatePresence>
                       {isExpanded && (
@@ -388,7 +388,7 @@ const NIS2Compliance: React.FC = () => {
                 </p>
               </div>
               {data.reportableIncidents.length === 0 ? (
-                <p className="text-xs text-slate-500 text-center py-8">No reportable incidents at the moment. âœ“</p>
+                <p className="text-xs text-slate-500 text-center py-8">No reportable incidents at the moment. ✓</p>
               ) : (
                 <div className="space-y-2">
                   {data.reportableIncidents.map((inc, i) => (
@@ -484,7 +484,7 @@ const NIS2Compliance: React.FC = () => {
                   <p className="text-3xl font-bold text-violet-900 tabular-nums mt-1">
                     <AnimatedNumber value={data.evidenceLibrary.totalArtifacts} />
                   </p>
-                  <p className="text-xs text-violet-700/80">Logs Â· Alerts Â· Policies Â· Reviews</p>
+                  <p className="text-xs text-violet-700/80">Logs · Alerts · Policies · Reviews</p>
                 </div>
                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
                   <p className="text-[10px] uppercase font-bold tracking-wider text-emerald-700">Retention compliance</p>
@@ -559,7 +559,7 @@ const NIS2Compliance: React.FC = () => {
                         URL.revokeObjectURL(url);
                       }}
                     >
-                      Export CSV â†“
+                      Export CSV ↓
                     </button>
                   </div>
                   <div className="overflow-x-auto">
@@ -622,7 +622,7 @@ const NIS2Compliance: React.FC = () => {
                       className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 rounded-full"
                     />
                   </div>
-                  <p className="text-[10px] text-slate-500 mt-2">YES = full credit Â· PARTIAL = half credit Â· NO = no credit</p>
+                  <p className="text-[10px] text-slate-500 mt-2">YES = full credit · PARTIAL = half credit · NO = no credit</p>
                 </div>
               </div>
 
@@ -635,7 +635,7 @@ const NIS2Compliance: React.FC = () => {
                   className="bg-white border border-slate-200 rounded-xl overflow-hidden"
                 >
                   <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
-                    <p className="text-sm font-semibold text-slate-900">{section.id} Â· {section.title}</p>
+                    <p className="text-sm font-semibold text-slate-900">{section.id} · {section.title}</p>
                   </div>
                   <div className="p-4 space-y-3">
                     {section.questions.map((q) => {
@@ -679,7 +679,7 @@ const NIS2Compliance: React.FC = () => {
                       if (gaps.length === 0 && partial.length === 0) return null;
                       return (
                         <div key={section.id} className="border-l-4 border-rose-400 pl-3 py-1">
-                          <p className="text-xs font-semibold text-slate-900">{section.id} Â· {section.title}</p>
+                          <p className="text-xs font-semibold text-slate-900">{section.id} · {section.title}</p>
                           <p className="text-[11px] text-slate-600">
                             {gaps.length} gap{gaps.length === 1 ? '' : 's'}, {partial.length} partial coverage
                           </p>
@@ -689,7 +689,7 @@ const NIS2Compliance: React.FC = () => {
                     {data.selfAssessment.every((s) =>
                       s.questions.every((q) => answers[q.id] !== 'NO' && answers[q.id] !== 'PARTIAL'),
                     ) && (
-                      <p className="text-xs text-emerald-700">âœ“ No gaps identified in answered questions</p>
+                      <p className="text-xs text-emerald-700">✓ No gaps identified in answered questions</p>
                     )}
                   </div>
                 </div>

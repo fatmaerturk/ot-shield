@@ -77,7 +77,7 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response?.status === 401) {
-      // Token expired veya geÃ§ersiz
+      // Token expired veya geçersiz
       const refreshToken = localStorage.getItem('refreshToken');
       
       if (refreshToken) {
@@ -90,7 +90,7 @@ api.interceptors.response.use(
           if (response.data?.token) {
             localStorage.setItem('token', response.data.token);
             
-            // Orijinal isteÄŸi yeni token ile tekrar dene
+            // Orijinal isteği yeni token ile tekrar dene
             if (error.config.headers) {
               error.config.headers['Authorization'] = `Bearer ${response.data.token}`;
             }

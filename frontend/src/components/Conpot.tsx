@@ -293,7 +293,7 @@ const Conpot: React.FC = () => {
       { id: 'TA0107', name: 'Impair Process Control', observed: 0, color: 'from-rose-500 to-pink-500' },
       { id: 'TA0105', name: 'Impact', observed: 0, color: 'from-red-600 to-rose-700' },
     ];
-    // Simple keyword routing: scans â†’ discovery, login attempts â†’ initial access, write/exec â†’ impact, etc.
+    // Simple keyword routing: scans → discovery, login attempts → initial access, write/exec → impact, etc.
     Object.entries(stats.modbusFunctionBreakdown).forEach(([fc, count]) => {
       // FC 1-4 = read = Discovery; FC 5,6,15,16 = write = Impair/Impact
       const num = parseInt(fc.replace('FC ', ''), 10);
@@ -324,7 +324,7 @@ const Conpot: React.FC = () => {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
-              ICS DECEPTION Â· LIVE
+              ICS DECEPTION · LIVE
             </div>
             <h1 className="text-3xl md:text-4xl font-bold leading-tight">
               ICS Decoy Telemetry
@@ -334,7 +334,7 @@ const Conpot: React.FC = () => {
               <span className="block mt-3 text-sm text-violet-100/70">
                 Looking for fleet-wide analytics, geo maps, and credential intelligence? Open{' '}
                 <Link to="/attack-intelligence" className="underline decoration-violet-300/60 hover:decoration-white font-semibold text-white">
-                  Attack Intelligence â†’
+                  Attack Intelligence →
                 </Link>
               </span>
             </h1>
@@ -350,7 +350,7 @@ const Conpot: React.FC = () => {
             <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 ring-1 ring-white/20 backdrop-blur-sm" title="Decoy is configured as remote (lifecycle managed elsewhere)">
               <span className={`w-2 h-2 rounded-full ${remoteMode ? 'bg-violet-300' : 'bg-amber-300'}`} />
               <span className="text-xs font-semibold uppercase tracking-wider text-white">
-                {remoteMode === null ? 'Mode â€¦' : remoteMode ? 'Remote mode' : 'Local mode'}
+                {remoteMode === null ? 'Mode …' : remoteMode ? 'Remote mode' : 'Local mode'}
               </span>
             </div>
             <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 ring-1 ring-white/20 backdrop-blur-sm" title={eventsRecentlyGrew ? 'New event in the last few seconds' : 'Waiting for the next event'}>
@@ -413,7 +413,7 @@ const Conpot: React.FC = () => {
           },
           {
             label: 'Errors / Resets', value: (stats.errorCount + stats.resetConnections).toLocaleString(),
-            hint: `${stats.errorCount} exceptions Â· ${stats.resetConnections} resets`,
+            hint: `${stats.errorCount} exceptions · ${stats.resetConnections} resets`,
             gradient: 'from-amber-500 to-rose-500',
             icon: (<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>),
           },
@@ -533,7 +533,7 @@ const Conpot: React.FC = () => {
                 {Object.entries(stats.httpMethodBreakdown).map(([m, c]) => (
                   <span key={m} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gradient-to-br from-violet-50 to-fuchsia-50 ring-1 ring-violet-200/60 text-xs font-semibold text-violet-700">
                     <span className="font-mono">{m}</span>
-                    <span className="text-violet-500">Â· {c}</span>
+                    <span className="text-violet-500">· {c}</span>
                   </span>
                 ))}
               </div>
@@ -566,7 +566,7 @@ const Conpot: React.FC = () => {
                   className="text-[11px] font-semibold uppercase tracking-wider text-fuchsia-700 bg-fuchsia-50 hover:bg-fuchsia-100 ring-1 ring-fuchsia-200 px-2 py-1 rounded-full transition"
                   title="Show top source IPs observed by this decoy instance"
                 >
-                  Top Attackers ({stats.topAttackers.length}) â†’
+                  Top Attackers ({stats.topAttackers.length}) →
                 </button>
               </div>
             </div>
@@ -835,7 +835,7 @@ const Conpot: React.FC = () => {
                 </div>
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">Top Attackers - decoy instance</h2>
-                  <p className="text-xs text-slate-500 mt-0.5">Source IPs ranked by event count Â· {stats.uniqueIPs} unique IPs across {stats.totalLogs} log lines</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Source IPs ranked by event count · {stats.uniqueIPs} unique IPs across {stats.totalLogs} log lines</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -844,7 +844,7 @@ const Conpot: React.FC = () => {
                   className="text-[11px] font-semibold uppercase tracking-wider text-violet-700 bg-violet-50 hover:bg-violet-100 ring-1 ring-violet-200 px-2.5 py-1.5 rounded-lg transition"
                   title="Open fleet-wide Attack Intelligence with geo, ASN, credentials"
                 >
-                  Fleet view â†’
+                  Fleet view →
                 </Link>
                 <button
                   type="button"
@@ -927,22 +927,22 @@ const Conpot: React.FC = () => {
                             href={`https://www.abuseipdb.com/check/${selectedAttackerIp}`}
                             target="_blank" rel="noreferrer"
                             className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 bg-white hover:bg-slate-50 ring-1 ring-slate-200 px-2.5 py-1.5 rounded-lg transition"
-                          >AbuseIPDB â†—</a>
+                          >AbuseIPDB ↗</a>
                           <a
                             href={`https://www.virustotal.com/gui/ip-address/${selectedAttackerIp}`}
                             target="_blank" rel="noreferrer"
                             className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 bg-white hover:bg-slate-50 ring-1 ring-slate-200 px-2.5 py-1.5 rounded-lg transition"
-                          >VirusTotal â†—</a>
+                          >VirusTotal ↗</a>
                           <a
                             href={`https://ipinfo.io/${selectedAttackerIp}`}
                             target="_blank" rel="noreferrer"
                             className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 bg-white hover:bg-slate-50 ring-1 ring-slate-200 px-2.5 py-1.5 rounded-lg transition"
-                          >ipinfo.io â†—</a>
+                          >ipinfo.io ↗</a>
                           <a
                             href={`https://www.shodan.io/host/${selectedAttackerIp}`}
                             target="_blank" rel="noreferrer"
                             className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 bg-white hover:bg-slate-50 ring-1 ring-slate-200 px-2.5 py-1.5 rounded-lg transition"
-                          >Shodan â†—</a>
+                          >Shodan ↗</a>
                         </div>
                       </div>
 
@@ -1020,7 +1020,7 @@ const Conpot: React.FC = () => {
                               </div>
                             </td>
                             <td className="px-6 py-3 whitespace-nowrap text-right">
-                              <span className="text-[11px] font-semibold uppercase tracking-wider text-violet-700">Details â†’</span>
+                              <span className="text-[11px] font-semibold uppercase tracking-wider text-violet-700">Details →</span>
                             </td>
                           </tr>
                         );
