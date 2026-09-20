@@ -27,9 +27,14 @@ services:
   backend:
     build: ./backend
     restart: unless-stopped
+    # Cap the JVM so it shares the box with Ollama (JAVA_OPTS uses
+    # MaxRAMPercentage=75, i.e. ~1.5g heap of this 2g limit).
+    mem_limit: 2g
     depends_on:
       postgres:
         condition: service_healthy
+      ollama:
+        condition: service_started
     environment:
       SPRING_PROFILES_ACTIVE: prod
       DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
@@ -37,6 +42,9 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       HONEYPOT_INGEST_TOKEN: ${HONEYPOT_INGEST_TOKEN}
+      # AI Research copilot: reach the Ollama container (overrides the localhost
+      # default via Spring relaxed binding: OLLAMA_BASE_URL -> ollama.base-url).
+      OLLAMA_BASE_URL: http://ollama:11434
       # MaxMind GeoLite2 dbs are not in git (license); mounted from the host below.
       GEOIP_DATABASE_PATH: /app/geoip/GeoLite2-City.mmdb
       GEOIP_ASN_DATABASE_PATH: /app/geoip/GeoLite2-ASN.mmdb
@@ -45,6 +53,14 @@ services:
       # enrichment degrades gracefully if absent, so this is optional.
       - ./backend/geoip:/app/geoip:ro
     # No published port: nginx (frontend) proxies to it as http://backend:8080.
+
+  # Local LLM runtime for the Research copilot (embeddings + chat). Internal
+  # only. Models are pulled after first start (see deploy/README.md).
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
 
   frontend:
     build:
@@ -76,3 +92,4 @@ volumes:
   pgdata:
   caddy_data:
   caddy_config:
+  ollama_data:
