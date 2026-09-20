@@ -30,6 +30,15 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthFilter;
     private final CustomUserDetailsService userDetailsService;
 
+    // Comma-separated CORS allowed origins. Dev default is localhost; prod sets
+    // the public origin(s) via CORS_ALLOWED_ORIGINS (see application-prod.properties).
+    // The browser sends an Origin header even for same-origin POSTs behind a
+    // reverse proxy (scheme differs), so the public URL MUST be listed here or
+    // Spring rejects the request with 403 "Invalid CORS request".
+    @org.springframework.beans.factory.annotation.Value(
+        "${cors.allowed-origins:http://localhost:3000,http://127.0.0.1:3000}")
+    private String allowedOrigins;
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -97,7 +106,8 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList("http://localhost:3000", "http://127.0.0.1:3000"));
+        configuration.setAllowedOrigins(
+            Arrays.stream(allowedOrigins.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList());
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);
