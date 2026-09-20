@@ -23,6 +23,7 @@ import TTPIntelTab from './TTPIntelTab';
 import AttackerWatchlist from './AttackerWatchlist';
 import AnonymityBadge from './AnonymityBadge';
 import { threatIntelService, IpAnonymity } from '../services/threatIntelService';
+import { parseServerTime } from '../utils/time';
 
 ChartJS.register(
   CategoryScale,
@@ -211,7 +212,7 @@ const PROTO_COLORS = [
 
 const formatRelative = (iso: string | null): string => {
   if (!iso) return '-';
-  const t = new Date(iso).getTime();
+  const t = parseServerTime(iso);   // parses the backend's naive timestamp as UTC
   if (isNaN(t)) return '-';
   const diff = Math.max(0, Date.now() - t);
   const mins = Math.floor(diff / 60000);

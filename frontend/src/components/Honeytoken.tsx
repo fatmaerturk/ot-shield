@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { parseServerTime } from '../utils/time';
 import { Icon, PageHero, Panel } from './theme';
 import {
   honeytokenService,
@@ -69,7 +70,7 @@ const TYPE_ORDER: HoneytokenType[] = ['URL_BEACON', 'FILE_BEACON', 'CREDENTIAL',
 
 const timeAgo = (iso?: string | null) => {
   if (!iso) return '-';
-  const d = new Date(iso).getTime();
+  const d = parseServerTime(iso);
   const s = Math.floor((Date.now() - d) / 1000);
   if (s < 60) return `${s}s ago`;
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;

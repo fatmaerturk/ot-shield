@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { parseServerTime } from '../utils/time';
 import { motion, AnimatePresence, Variants } from 'framer-motion';
 
 // =====================================================================
@@ -147,7 +148,7 @@ const tierStyle = (tier: string) => {
 
 const formatTimeAgo = (iso: string | null): string => {
   if (!iso) return '-';
-  const t = new Date(iso).getTime();
+  const t = parseServerTime(iso);
   if (Number.isNaN(t)) return '-';
   const diffMs = Date.now() - t;
   const m = Math.floor(diffMs / 60000);

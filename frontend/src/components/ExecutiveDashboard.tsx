@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { parseServerTime } from '../utils/time';
 import { motion } from 'framer-motion';
 import { Line, Bar } from 'react-chartjs-2';
 import {
@@ -150,7 +151,7 @@ const fmtNum = (n: number | undefined | null, fallback = '-'): string => {
 
 const relativeTime = (iso?: string): string => {
   if (!iso) return '';
-  const ts = new Date(iso).getTime();
+  const ts = parseServerTime(iso);
   if (Number.isNaN(ts)) return '';
   const diff = Date.now() - ts;
   if (diff < 60_000) return `${Math.max(1, Math.floor(diff / 1000))}s ago`;

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
+import { parseServerTime } from '../../../utils/time';
 interface TripwireEvent {
   id: number;
   timestamp: string | null;
@@ -20,7 +21,7 @@ interface DashboardStats {
 
 const formatRelative = (iso: string | null): string => {
   if (!iso) return 'just now';
-  const t = new Date(iso).getTime();
+  const t = parseServerTime(iso);
   if (isNaN(t)) return 'just now';
   const diff = Math.max(0, Date.now() - t);
   const mins = Math.floor(diff / 60000);

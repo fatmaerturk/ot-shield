@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { parseServerTime } from '../utils/time';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   decoyService,
@@ -962,7 +963,7 @@ const DecoyChip: React.FC<{ decoy: DecoyInstance; selected: boolean; onClick: ()
 /* ---------- Helpers ---------- */
 function relativeTime(iso: string | null | undefined): string {
   if (!iso) return '-';
-  const d = new Date(iso).getTime();
+  const d = parseServerTime(iso);
   const diff = Date.now() - d;
   if (diff < 60_000) return Math.max(1, Math.floor(diff / 1000)) + 's ago';
   if (diff < 3_600_000) return Math.floor(diff / 60_000) + 'm ago';

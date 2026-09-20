@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { parseServerTime } from '../../utils/time';
 import { motion } from 'framer-motion';
 import { Panel, Icon, pageItem, theme } from '../theme';
 import {
@@ -469,7 +470,7 @@ const Labelled: React.FC<{ label: string; children: React.ReactNode }> = ({ labe
 
 const formatRelative = (iso: string | null): string => {
   if (!iso) return '-';
-  const t = new Date(iso).getTime();
+  const t = parseServerTime(iso);
   if (Number.isNaN(t)) return '-';
   const diff = (Date.now() - t) / 1000;
   if (diff < 60) return `${Math.round(diff)}s ago`;

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { parseServerTime } from '../../utils/time';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Panel, Icon, pageItem, theme } from '../theme';
 import {
@@ -59,7 +60,7 @@ import { useBundles } from '../../contexts/BundleContext';
 
 const formatRelative = (iso: string | null): string => {
   if (!iso) return '-';
-  const t = new Date(iso).getTime();
+  const t = parseServerTime(iso);
   if (Number.isNaN(t)) return '-';
   const diff = (Date.now() - t) / 1000;
   if (diff < 60) return `${Math.round(diff)}s ago`;
