@@ -70,6 +70,13 @@ public class AuthService {
         } catch (BadCredentialsException e) {
             log.error("Invalid credentials for user: {}", request.getEmail());
             throw new BadCredentialsException("Invalid email or password");
+        } catch (UsernameNotFoundException e) {
+            // Unknown email: fail with the SAME 401 + message as a wrong password
+            // so responses don't reveal whether an account exists (no user
+            // enumeration). BadCredentialsException is an AuthenticationException,
+            // which Spring Security's ExceptionTranslationFilter maps to 401.
+            log.warn("Login attempt for unknown user: {}", request.getEmail());
+            throw new BadCredentialsException("Invalid email or password");
         } catch (Exception e) {
             log.error("Login error for user: {}", request.getEmail(), e);
             throw new RuntimeException("An error occurred during login");
