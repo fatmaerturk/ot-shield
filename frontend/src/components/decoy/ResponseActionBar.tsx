@@ -133,7 +133,7 @@ const ResponseActionBar: React.FC<Props> = ({ engagement, onActionApplied }) => 
 
       {/* Confirm dialog */}
       {pending && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
           <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl ring-1 ring-slate-200 overflow-hidden">
             <div className="p-5 border-b border-slate-100">
               <div className="text-xs uppercase tracking-wider text-violet-600 font-semibold">Response action</div>

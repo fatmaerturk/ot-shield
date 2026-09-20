@@ -3856,11 +3856,11 @@ const AlertDetailDrawer: React.FC<AlertDetailDrawerProps> = ({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-40"
+        className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-[10000]"
         onClick={onClose}
       />
       {/* Panel */}
-      <aside className="fixed inset-y-0 right-0 w-full max-w-2xl bg-white shadow-2xl z-50 overflow-y-auto">
+      <aside className="fixed inset-y-0 right-0 w-full max-w-2xl bg-white shadow-2xl z-[10001] overflow-y-auto">
         <div className="p-6">
           {/* Header */}
           <div className="flex items-start justify-between gap-4 mb-4">

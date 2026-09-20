@@ -141,7 +141,7 @@ const DpiEventModal: React.FC<Props> = ({ open, scope, onClose }) => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      className="fixed inset-0 z-[10001] flex items-center justify-center bg-black/50"
       onClick={onClose}
     >
       <div

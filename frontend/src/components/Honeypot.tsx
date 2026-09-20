@@ -1469,7 +1469,7 @@ const CredCard: React.FC<{
 };
 
 const AttackerModal: React.FC<{ attacker: TopAttacker; events: RecentEvent[]; anon?: IpAnonymity; onClose: () => void }> = ({ attacker, events, anon, onClose }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={onClose}>
+  <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={onClose}>
     <div className="bg-white rounded-2xl shadow-2xl ring-1 ring-slate-200/70 w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
       <div className="px-6 py-4 border-b border-slate-200/70 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">

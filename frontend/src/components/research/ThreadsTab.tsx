@@ -1169,14 +1169,14 @@ const PromoteToVulnModal: React.FC<PromoteToVulnModalProps> = ({ message, onClos
   return (
     <>
       <motion.div
-        className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-40"
+        className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-[10000]"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
       />
       <motion.div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        className="fixed inset-0 z-[10001] flex items-center justify-center p-4"
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.98 }}

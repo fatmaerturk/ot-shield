@@ -581,17 +581,17 @@ const VulnDetailDrawer: React.FC<VulnDetailDrawerProps> = ({ id, onClose }) => {
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Backdrop - above the top nav (z-[9999]) so the drawer covers it */}
       <motion.div
-        className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-40"
+        className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-[10000]"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
       />
-      {/* Panel */}
+      {/* Panel - must sit above the nav (z-[9999]) or it slides in underneath */}
       <motion.aside
-        className="fixed inset-y-0 right-0 w-full max-w-2xl bg-white shadow-2xl z-50 overflow-y-auto"
+        className="fixed inset-y-0 right-0 w-full max-w-2xl bg-white shadow-2xl z-[10001] overflow-y-auto"
         initial={{ x: '100%' }}
         animate={{ x: 0 }}
         exit={{ x: '100%' }}
@@ -1017,14 +1017,14 @@ const NewVulnModal: React.FC<NewVulnModalProps> = ({ onClose, onCreated }) => {
   return (
     <>
       <motion.div
-        className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-40"
+        className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-[10000]"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
       />
       <motion.div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        className="fixed inset-0 z-[10001] flex items-center justify-center p-4"
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.98 }}

@@ -818,7 +818,7 @@ const Conpot: React.FC = () => {
       {/* ===== Top Attackers modal ===== */}
       {attackersOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+          className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
           onClick={() => { setAttackersOpen(false); setSelectedAttackerIp(null); }}
         >
           <div

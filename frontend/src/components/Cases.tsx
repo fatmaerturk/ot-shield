@@ -386,7 +386,7 @@ const NewCaseModal: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
       <div className="bg-white rounded-2xl w-full max-w-lg ring-1 ring-slate-200 shadow-2xl overflow-hidden">
         <div
           className="px-6 py-4 text-white"

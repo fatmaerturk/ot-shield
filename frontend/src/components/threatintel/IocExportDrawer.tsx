@@ -73,7 +73,7 @@ const IocExportDrawer: React.FC<Props> = ({ open, onClose, ips }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/40 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[10001] flex items-stretch justify-end bg-black/40 backdrop-blur-sm">
       <div className="bg-white w-full max-w-md h-full shadow-2xl ring-1 ring-violet-200 flex flex-col">
         <div className="p-4 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white">
           <div className="flex items-center justify-between">
