@@ -6,14 +6,16 @@
 
 services:
   postgres:
-    image: postgres:16
+    image: postgres:18
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USERNAME}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # postgres:18+ stores data under /var/lib/postgresql/<major>; mount the
+      # parent (NOT /var/lib/postgresql/data, which is the pre-18 convention).
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_NAME}"]
       interval: 5s
@@ -52,9 +54,25 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+    expose:
+      - "80"          # Caddy fronts it; not published to the host directly
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - frontend
     ports:
       - "80:80"
-      # - "443:443"   # enable once TLS is configured (see deploy/README.md)
+      - "443:443"
+    environment:
+      OTSHIELD_DOMAIN: ${OTSHIELD_DOMAIN}
+    volumes:
+      - ./deploy/tls/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
 
 volumes:
   pgdata:
+  caddy_data:
+  caddy_config:
