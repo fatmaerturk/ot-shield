@@ -558,6 +558,10 @@ public class ConpotService {
                         protocol = "HTTP";
                         attackType = "HTTP Request";
                         severity = "LOW";
+                    } else if (logLine.toLowerCase().contains("ethernet/ip") || logLine.toLowerCase().contains("enip")) {
+                        protocol = "ENIP";
+                        attackType = "EtherNet/IP Connection";
+                        severity = "HIGH";
                     } else if (logLine.toLowerCase().contains("s7comm")) {
                         protocol = "S7COMM";
                         attackType = "S7Comm Connection";
@@ -597,6 +601,9 @@ public class ConpotService {
                 } else if (logLine.toLowerCase().contains("http")) {
                     protocol = "HTTP";
                     attackType = "HTTP Attack";
+                } else if (logLine.toLowerCase().contains("ethernet/ip") || logLine.toLowerCase().contains("enip")) {
+                    protocol = "ENIP";
+                    attackType = "EtherNet/IP Exploit";
                 } else if (logLine.toLowerCase().contains("s7comm")) {
                     protocol = "S7COMM";
                     attackType = "S7Comm Exploit";

@@ -15,7 +15,7 @@ a CRITICAL incident — no legitimate user has any reason to talk to it.
 
 Configuration (env vars):
     HMI_TYPE             SUBSTATION | WATER_TREATMENT | REFINERY | MANUFACTURING
-    HMI_PROTOCOL         MODBUS | S7COMM | IEC104 | HTTP
+    HMI_PROTOCOL         MODBUS | S7COMM | IEC104 | ENIP | HTTP
     HMI_PORT             TCP port to listen on (e.g. 502)
     HMI_VENDOR           SIEMENS | ROCKWELL | SCHNEIDER | ABB | GENERIC
     HMI_SITE_TAG         Free-form site identifier shown in alarms (e.g. "PLANT-A-NORTH")
@@ -29,6 +29,7 @@ import sys
 import json
 import time
 import socket
+import struct
 import logging
 import threading
 import urllib.request
@@ -88,10 +89,32 @@ def http_banner() -> bytes:
     ).encode()
     return headers + body
 
+def enip_banner() -> bytes:
+    """EtherNet/IP ListIdentity response (encapsulation command 0x0063) that
+    advertises a Rockwell/Allen-Bradley ControlLogix EtherNet/IP module, so an
+    attacker sees a believable Allen-Bradley CIP identity."""
+    product = b"1756-EN2T/B"
+    ident  = struct.pack("<H", 1)                          # encap protocol version
+    ident += struct.pack(">hHI", 2, 44818, 0) + b"\x00" * 8  # socket address (16B)
+    ident += struct.pack("<H", 0x0001)                     # Vendor ID: Rockwell/Allen-Bradley
+    ident += struct.pack("<H", 0x000C)                     # Device Type: Communications Adapter
+    ident += struct.pack("<H", 0x0036)                     # Product Code
+    ident += bytes([11, 2])                                # Revision major.minor
+    ident += struct.pack("<H", 0x0060)                     # Status word
+    ident += struct.pack("<I", 0x00A1B2C3)                 # Serial number
+    ident += bytes([len(product)]) + product               # Product name
+    ident += bytes([0x03])                                 # State
+    data   = struct.pack("<H", 1)                          # CPF item count
+    data  += struct.pack("<HH", 0x000C, len(ident)) + ident  # identity item (type 0x0C)
+    header = struct.pack("<HH", 0x0063, len(data))         # command + length
+    header += b"\x00" * 4 + b"\x00" * 4 + b"\x00" * 8 + b"\x00" * 4  # session/status/context/options
+    return header + data
+
 BANNERS = {
     "MODBUS":  modbus_banner,
     "S7COMM":  s7_banner,
     "IEC104":  iec104_banner,
+    "ENIP":    enip_banner,
     "HTTP":    http_banner,
 }
 
@@ -114,7 +137,8 @@ def post_alarm(source_ip: str, source_port: int, payload_hex: str) -> None:
     # Build a log line the existing Conpot parser will recognise. We re-use the
     # well-known "New <Protocol> connection from <ip>:<port>." shape so the
     # backend's processLogLine path picks it up without changes.
-    proto_label = HMI_PROTOCOL.title() if HMI_PROTOCOL != "IEC104" else "IEC104"
+    proto_label = {"IEC104": "IEC104", "ENIP": "EtherNet/IP", "S7COMM": "S7Comm"}.get(
+        HMI_PROTOCOL, HMI_PROTOCOL.title())
     line = (
         f"[INTERNAL-DECOY] [{HMI_SITE_TAG}] "
         f"New {proto_label} connection from {source_ip}:{source_port}. "

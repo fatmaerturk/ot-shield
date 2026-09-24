@@ -40,15 +40,15 @@ printf '\x00\x02\x00\x00\x00\x06\x01\x06\x00\x01\x27\x10' \
   | ncat -w 2 172.30.50.11 502 | xxd | head -3 || true
 sleep 1
 
-# ─── Phase 4: IEC104 + S7Comm probes ──────────────────────────────────
+# ─── Phase 4: IEC104 + EtherNet/IP probes ─────────────────────────────
 echo ""
 echo "[4/4] IEC104 STARTDT → refinery (172.30.50.12:2404)"
 printf '\x68\x04\x07\x00\x00\x00' | ncat -w 2 172.30.50.12 2404 | xxd | head -3 || true
 
 echo ""
-echo "[4/4] S7Comm CR (TPKT) → manufacturing (172.30.50.13:102)"
-printf '\x03\x00\x00\x16\x11\xe0\x00\x00\x00\x01\x00\xc0\x01\x0a\xc1\x02\x01\x00\xc2\x02\x01\x02' \
-  | ncat -w 2 172.30.50.13 102 | xxd | head -3 || true
+echo "[4/4] EtherNet/IP ListIdentity → manufacturing (172.30.50.13:44818)"
+printf '\x63\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00' \
+  | ncat -w 2 172.30.50.13 44818 | xxd | head -3 || true
 
 echo ""
 echo "════════════════════════════════════════════════════════════════"

@@ -7,7 +7,7 @@
 #   172.30.50.10  decoy-substation       (Modbus 502)
 #   172.30.50.11  decoy-water-treatment  (Modbus 502)
 #   172.30.50.12  decoy-refinery         (IEC104 2404)
-#   172.30.50.13  decoy-manufacturing    (S7Comm 102)
+#   172.30.50.13  decoy-manufacturing    (EtherNet/IP 44818)
 #   172.30.50.250 attacker-sandbox       (alpine + nmap + ncat — for testing)
 #
 # Each HMI POSTs every inbound TCP connection to the OTShield backend on
@@ -107,7 +107,7 @@ services:
       INGEST_TOKEN: ${INGEST_TOKEN}
 
   # ──────────────────────────────────────────────────────────────────────────
-  # MANUFACTURING — assembly line OEE HMI (Rockwell-style, S7Comm)
+  # MANUFACTURING — assembly line OEE HMI (Rockwell-style, EtherNet/IP)
   # ──────────────────────────────────────────────────────────────────────────
   decoy-manufacturing:
     <<: *tripwire-base
@@ -117,11 +117,11 @@ services:
       ot-subnet:
         ipv4_address: 172.30.50.13
     ports:
-      - "10102:102"  # host:10102 -> manufacturing S7Comm
+      - "10102:44818"  # host:10102 -> manufacturing EtherNet/IP
     environment:
       HMI_TYPE:     MANUFACTURING
-      HMI_PROTOCOL: S7COMM
-      HMI_PORT:     "102"
+      HMI_PROTOCOL: ENIP
+      HMI_PORT:     "44818"
       HMI_VENDOR:   ROCKWELL
       HMI_SITE_TAG: ASSEMBLY-LINE-1
       INGEST_URL:   ${INGEST_URL}

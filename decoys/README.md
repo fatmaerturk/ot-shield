@@ -33,7 +33,7 @@ The four sites:
 | `decoy-substation`      | 172.30.50.10  | 502  | Modbus   | Siemens   |
 | `decoy-water-treatment` | 172.30.50.11  | 502  | Modbus   | Schneider |
 | `decoy-refinery`        | 172.30.50.12  | 2404 | IEC104   | ABB       |
-| `decoy-manufacturing`   | 172.30.50.13  | 102  | S7Comm   | Rockwell  |
+| `decoy-manufacturing`   | 172.30.50.13  | 44818 | EtherNet/IP | Rockwell |
 | `attacker-sandbox`      | 172.30.50.250 | —    | —        | (alpine)  |
 
 ## Running it locally
