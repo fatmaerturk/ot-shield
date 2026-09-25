@@ -363,7 +363,10 @@ public class HoneypotController {
     private static final java.util.regex.Pattern TRIPWIRE_SITE =
         java.util.regex.Pattern.compile("\\[INTERNAL-DECOY\\]\\s*\\[([^\\]]+)\\]");
     private static final java.util.regex.Pattern TRIPWIRE_CONN =
-        java.util.regex.Pattern.compile("New\\s+(\\w+)\\s+connection\\s+from\\s+(\\d{1,3}(?:\\.\\d{1,3}){3}):(\\d+)");
+        // Protocol token may contain "/" (e.g. EtherNet/IP), so match [\w/]+, not \w+.
+        java.util.regex.Pattern.compile("New\\s+([\\w/]+)\\s+connection\\s+from\\s+(\\d{1,3}(?:\\.\\d{1,3}){3}):(\\d+)");
+    private static final java.util.regex.Pattern ANY_IPV4 =
+        java.util.regex.Pattern.compile("(\\d{1,3}(?:\\.\\d{1,3}){3})");
     private static final java.util.regex.Pattern TRIPWIRE_PORT =
         java.util.regex.Pattern.compile("on\\s+port\\s+(\\d+)");
 
@@ -387,7 +390,17 @@ public class HoneypotController {
         // Normalise protocol naming so it lines up with the rest of the dashboard
         if ("S7".equals(protoLabel)) protoLabel = "S7COMM";
         if ("IEC 104".equals(protoLabel) || "IEC-104".equals(protoLabel)) protoLabel = "IEC104";
+        if ("ETHERNET/IP".equals(protoLabel) || "ETHERNETIP".equals(protoLabel) || "ENIP".equals(protoLabel)) protoLabel = "ETHERNET_IP";
         row.setProtocol(protoLabel);
+
+        // Fallback: if the structured pattern did not yield a source IP (e.g. a
+        // future line format), grab the first IPv4 in the line so we never write
+        // a null source_ip (which violates the NOT NULL constraint and drops the
+        // alarm). The tripwire always includes the attacker IP in the line.
+        if (row.getSourceIp() == null) {
+            java.util.regex.Matcher im = ANY_IPV4.matcher(line);
+            row.setSourceIp(im.find() ? im.group(1) : "0.0.0.0");
+        }
 
         // Destination port - pulled from "on port NNN"
         java.util.regex.Matcher pm = TRIPWIRE_PORT.matcher(line);
