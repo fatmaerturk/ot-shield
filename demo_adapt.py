@@ -22,7 +22,7 @@ def print(*args, **kw):
 # and rotates in a fresh honeytoken. Every action is a real platform primitive.
 BASE  = os.environ.get("OTSHIELD_BASE", "http://localhost:8080")
 CREDS = {"email":    os.environ.get("OTSHIELD_EMAIL", "fatma.erturk@otshield.io"),
-         "password": os.environ.get("OTSHIELD_PASSWORD", "Alex123@@@")}  # local dev seed
+         "password": os.environ.get("OTSHIELD_PASSWORD", "Alex123***")}  # local dev seed
 WRITE_PDU = bytes.fromhex("0001000000060106000000ff")  # Modbus FC06  reg[0] = 0x00FF
 
 def _open(req):

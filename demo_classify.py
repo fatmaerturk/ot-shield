@@ -21,7 +21,7 @@ def print(*args, **kw):
 # badge. (Targets are chosen dynamically so this demo never goes stale.)
 BASE  = os.environ.get("OTSHIELD_BASE", "http://localhost:8080")
 CREDS = {"email":    os.environ.get("OTSHIELD_EMAIL", "fatma.erturk@otshield.io"),
-         "password": os.environ.get("OTSHIELD_PASSWORD", "Alex123@@@")}  # local dev seed
+         "password": os.environ.get("OTSHIELD_PASSWORD", "Alex123***")}  # local dev seed
 MY_IP = os.environ.get("MY_IP", "")  # optionally exclude your own probe IP
 
 
