@@ -2,6 +2,20 @@ import os, sys, json, urllib.request
 try: sys.stdout.reconfigure(encoding="utf-8")  # so Turkiye / USOM render on Windows too
 except Exception: pass
 
+# --- demo output IP masking: public (attacker) IPs shown as A.B.xxx.xxx; loopback/private stay visible ---
+import re as _re
+def _maskip(_m):
+    _p = _m.group(0).split("."); _a, _b = int(_p[0]), int(_p[1])
+    if _a in (0, 10, 127) or (_a == 172 and 16 <= _b <= 31) or (_a == 192 and _b == 168) or (_a == 169 and _b == 254):
+        return _m.group(0)
+    return _p[0] + "." + _p[1] + ".xxx.xxx"
+__b_print = print
+def print(*args, **kw):
+    args = [_re.sub(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", _maskip, a) if isinstance(a, str) else a for a in args]
+    __b_print(*args, **kw)
+# --- end IP masking ---
+
+
 # Compliance is usually a spreadsheet audited once a year. OTShield computes it LIVE
 # from the platform's own telemetry: the same anomalies, decoy hits, DPI, asset zones
 # and cases that catch attackers are the evidence that proves your posture. Two
