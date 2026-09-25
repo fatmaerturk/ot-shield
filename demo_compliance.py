@@ -8,7 +8,7 @@ except Exception: pass
 # standards, one evidence base. Controls with no telemetry basis are reported
 # NOT_ASSESSED, never assumed compliant. And a real detected attack drives the NIS2
 # reporting clock, right down to a regulator-ready early-warning draft.
-BASE  = "http://localhost:8080"
+BASE  = os.environ.get("OTSHIELD_BASE", "http://localhost:8080")
 CREDS = {"email":    os.environ.get("OTSHIELD_EMAIL", "fatma.erturk@otshield.io"),
          "password": os.environ.get("OTSHIELD_PASSWORD", "Alex123@@@")}  # local dev seed
 

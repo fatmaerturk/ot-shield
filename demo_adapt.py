@@ -6,7 +6,7 @@ import os, json, time, socket, urllib.request
 # write is a false-positive-free breach - and the instant it lands the platform
 # reacts on its own: expands the decoy fabric, flags the attacker at the OT boundary,
 # and rotates in a fresh honeytoken. Every action is a real platform primitive.
-BASE  = "http://localhost:8080"
+BASE  = os.environ.get("OTSHIELD_BASE", "http://localhost:8080")
 CREDS = {"email":    os.environ.get("OTSHIELD_EMAIL", "fatma.erturk@otshield.io"),
          "password": os.environ.get("OTSHIELD_PASSWORD", "Alex123@@@")}  # local dev seed
 WRITE_PDU = bytes.fromhex("0001000000060106000000ff")  # Modbus FC06  reg[0] = 0x00FF

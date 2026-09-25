@@ -6,7 +6,7 @@ import os, json, time, socket, struct, urllib.request
 # apart from the real PLC: it answers identity probes with your vendor and model,
 # serves live drifting register values, and returns the exact PLC error for an
 # out-of-range read. Every probe is captured. A read is intel; a write is a breach.
-BASE  = "http://localhost:8080"
+BASE  = os.environ.get("OTSHIELD_BASE", "http://localhost:8080")
 CREDS = {"email":    os.environ.get("OTSHIELD_EMAIL", "fatma.erturk@otshield.io"),
          "password": os.environ.get("OTSHIELD_PASSWORD", "Alex123@@@")}  # local dev seed
 
