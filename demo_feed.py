@@ -19,7 +19,7 @@ def print(*args, **kw):
 # live STIX 2.1 feed you can share with your SIEM, ISAC, or TAXII server.
 BASE  = os.environ.get("OTSHIELD_BASE", "http://localhost:8080")
 CREDS = {"email":    os.environ.get("OTSHIELD_EMAIL", "fatma.erturk@otshield.io"),
-         "password": os.environ.get("OTSHIELD_PASSWORD", "Alex123***")}  # local dev seed
+         "password": os.environ.get("OTSHIELD_PASSWORD", "Alex123!!!")}  # local dev seed
 
 def _open(req):
     return json.load(urllib.request.urlopen(req, timeout=15))
