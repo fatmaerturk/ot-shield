@@ -252,7 +252,7 @@ public class DecoyService {
             if (site.contains("REFINERY") || site.contains("PIPELINE")) return "int-refinery";
             if (site.contains("MANUFACT") || site.contains("ASSEMBLY")) return "int-manufacturing";
             DecoyProtocol p = mapProtocol(l.getProtocol());
-            if (p == DecoyProtocol.S7) return "int-manufacturing";
+            if (p == DecoyProtocol.ETHERNET_IP) return "int-manufacturing";
             if (p == DecoyProtocol.IEC104) return "int-refinery";
             return "int-substation"; // default internal (Modbus)
         }
@@ -565,10 +565,10 @@ public class DecoyService {
                 0, 0, 0, "Internal IEC-104 tripwire - pipeline HMI",
                 "Refinery (internal)", 0.5, 0.55));
         instances.put("int-manufacturing", instance(
-                "int-manufacturing", "Manufacturing tripwire HMI", DecoyProtocol.S7,
+                "int-manufacturing", "Manufacturing tripwire HMI", DecoyProtocol.ETHERNET_IP,
                 "Rockwell Automation", "ControlLogix (decoy)", "tripwire",
-                "172.30.50.13", 102, 1, DecoyStatus.RUNNING,
-                0, 0, 0, "Internal S7 tripwire - assembly line HMI",
+                "172.30.50.13", 44818, 1, DecoyStatus.RUNNING,
+                0, 0, 0, "Internal EtherNet/IP tripwire - assembly line HMI",
                 "Manufacturing (internal)", 0.5, 0.55));
 
         // ── Layer 2: internet-exposed Conpot decoy (INTELLIGENCE) - one card per
