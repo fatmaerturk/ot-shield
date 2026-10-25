@@ -1,15 +1,34 @@
-# Automatic HTTPS for OTShield. Caddy fetches and renews a Let's Encrypt
-# certificate for $OTSHIELD_DOMAIN on its own, and reverse-proxies to the nginx
-# frontend container. See deploy/README.md step 8.
+# Automatic HTTPS for OTShield. Caddy fetches/renews Let's Encrypt certs on its
+# own and reverse-proxies to the frontend / Splunk containers.
+#
+# ACCESS RESTRICTED (2026-10-25) to the operator's ISP block 37.203.167.0/24.
+# Everyone else gets 403. /api/honeypot/* stays open on the SOC host so the
+# honeypot forwarder can keep ingesting (it is bearer-token protected). ACME
+# challenges are served by Caddy on :80 / TLS-ALPN and are NOT affected by
+# these HTTPS handlers, so certificate renewal keeps working.
+# NOTE: if the operator's ISP block changes, update the remote_ip CIDR below.
+
 {$OTSHIELD_DOMAIN} {
-    encode zstd gzip
-    reverse_proxy frontend:80
+	encode zstd gzip
+	@operator remote_ip 37.203.167.0/24
+	handle /api/honeypot/* {
+		reverse_proxy frontend:80
+	}
+	handle @operator {
+		reverse_proxy frontend:80
+	}
+	handle {
+		respond "Forbidden" 403
+	}
 }
 
-# Splunk web UI on its own subdomain. Caddy fetches a Let's Encrypt cert for
-# $SPLUNK_DOMAIN once its DNS A record points here. Splunk serves plain HTTP on
-# 8000 inside the compose network; Caddy terminates TLS at the edge.
 {$SPLUNK_DOMAIN} {
-    encode zstd gzip
-    reverse_proxy splunk:8000
+	encode zstd gzip
+	@operator remote_ip 37.203.167.0/24
+	handle @operator {
+		reverse_proxy splunk:8000
+	}
+	handle {
+		respond "Forbidden" 403
+	}
 }
