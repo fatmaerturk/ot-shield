@@ -6,7 +6,9 @@
 # honeypot forwarder can keep ingesting (it is bearer-token protected). ACME
 # challenges are served by Caddy on :80 / TLS-ALPN and are NOT affected by
 # these HTTPS handlers, so certificate renewal keeps working.
-# NOTE: if the operator's ISP block changes, update the remote_ip CIDR below.
+# NOTE: if the operator's ISP block changes, update the remote_ip CIDRs below.
+# NOTE: after editing this file, `docker compose restart caddy` (a plain
+#       `caddy reload` has been observed to go stale here).
 
 {$OTSHIELD_DOMAIN} {
 	encode zstd gzip
@@ -25,6 +27,20 @@
 {$SPLUNK_DOMAIN} {
 	encode zstd gzip
 	@operator remote_ip 37.203.167.0/24
+	# Splunk HEC for the Conpot watchdog on the honeypot VM (static IP 136.71.85.236),
+	# plus the operator. Bearer-token protected inside Splunk; proxied to the
+	# in-network HEC listener on 8088 (self-signed, hence tls_insecure_skip_verify).
+	@hec {
+		path /services/collector*
+		remote_ip 136.71.85.236/32 37.203.167.0/24
+	}
+	handle @hec {
+		reverse_proxy https://splunk:8088 {
+			transport http {
+				tls_insecure_skip_verify
+			}
+		}
+	}
 	handle @operator {
 		reverse_proxy splunk:8000
 	}
