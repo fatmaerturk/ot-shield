@@ -302,7 +302,7 @@ public class DecoyService {
         String id = "ext-" + p.name().toLowerCase();
         DecoyInstanceDTO d = instance(
             id, "Internet-exposed · " + p.name(), p,
-            vendor, model, "1.0", "34.122.225.46", port, purdueLevelFor(p), DecoyStatus.RUNNING,
+            vendor, model, "1.0", "136.71.85.236", port, purdueLevelFor(p), DecoyStatus.RUNNING,
             0, 0, 0, "Internet-exposed " + p.name() + " decoy (deployed)",
             "Internet-exposed decoy", 0.5, 0.5);
         instances.put(id, d);
@@ -573,7 +573,7 @@ public class DecoyService {
 
         // ── Layer 2: internet-exposed Conpot decoy (INTELLIGENCE) - one card per
         //    exposed protocol. Fed by external (non internal-decoy) honeypot rows.
-        String conpotIp = "34.122.225.46"; // GCP VM public IP
+        String conpotIp = "136.71.85.236"; // GCP honeypot VM static public IP (otshield-decoy-ip)
         instances.put("ext-modbus", instance(
                 "ext-modbus", "Internet-exposed ·Modbus", DecoyProtocol.MODBUS,
                 "OTShield", "internet-exposed decoy", "1.0",
