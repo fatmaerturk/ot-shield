@@ -41,6 +41,7 @@ interface UserRow {
   id?: string;
   email?: string;
   username?: string;
+  fullName?: string;
   firstName?: string;
   lastName?: string;
   role?: string;
@@ -50,7 +51,31 @@ interface UserRow {
   department?: string;
   lastLoginAt?: string;
   createdAt?: string;
+  lockedUntil?: string;
+  failedLoginAttempts?: number;
 }
+
+const ROLE_OPTIONS = [
+  { value: 'ADMIN', label: 'Admin' },
+  { value: 'ANALYST', label: 'Analyst' },
+  { value: 'OPERATOR', label: 'Operator' },
+  { value: 'VIEWER', label: 'Viewer' },
+];
+
+/** Canonical role label (strip the ROLE_ prefix, map legacy USER -> VIEWER). */
+const roleLabel = (role?: string): string => {
+  if (!role) return 'VIEWER';
+  const n = role.replace(/^ROLE_/i, '').toUpperCase();
+  return n === 'USER' ? 'VIEWER' : n;
+};
+
+/** True if lockedUntil is set and still in the future. */
+const isLocked = (u: UserRow): boolean =>
+  !!u.lockedUntil && new Date(u.lockedUntil).getTime() > Date.now();
+
+/** Pull a human-readable error out of an axios error (backend sends {error}). */
+const errMsg = (e: any, fallback: string): string =>
+  e?.response?.data?.error ?? e?.response?.data?.message ?? fallback;
 
 interface AuditEntry {
   id: number;
@@ -168,7 +193,10 @@ const Settings: React.FC = () => {
 
   // user create modal
   const [showCreate, setShowCreate] = useState(false);
-  const [newUser, setNewUser] = useState({ email: '', username: '', firstName: '', lastName: '', role: 'USER' });
+  const [newUser, setNewUser] = useState({ email: '', username: '', firstName: '', lastName: '', role: 'VIEWER' });
+  // After a successful create we show the one-time temp password here until dismissed.
+  const [createdResult, setCreatedResult] = useState<{ email: string; tempPassword: string } | null>(null);
+  const [createErr, setCreateErr] = useState<string | null>(null);
 
   // === LOADERS ===
   useEffect(() => {
@@ -308,17 +336,65 @@ const Settings: React.FC = () => {
     }
   };
 
+  const refreshUsers = async () => {
+    const r = await api.get<any>('/api/users?size=100');
+    const list = r.data?.content ?? r.data ?? [];
+    setUsers(Array.isArray(list) ? list : []);
+  };
+
   const createUser = async () => {
+    setCreateErr(null);
+    if (!newUser.email.trim()) { setCreateErr('Email is required'); return; }
+    const fullName = `${newUser.firstName} ${newUser.lastName}`.trim();
     try {
-      await api.post('/api/users', newUser);
-      setShowCreate(false);
-      setNewUser({ email: '', username: '', firstName: '', lastName: '', role: 'USER' });
-      // refresh
-      const r = await api.get<any>('/api/users?size=100');
-      const list = r.data?.content ?? r.data ?? [];
-      setUsers(Array.isArray(list) ? list : []);
+      const r = await api.post<any>('/api/users', {
+        email: newUser.email.trim(),
+        username: newUser.username.trim() || undefined,
+        fullName: fullName || undefined,
+        role: newUser.role,
+      });
+      // Surface the one-time temp password so the admin can hand it over.
+      setCreatedResult({
+        email: r.data?.user?.email ?? newUser.email.trim(),
+        tempPassword: r.data?.tempPassword ?? '',
+      });
+      setNewUser({ email: '', username: '', firstName: '', lastName: '', role: 'VIEWER' });
+      await refreshUsers();
     } catch (e: any) {
-      alert(e?.response?.data?.message ?? 'Failed to create user');
+      setCreateErr(errMsg(e, 'Failed to create user'));
+    }
+  };
+
+  const changeRole = async (id: string, role: string) => {
+    try {
+      await api.post(`/api/users/${id}/role`, { role });
+      await refreshUsers();
+    } catch (e: any) {
+      alert(errMsg(e, 'Failed to change role'));
+      await refreshUsers();   // revert the optimistic <select> back to the stored role
+    }
+  };
+
+  const unlockUser = async (id: string) => {
+    try {
+      await api.post(`/api/users/${id}/unlock`, {});
+      await refreshUsers();
+    } catch (e: any) {
+      alert(errMsg(e, 'Failed to unlock user'));
+    }
+  };
+
+  const resetPassword = async (id: string, email?: string) => {
+    const pwd = window.prompt(
+      `Set a new password for ${email ?? 'this user'}.\nMin 10 chars with an uppercase, a lowercase and a digit:`,
+    );
+    if (pwd == null) return;   // cancelled
+    try {
+      await api.post(`/api/users/${id}/change-password`, { newPassword: pwd });
+      alert('Password updated. Any active lockout was cleared.');
+      await refreshUsers();
+    } catch (e: any) {
+      alert(errMsg(e, 'Failed to reset password'));
     }
   };
 
@@ -326,31 +402,34 @@ const Settings: React.FC = () => {
     if (!window.confirm('Suspend this user?')) return;
     try {
       await api.post(`/api/users/${id}/suspend`, {});
-      const r = await api.get<any>('/api/users?size=100');
-      setUsers(r.data?.content ?? r.data ?? []);
-    } catch { /* noop */ }
+      await refreshUsers();
+    } catch (e: any) {
+      alert(errMsg(e, 'Failed to suspend user'));
+    }
   };
   const activateUser = async (id: string) => {
     try {
       await api.post(`/api/users/${id}/activate`, {});
-      const r = await api.get<any>('/api/users?size=100');
-      setUsers(r.data?.content ?? r.data ?? []);
-    } catch { /* noop */ }
+      await refreshUsers();
+    } catch (e: any) {
+      alert(errMsg(e, 'Failed to activate user'));
+    }
   };
   const deleteUser = async (id: string) => {
     if (!window.confirm('Delete this user? This cannot be undone.')) return;
     try {
       await api.delete(`/api/users/${id}`);
-      const r = await api.get<any>('/api/users?size=100');
-      setUsers(r.data?.content ?? r.data ?? []);
-    } catch { /* noop */ }
+      await refreshUsers();
+    } catch (e: any) {
+      alert(errMsg(e, 'Failed to delete user'));
+    }
   };
 
   const filteredUsers = useMemo(() => {
     if (!search.trim()) return users;
     const q = search.toLowerCase();
     return users.filter((u) =>
-      [u.email, u.username, u.firstName, u.lastName, u.role, u.department]
+      [u.email, u.username, u.fullName, u.firstName, u.lastName, u.role, u.department]
         .filter(Boolean).some((v) => (v ?? '').toLowerCase().includes(q)),
     );
   }, [users, search]);
@@ -534,32 +613,64 @@ const Settings: React.FC = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {filteredUsers.map((u) => (
+                          {filteredUsers.map((u) => {
+                            const isSelf = !!me?.email && me.email.toLowerCase() === (u.email ?? '').toLowerCase();
+                            const locked = isLocked(u);
+                            return (
                             <tr key={u.id} className="border-t border-slate-100 hover:bg-slate-50">
                               <td className="px-4 py-2">
-                                <p className="font-semibold text-slate-900">{`${u.firstName ?? ''} ${u.lastName ?? ''}`.trim() || u.username}</p>
+                                <p className="font-semibold text-slate-900">
+                                  {u.fullName || `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim() || u.username || u.email}
+                                  {isSelf && <span className="ml-1.5 text-[10px] font-semibold text-violet-500">(you)</span>}
+                                </p>
                                 <p className="text-[11px] text-slate-500">{u.username}</p>
                               </td>
                               <td className="px-4 py-2 text-xs text-slate-700">{u.email}</td>
-                              <td className="px-4 py-2"><Pill tone={u.isAdmin ? 'rose' : 'violet'}>{u.role ?? 'USER'}</Pill></td>
                               <td className="px-4 py-2">
-                                {u.isSuspended ? <Pill tone="rose">SUSPENDED</Pill> :
-                                 u.isActive ? <Pill tone="emerald">ACTIVE</Pill> : <Pill>INACTIVE</Pill>}
+                                {/* Role is a live dropdown: changing it calls POST /{id}/role,
+                                    enforced server-side (self-demote / last-admin are blocked). */}
+                                <select
+                                  value={roleLabel(u.role)}
+                                  disabled={isSelf}
+                                  onChange={(e) => changeRole(u.id!, e.target.value)}
+                                  title={isSelf ? 'You cannot change your own role' : 'Change role'}
+                                  className="text-xs px-2 py-1 rounded-md ring-1 ring-slate-200 bg-white focus:ring-2 focus:ring-violet-300 outline-none disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                  {ROLE_OPTIONS.map((o) => (
+                                    <option key={o.value} value={o.value}>{o.label}</option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="px-4 py-2">
+                                <div className="inline-flex items-center gap-1">
+                                  {u.isSuspended ? <Pill tone="rose">SUSPENDED</Pill> :
+                                   u.isActive ? <Pill tone="emerald">ACTIVE</Pill> : <Pill>INACTIVE</Pill>}
+                                  {locked && <Pill tone="amber">LOCKED</Pill>}
+                                </div>
                               </td>
                               <td className="px-4 py-2 text-xs text-slate-500">{fmtDate(u.lastLoginAt)}</td>
                               <td className="px-4 py-2 text-right">
-                                <div className="inline-flex gap-1">
+                                <div className="inline-flex gap-1 items-center">
+                                  {locked && (
+                                    <>
+                                      <button onClick={() => unlockUser(u.id!)} className="text-[11px] text-amber-700 hover:text-amber-900 font-semibold">Unlock</button>
+                                      <span className="text-slate-300">·</span>
+                                    </>
+                                  )}
+                                  <button onClick={() => resetPassword(u.id!, u.email)} className="text-[11px] text-slate-600 hover:text-slate-900 font-semibold">Reset pw</button>
+                                  <span className="text-slate-300">·</span>
                                   {u.isSuspended ? (
                                     <button onClick={() => activateUser(u.id!)} className="text-[11px] text-emerald-700 hover:text-emerald-900 font-semibold">Activate</button>
                                   ) : (
-                                    <button onClick={() => suspendUser(u.id!)} className="text-[11px] text-amber-700 hover:text-amber-900 font-semibold">Suspend</button>
+                                    <button onClick={() => suspendUser(u.id!)} disabled={isSelf} title={isSelf ? 'You cannot suspend yourself' : ''} className="text-[11px] text-amber-700 hover:text-amber-900 font-semibold disabled:opacity-40 disabled:cursor-not-allowed">Suspend</button>
                                   )}
                                   <span className="text-slate-300">·</span>
-                                  <button onClick={() => deleteUser(u.id!)} className="text-[11px] text-rose-700 hover:text-rose-900 font-semibold">Delete</button>
+                                  <button onClick={() => deleteUser(u.id!)} disabled={isSelf} title={isSelf ? 'You cannot delete yourself' : ''} className="text-[11px] text-rose-700 hover:text-rose-900 font-semibold disabled:opacity-40 disabled:cursor-not-allowed">Delete</button>
                                 </div>
                               </td>
                             </tr>
-                          ))}
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -575,7 +686,7 @@ const Settings: React.FC = () => {
                       { role: 'ADMIN', tone: 'rose' as const, desc: 'Full control: settings, users, billing, danger zone.', perms: ['users.write', 'settings.write', 'alerts.write', 'audit.read', 'system.danger'] },
                       { role: 'ANALYST', tone: 'violet' as const, desc: 'Triage incidents, manage alerts, run threat hunts.', perms: ['alerts.write', 'cases.write', 'audit.read', 'compliance.read'] },
                       { role: 'OPERATOR', tone: 'amber' as const, desc: 'Day-to-day ICS monitoring; can ack alerts but not delete.', perms: ['alerts.ack', 'honeypot.read', 'compliance.read'] },
-                      { role: 'USER', tone: 'slate' as const, desc: 'Read-only dashboard access. No mutations.', perms: ['*.read'] },
+                      { role: 'VIEWER', tone: 'slate' as const, desc: 'Read-only dashboard access. No mutations.', perms: ['*.read'] },
                     ].map((r) => (
                       <div key={r.role} className="border border-slate-200 rounded-xl p-4">
                         <div className="flex items-center justify-between mb-1">
@@ -592,7 +703,9 @@ const Settings: React.FC = () => {
                     ))}
                   </div>
                   <p className="text-[11px] text-slate-500 mt-4">
-                    Custom roles are coming. For now, attach a built-in role to each user from the Users tab.
+                    These roles are enforced server-side: each request is authorised against the
+                    user's role (ADMIN&nbsp;&gt;&nbsp;ANALYST&nbsp;&gt;&nbsp;OPERATOR&nbsp;&gt;&nbsp;VIEWER),
+                    so a higher role inherits everything below it. Assign a role to each user from the Users tab.
                   </p>
                 </Card>
               )}
@@ -779,7 +892,7 @@ const Settings: React.FC = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/40 z-[10001] flex items-center justify-center p-4"
-            onClick={() => setShowCreate(false)}
+            onClick={() => { setShowCreate(false); setCreatedResult(null); setCreateErr(null); }}
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
@@ -788,24 +901,55 @@ const Settings: React.FC = () => {
               className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6"
               onClick={(e) => e.stopPropagation()}
             >
-              <h3 className="text-lg font-bold text-slate-900 mb-4">New user</h3>
-              <div className="space-y-3">
-                <Input label="Email" value={newUser.email} onChange={(v) => setNewUser({ ...newUser, email: v })} />
-                <Input label="Username" value={newUser.username} onChange={(v) => setNewUser({ ...newUser, username: v })} />
-                <div className="grid grid-cols-2 gap-3">
-                  <Input label="First name" value={newUser.firstName} onChange={(v) => setNewUser({ ...newUser, firstName: v })} />
-                  <Input label="Last name" value={newUser.lastName} onChange={(v) => setNewUser({ ...newUser, lastName: v })} />
-                </div>
-                <Select label="Role" value={newUser.role} onChange={(v) => setNewUser({ ...newUser, role: v })}
-                  options={[{ value: 'ADMIN', label: 'Admin' }, { value: 'ANALYST', label: 'Analyst' }, { value: 'OPERATOR', label: 'Operator' }, { value: 'USER', label: 'User' }]} />
-              </div>
-              <p className="text-[11px] text-slate-500 mt-3">
-                A temporary password ("changeme") will be set; the user must change it on first login.
-              </p>
-              <div className="mt-5 flex justify-end gap-2">
-                <button onClick={() => setShowCreate(false)} className="px-4 py-2 rounded-lg ring-1 ring-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50">Cancel</button>
-                <button onClick={createUser} className="px-4 py-2 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white text-sm font-semibold hover:shadow-lg hover:shadow-violet-500/30">Create</button>
-              </div>
+              {createdResult ? (
+                /* Success: show the one-time temporary password for hand-off. */
+                <>
+                  <h3 className="text-lg font-bold text-slate-900 mb-1">User created</h3>
+                  <p className="text-xs text-slate-500 mb-4">
+                    Share this temporary password with <span className="font-semibold">{createdResult.email}</span> over
+                    a secure channel. It is shown only once and must be changed on first login.
+                  </p>
+                  <div className="rounded-xl ring-1 ring-violet-200 bg-violet-50 p-4">
+                    <p className="text-[10px] uppercase font-bold tracking-wider text-violet-500 mb-1">Temporary password</p>
+                    <code className="block text-sm font-mono text-violet-800 select-all break-all">{createdResult.tempPassword}</code>
+                  </div>
+                  <div className="mt-5 flex justify-end gap-2">
+                    <button
+                      onClick={() => { navigator.clipboard?.writeText(createdResult.tempPassword); }}
+                      className="px-4 py-2 rounded-lg ring-1 ring-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50">
+                      Copy
+                    </button>
+                    <button
+                      onClick={() => { setShowCreate(false); setCreatedResult(null); }}
+                      className="px-4 py-2 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white text-sm font-semibold hover:shadow-lg hover:shadow-violet-500/30">
+                      Done
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-lg font-bold text-slate-900 mb-4">New user</h3>
+                  <div className="space-y-3">
+                    <Input label="Email" value={newUser.email} onChange={(v) => setNewUser({ ...newUser, email: v })} />
+                    <Input label="Username" value={newUser.username} onChange={(v) => setNewUser({ ...newUser, username: v })} />
+                    <div className="grid grid-cols-2 gap-3">
+                      <Input label="First name" value={newUser.firstName} onChange={(v) => setNewUser({ ...newUser, firstName: v })} />
+                      <Input label="Last name" value={newUser.lastName} onChange={(v) => setNewUser({ ...newUser, lastName: v })} />
+                    </div>
+                    <Select label="Role" value={newUser.role} onChange={(v) => setNewUser({ ...newUser, role: v })}
+                      options={ROLE_OPTIONS} />
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-3">
+                    A strong temporary password is generated automatically and shown once after creation; the
+                    user must change it on first login.
+                  </p>
+                  {createErr && <p className="text-[11px] text-rose-600 font-semibold mt-2">{createErr}</p>}
+                  <div className="mt-5 flex justify-end gap-2">
+                    <button onClick={() => { setShowCreate(false); setCreateErr(null); }} className="px-4 py-2 rounded-lg ring-1 ring-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50">Cancel</button>
+                    <button onClick={createUser} className="px-4 py-2 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white text-sm font-semibold hover:shadow-lg hover:shadow-violet-500/30">Create</button>
+                  </div>
+                </>
+              )}
             </motion.div>
           </motion.div>
         )}
