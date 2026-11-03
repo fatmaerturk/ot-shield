@@ -44,6 +44,15 @@ public class AuthController {
     @Value("${auth.debug.enabled:false}")
     private boolean debugEnabled;
 
+    // Failed-login lockout: after `maxAttempts` consecutive failures an account is
+    // locked for `lockoutMinutes`. Tunable via config; defaults are a sane
+    // enterprise baseline. A successful login or an admin unlock resets the counter.
+    @Value("${security.lockout.max-attempts:5}")
+    private int maxAttempts;
+
+    @Value("${security.lockout.minutes:15}")
+    private int lockoutMinutes;
+
     @PostMapping("/register")
     public ResponseEntity<LoginResponse> register(@Valid @RequestBody RegisterRequest request) {
         if (!registrationEnabled) {
@@ -53,18 +62,38 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request,
-                                               HttpServletRequest httpRequest) {
+    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request,
+                                   HttpServletRequest httpRequest) {
         String ip = clientIp(httpRequest);
+        String email = request.getEmail();
+
+        // Pre-check: if the account is currently locked out, reject BEFORE touching
+        // the password so a locked account can't be probed. Returns 423 LOCKED with
+        // a clear message; the login page surfaces it (the axios 401 interceptor,
+        // which refreshes/redirects, deliberately does not fire on 423).
+        User existing = userRepository.findByEmail(email).orElse(null);
+        if (existing != null && existing.getLockedUntil() != null
+                && existing.getLockedUntil().isAfter(LocalDateTime.now())) {
+            long mins = Math.max(1,
+                java.time.Duration.between(LocalDateTime.now(), existing.getLockedUntil()).toMinutes() + 1);
+            recordLogin(email, ip, "FAILURE", "Login blocked: account locked");
+            Map<String, Object> body = new HashMap<>();
+            body.put("status", 423);
+            body.put("error", "Account locked");
+            body.put("message", "Too many failed attempts. Try again in about " + mins + " minute(s).");
+            return ResponseEntity.status(HttpStatus.LOCKED).body(body);
+        }
+
         try {
             LoginResponse response = authService.login(request);
-            recordLogin(request.getEmail(), ip, "SUCCESS", "Signed in");
-            markLastLogin(request.getEmail(), ip);
+            onLoginSuccess(email, ip);
+            recordLogin(email, ip, "SUCCESS", "Signed in");
             return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
-            // Log the failed attempt (invalid credentials, unknown user, ...) then
-            // let it propagate so the client still gets its 401.
-            recordLogin(request.getEmail(), ip, "FAILURE", "Login failed: " + e.getMessage());
+            // Count the failed attempt (and lock if the threshold is reached), log it,
+            // then let it propagate so the client still gets its 401.
+            onLoginFailure(existing, ip);
+            recordLogin(email, ip, "FAILURE", "Login failed: " + e.getMessage());
             throw e;
         }
     }
@@ -78,14 +107,47 @@ public class AuthController {
         }
     }
 
-    /** Stamp the user's last-login time/IP on a successful sign-in (best-effort). */
-    private void markLastLogin(String email, String ip) {
+    /**
+     * On success: stamp last-login time/IP and clear any failed-attempt counter and
+     * lockout (best-effort - a persistence hiccup must not block a valid sign-in).
+     */
+    private void onLoginSuccess(String email, String ip) {
         try {
             userRepository.findByEmail(email).ifPresent(u -> {
                 u.setLastLoginAt(LocalDateTime.now());
                 u.setLastLoginIp(ip);
+                u.setFailedLoginAttempts(0);
+                u.setLockedUntil(null);
                 userRepository.save(u);
             });
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * On failure: increment the failed-attempt counter for a KNOWN account and lock
+     * it once the threshold is reached. Unknown emails are ignored (no row to lock,
+     * and we must not reveal whether the account exists). Best-effort.
+     */
+    private void onLoginFailure(User existing, String ip) {
+        if (existing == null) {
+            return;
+        }
+        try {
+            int attempts = (existing.getFailedLoginAttempts() == null ? 0
+                    : existing.getFailedLoginAttempts()) + 1;
+            existing.setFailedLoginAttempts(attempts);
+            if (attempts >= maxAttempts) {
+                existing.setLockedUntil(LocalDateTime.now().plusMinutes(lockoutMinutes));
+                existing.setFailedLoginAttempts(0);   // reset the counter once locked
+                recordLogin(existing.getEmail(), ip, "FAILURE",
+                        "Account locked after " + maxAttempts + " failed attempts");
+                settingsService.log("system", "ACCOUNT_LOCKED",
+                        "Account locked for " + lockoutMinutes + " min after "
+                                + maxAttempts + " failed login attempts",
+                        "user", existing.getEmail(), ip, "FAILURE");
+            }
+            userRepository.save(existing);
         } catch (Exception ignored) {
         }
     }

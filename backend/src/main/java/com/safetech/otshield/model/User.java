@@ -62,6 +62,14 @@ public class User implements UserDetails {
     private String lastLoginIp;
     private Boolean isActive;
 
+    /**
+     * When set to a future time, the account is temporarily locked out after too
+     * many failed login attempts (see AuthController). Null = not locked. Cleared
+     * on a successful login or by an admin via the unlock endpoint. Maps to the
+     * {@code locked_until} column (added by the user-mgmt migration).
+     */
+    private LocalDateTime lockedUntil;
+
     // Additional user information
     private String department;
     private String phoneNumber;
@@ -96,10 +104,15 @@ public class User implements UserDetails {
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        if (isAdmin != null && isAdmin) {
-            return List.of(new SimpleGrantedAuthority("ROLE_ADMIN"));
-        }
-        return List.of(new SimpleGrantedAuthority(role != null ? role : "ROLE_USER"));
+        // Real RBAC: resolve the canonical role (tolerating legacy ROLE_USER /
+        // isAdmin rows) and grant it plus every lower-privileged role, so the
+        // role hierarchy is enforced through the authorities themselves.
+        return Role.fromStored(role, isAdmin).impliedAuthorities();
+    }
+
+    /** The effective canonical role for this user, resolving the legacy isAdmin flag. */
+    public Role effectiveRole() {
+        return Role.fromStored(role, isAdmin);
     }
 
     @Override
@@ -119,7 +132,9 @@ public class User implements UserDetails {
 
     @Override
     public boolean isAccountNonLocked() {
-        return isSuspended == null || !isSuspended;
+        boolean notSuspended = isSuspended == null || !isSuspended;
+        boolean notTimeLocked = lockedUntil == null || lockedUntil.isBefore(LocalDateTime.now());
+        return notSuspended && notTimeLocked;
     }
 
     @Override

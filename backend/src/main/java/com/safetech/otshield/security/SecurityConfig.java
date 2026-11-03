@@ -69,9 +69,18 @@ public class SecurityConfig {
                 "/pcap/**", "/ws/**", "/pcap/interfaces", "/pcap/pcap-interfaces"
             )
             .permitAll()
-            .requestMatchers("/api/anomalies/**").hasAnyRole("ADMIN", "ANALYST", "USER")
-            .requestMatchers("/api/assets/**").hasAnyRole("ADMIN", "ANALYST", "USER")
-            .requestMatchers("/api/alerts/**").hasAnyRole("ADMIN", "ANALYST", "USER")
+            // Read-only operational surfaces: any authenticated user (VIEWER and up).
+            // Thanks to the implied-authority hierarchy (see Role#impliedAuthorities),
+            // granting VIEWER covers OPERATOR/ANALYST/ADMIN too.
+            .requestMatchers("/api/anomalies/**").hasRole("VIEWER")
+            .requestMatchers("/api/assets/**").hasRole("VIEWER")
+            .requestMatchers("/api/alerts/**").hasRole("VIEWER")
+            // A user may always read (and manage) their own profile, even without
+            // the ADMIN role that the rest of /api/users/** requires. This matcher
+            // MUST come before the admin-only rule below.
+            .requestMatchers("/api/users/me", "/api/users/me/**").authenticated()
+            // All other user administration (list/create/update/delete/suspend/
+            // role-change/unlock) is ADMIN only.
             .requestMatchers("/api/users/**").hasRole("ADMIN")
             // Everything else (cases, decoy, deception, settings, research,
             // engage, threat-intel, compliance, conpot, honeytoken management,

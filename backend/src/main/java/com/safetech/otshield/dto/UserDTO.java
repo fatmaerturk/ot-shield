@@ -32,6 +32,7 @@ public class UserDTO {
     private LocalDateTime lastLoginAt;
     private String lastLoginIp;
     private Boolean isActive;
+    private LocalDateTime lockedUntil;
     private String department;
     private String phoneNumber;
     private String avatarUrl;
