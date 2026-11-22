@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
@@ -38,4 +39,9 @@ public interface HoneypotLogRepository extends JpaRepository<HoneypotLog, Long> 
     List<HoneypotLog> findByIsBlockedOrderByTimestampDesc(Boolean isBlocked);
     
     List<HoneypotLog> findBySourceIpAndProtocolOrderByTimestampDesc(String sourceIp, String protocol);
+
+    /** Rows at/after the given instant - lets the dashboard's time-windowed stats
+     *  (24h / 7d / 30d) pull only the selected window from SQL (served by
+     *  idx_honeypot_logs_timestamp) instead of hydrating the whole table. */
+    List<HoneypotLog> findByTimestampGreaterThanEqual(LocalDateTime cutoff);
 }

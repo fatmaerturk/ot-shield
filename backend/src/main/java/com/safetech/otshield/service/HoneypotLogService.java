@@ -192,16 +192,18 @@ public class HoneypotLogService {
      *                  24h / 7d / 30d selector); null or 0 means all time.
      */
     public Map<String, Object> getStats(Integer sinceDays) {
-        List<HoneypotLog> rawLogs = honeypotLogRepository.findAll();
+        // Pull only the requested window from SQL (served by
+        // idx_honeypot_logs_timestamp) instead of hydrating the entire
+        // honeypot_logs table on every 60s dashboard refresh. The Executive
+        // dashboard always passes a bounded range (1 / 7 / 30 days); a null or
+        // non-positive sinceDays still means all-time (other callers).
+        List<HoneypotLog> rawLogs = (sinceDays != null && sinceDays > 0)
+            ? honeypotLogRepository.findByTimestampGreaterThanEqual(
+                  java.time.LocalDateTime.now().minusDays(sinceDays))
+            : honeypotLogRepository.findAll();
         List<HoneypotLog> allLogs = rawLogs.stream()
             .filter(l -> !isInternalNoise(l))
             .collect(Collectors.toList());
-        if (sinceDays != null && sinceDays > 0) {
-            java.time.LocalDateTime cutoff = java.time.LocalDateTime.now().minusDays(sinceDays);
-            allLogs = allLogs.stream()
-                .filter(l -> l.getTimestamp() != null && l.getTimestamp().isAfter(cutoff))
-                .collect(Collectors.toList());
-        }
         Map<String, Object> stats = new HashMap<>();
         stats.put("filteredOutInternalNoise", rawLogs.size() - allLogs.size());
 
