@@ -18,7 +18,6 @@ import honeypotService, { HoneypotStats, TtpAnalysis, HoneypotLog } from '../ser
 import { alertService } from '../services/alertService';
 import { AlertStatistics, Alert as BackendAlert } from '../types/alert';
 import assetService, { AssetDTO } from '../services/assetService';
-import { PageLoading } from './theme';
 import api from '../services/api';
 import { iec62443Service } from '../services/iec62443Service';
 
@@ -557,14 +556,10 @@ const ExecutiveDashboard: React.FC = () => {
   };
 
   /* ---------- Render ---------- */
-  if (loading) {
-    return (
-      <div className="relative">
-        <PageLoading label="Loading executive overview…" />
-      </div>
-    );
-  }
-
+  // No full-page spinner: render the shell immediately so the page appears at
+  // once and each value streams in as its fetch lands (tiles show a "-" until
+  // then - see showLoadingValue and the `loading ? '-'` guards). The header
+  // carries a "Loading live data..." state while the first fetch is in flight.
   return (
     <motion.div
       className="relative"
@@ -667,10 +662,10 @@ const ExecutiveDashboard: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2 text-xs text-violet-200/80">
                   <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${loading ? 'bg-amber-300' : 'bg-emerald-300'}`}></span>
+                    <span className={`relative inline-flex rounded-full h-2 w-2 ${loading ? 'bg-amber-400' : 'bg-emerald-400'}`}></span>
                   </span>
-                  Live · updated {relativeTime(lastUpdated.toISOString()) || 'now'}
+                  {loading ? 'Loading live data…' : `Live · updated ${relativeTime(lastUpdated.toISOString()) || 'now'}`}
                 </div>
               </div>
             </div>
