@@ -555,6 +555,15 @@ const ExecutiveDashboard: React.FC = () => {
     return `${val}${suffix}`;
   };
 
+  // While the first fetch is still in flight, render a pulsing bar in a value
+  // slot instead of the computed 0, so every tile reads as "loading". The bar
+  // auto-sizes to the surrounding font (h-[0.9em]); pass a width that fits the
+  // number it stands in for.
+  const lv = (node: React.ReactNode, w: string = 'w-16') =>
+    loading
+      ? <span className={`inline-block align-middle rounded bg-slate-200 animate-pulse h-[0.9em] ${w}`} aria-hidden="true" />
+      : <>{node}</>;
+
   /* ---------- Render ---------- */
   // No full-page spinner: render the shell immediately so the page appears at
   // once and each value streams in as its fetch lands (tiles show a "-" until
@@ -599,17 +608,17 @@ const ExecutiveDashboard: React.FC = () => {
                 <div className="mt-5 grid grid-cols-3 gap-3">
                   <div className="p-3 rounded-xl bg-white/10 ring-1 ring-white/15 backdrop-blur-sm">
                     <div className="text-[10px] uppercase tracking-wider text-violet-200/80">Confirmed incidents</div>
-                    <div className="mt-1 text-2xl font-bold">{fmtNum(confirmedIncidents, '0')}</div>
+                    <div className="mt-1 text-2xl font-bold">{lv(fmtNum(confirmedIncidents, '0'), 'w-10')}</div>
                     <div className="text-[11px] text-violet-200/80">last 24h</div>
                   </div>
                   <div className="p-3 rounded-xl bg-white/10 ring-1 ring-white/15 backdrop-blur-sm">
                     <div className="text-[10px] uppercase tracking-wider text-violet-200/80">Total attacks</div>
-                    <div className="mt-1 text-2xl font-bold">{fmtNum(honeypotStats?.totalAttacks, '0')}</div>
+                    <div className="mt-1 text-2xl font-bold">{lv(fmtNum(honeypotStats?.totalAttacks, '0'), 'w-16')}</div>
                     <div className="text-[11px] text-violet-200/80">{rangeLabel}</div>
                   </div>
                   <div className="p-3 rounded-xl bg-white/10 ring-1 ring-white/15 backdrop-blur-sm">
                     <div className="text-[10px] uppercase tracking-wider text-violet-200/80">Unique attackers</div>
-                    <div className="mt-1 text-2xl font-bold">{fmtNum(honeypotStats?.uniqueIPs, '0')}</div>
+                    <div className="mt-1 text-2xl font-bold">{lv(fmtNum(honeypotStats?.uniqueIPs, '0'), 'w-12')}</div>
                     <div className="text-[11px] text-violet-200/80">distinct IPs</div>
                   </div>
                 </div>
@@ -638,7 +647,7 @@ const ExecutiveDashboard: React.FC = () => {
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
                     <span className="text-[10px] uppercase tracking-widest text-violet-200/80">Posture</span>
-                    <span className="text-4xl font-bold">{loading ? '-' : postureScore}</span>
+                    <span className="text-4xl font-bold">{lv(postureScore, 'w-14')}</span>
                     <span className="text-xs text-emerald-300 font-semibold mt-1">
                       {residualRiskLevel}
                     </span>
@@ -727,7 +736,7 @@ const ExecutiveDashboard: React.FC = () => {
                 </span>
               </div>
               <p className="mt-4 text-[11px] uppercase tracking-wider text-slate-500 font-semibold">{p.label}</p>
-              <p className="mt-1 text-3xl font-bold text-slate-900 tracking-tight">{p.value}</p>
+              <p className="mt-1 text-3xl font-bold text-slate-900 tracking-tight">{lv(p.value, 'w-24')}</p>
               <p className="mt-1 text-xs text-slate-500">{p.benchmark}</p>
             </div>
           ))}
@@ -796,7 +805,7 @@ const ExecutiveDashboard: React.FC = () => {
                     {kpi.icon}
                   </div>
                 </div>
-                <div className="text-3xl font-bold text-slate-900 tracking-tight">{kpi.value}</div>
+                <div className="text-3xl font-bold text-slate-900 tracking-tight">{lv(kpi.value, 'w-20')}</div>
                 <p className="mt-1 text-xs text-slate-500">{kpi.hint}</p>
                 <div className="mt-4 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                   <div
@@ -852,7 +861,7 @@ const ExecutiveDashboard: React.FC = () => {
               <div className="text-[11px] uppercase tracking-wider text-violet-700 font-semibold">False positive rate</div>
               <div className="mt-1 flex items-baseline gap-2">
                 <span className="text-4xl font-bold bg-gradient-to-r from-violet-600 to-pink-600 bg-clip-text text-transparent">
-                  {noiseReduction}%
+                  {lv(`${noiseReduction}%`, 'w-20')}
                 </span>
                 <span className="text-xs text-slate-500">of total alerts</span>
               </div>
@@ -865,7 +874,7 @@ const ExecutiveDashboard: React.FC = () => {
                   <p className="text-sm font-semibold text-slate-900">Resolved alerts</p>
                   <p className="text-xs text-slate-500">closed by analysts</p>
                 </div>
-                <span className="text-lg font-bold text-emerald-600">{fmtNum(alertStats?.resolvedAlerts, '0')}</span>
+                <span className="text-lg font-bold text-emerald-600">{lv(fmtNum(alertStats?.resolvedAlerts, '0'), 'w-8')}</span>
               </div>
 
               <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 ring-1 ring-slate-200/60">
@@ -873,7 +882,7 @@ const ExecutiveDashboard: React.FC = () => {
                   <p className="text-sm font-semibold text-slate-900">New alerts</p>
                   <p className="text-xs text-slate-500">awaiting triage</p>
                 </div>
-                <span className="text-lg font-bold text-violet-600">{fmtNum(alertStats?.newAlerts, '0')}</span>
+                <span className="text-lg font-bold text-violet-600">{lv(fmtNum(alertStats?.newAlerts, '0'), 'w-8')}</span>
               </div>
 
               <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 ring-1 ring-slate-200/60">
@@ -881,7 +890,7 @@ const ExecutiveDashboard: React.FC = () => {
                   <p className="text-sm font-semibold text-slate-900">Unassigned</p>
                   <p className="text-xs text-slate-500">needs an owner</p>
                 </div>
-                <span className="text-lg font-bold text-rose-600">{fmtNum(alertStats?.unassignedAlerts, '0')}</span>
+                <span className="text-lg font-bold text-rose-600">{lv(fmtNum(alertStats?.unassignedAlerts, '0'), 'w-8')}</span>
               </div>
             </div>
           </div>
@@ -1040,7 +1049,7 @@ const ExecutiveDashboard: React.FC = () => {
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                   <span className="text-[10px] uppercase tracking-widest text-slate-500">Residual</span>
-                  <span className="text-3xl font-bold text-slate-900">{residualRiskScore}</span>
+                  <span className="text-3xl font-bold text-slate-900">{lv(residualRiskScore, 'w-12')}</span>
                   <span className="text-[11px] text-violet-600 font-semibold">/ 10</span>
                 </div>
               </div>
@@ -1056,15 +1065,15 @@ const ExecutiveDashboard: React.FC = () => {
             <div className="space-y-3">
               <div className="flex items-center justify-between p-3 rounded-lg bg-rose-50 ring-1 ring-rose-100">
                 <span className="text-xs text-slate-700">Critical alerts</span>
-                <span className="text-xs font-bold text-rose-700">{fmtNum(alertStats?.criticalAlerts, '0')}</span>
+                <span className="text-xs font-bold text-rose-700">{lv(fmtNum(alertStats?.criticalAlerts, '0'), 'w-6')}</span>
               </div>
               <div className="flex items-center justify-between p-3 rounded-lg bg-amber-50 ring-1 ring-amber-100">
                 <span className="text-xs text-slate-700">High alerts</span>
-                <span className="text-xs font-bold text-amber-700">{fmtNum(alertStats?.highAlerts, '0')}</span>
+                <span className="text-xs font-bold text-amber-700">{lv(fmtNum(alertStats?.highAlerts, '0'), 'w-6')}</span>
               </div>
               <div className="flex items-center justify-between p-3 rounded-lg bg-emerald-50 ring-1 ring-emerald-100">
                 <span className="text-xs text-slate-700">Honeypot decoyed</span>
-                <span className="text-xs font-bold text-emerald-700">{fmtNum(honeypotStats?.uniqueSessions, '0')}</span>
+                <span className="text-xs font-bold text-emerald-700">{lv(fmtNum(honeypotStats?.uniqueSessions, '0'), 'w-6')}</span>
               </div>
             </div>
           </div>
@@ -1189,7 +1198,7 @@ const ExecutiveDashboard: React.FC = () => {
                 <span className="text-violet-500">{s.icon}</span>
                 {s.label}
               </div>
-              <p className="relative text-3xl font-bold text-slate-900 mt-2 tracking-tight">{s.value}</p>
+              <p className="relative text-3xl font-bold text-slate-900 mt-2 tracking-tight">{lv(s.value, 'w-20')}</p>
             </div>
           ))}
         </motion.div>
