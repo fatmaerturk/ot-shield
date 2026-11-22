@@ -2106,14 +2106,12 @@ const Dashboard: React.FC = () => {
     return Array.from(new Set(ioas.map(ioa => ioa.mitreId).filter((id): id is string => !!id)));
   }, [ioas]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
-
+  // No full-page spinner: the only thing `loading` gated was the /api/users/me
+  // auth fetch (~200ms), which just unlocks role-based UI bits (all guarded with
+  // currentUser?.). Render the shell immediately - hero, upload panel, tabs and
+  // any packets restored from localStorage all paint at once - so the page
+  // appears instantly instead of blocking on a spinner. (`error` still gates,
+  // since a failed auth redirects to /login.)
   if (error) {
     return (
       <div className="flex items-center justify-center">
