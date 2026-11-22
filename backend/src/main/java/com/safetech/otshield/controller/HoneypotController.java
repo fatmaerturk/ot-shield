@@ -150,6 +150,24 @@ public class HoneypotController {
         }
     }
 
+    /** Lightweight TTP endpoint: only the MITRE tactic heatmap, for the Executive
+     *  dashboard (which renders just that). Avoids shipping the full ~70 kB report
+     *  on every 60s poll. Same cached numbers as /ttp-analysis, tiny payload. */
+    @GetMapping("/ttp-analysis/mitre")
+    public ResponseEntity<Map<String, Object>> getTTPMitre() {
+        if (ttpAnalysisService == null) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(Map.of("error", "TTPAnalysisService not available"));
+        }
+        try {
+            return ResponseEntity.ok(ttpAnalysisService.getMitreTacticsOnly());
+        } catch (Exception e) {
+            log.error("Failed to build TTP MITRE summary", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", "TTP MITRE summary failed: " + e.getMessage()));
+        }
+    }
+
     @PostMapping("/logs/clear")
     public ResponseEntity<String> clearLogs() {
         honeypotLogService.clearLogs();

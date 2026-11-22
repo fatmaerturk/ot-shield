@@ -59,6 +59,17 @@ public class TTPAnalysisService {
         return cachedReportJson;
     }
 
+    /** Just the MITRE tactic heatmap (7 rows) sliced from the cached snapshot.
+     *  The Executive dashboard only renders this, so it polls here instead of
+     *  pulling the full ~70 kB report (attacker profiles, kill chains, geo, ...)
+     *  it would otherwise download and discard. Same cached numbers, tiny payload. */
+    public Map<String, Object> getMitreTacticsOnly() {
+        Map<String, Object> full = buildTTPReport(); // cached snapshot, instant
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("mitreTactics", full != null ? full.get("mitreTactics") : Collections.emptyList());
+        return out;
+    }
+
     /** Recompute the snapshot in the background so polls stay served from cache. */
     @Scheduled(fixedDelay = TTP_REFRESH_MS, initialDelay = 20_000)
     public void scheduledRefresh() {

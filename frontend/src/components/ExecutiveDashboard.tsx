@@ -202,7 +202,7 @@ const ExecutiveDashboard: React.FC = () => {
       alertService.getRecentAlerts(),
       assetService.listAll(500),
       assetService.highRisk(),
-      honeypotService.getTtpAnalysis(),
+      honeypotService.getTtpMitre(),
       honeypotService.getRecentLogs(20),
     ]);
     const [hpRes, asRes, raRes, allAssetsRes, hraRes, ttpRes, logsRes] = tasks;

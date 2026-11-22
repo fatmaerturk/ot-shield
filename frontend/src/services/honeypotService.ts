@@ -118,6 +118,13 @@ export const honeypotService = {
     const res = await api.get<TtpAnalysis>('/api/honeypot/ttp-analysis');
     return res.data ?? {};
   },
+
+  // Only the MITRE tactic heatmap - the Executive dashboard renders just this, so
+  // it avoids pulling the full ~70 kB TTP report it would otherwise discard.
+  getTtpMitre: async (): Promise<TtpAnalysis> => {
+    const res = await api.get<TtpAnalysis>('/api/honeypot/ttp-analysis/mitre');
+    return res.data ?? {};
+  },
 };
 
 export default honeypotService;
