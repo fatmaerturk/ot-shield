@@ -26,37 +26,30 @@ public class TTPAnalysisService {
     }
 
     // computeReport() scans the full honeypot_logs table (all-time, so the
-    // advertised totals stay exact) and is relatively expensive, while the
-    // Executive dashboard polls ttp-analysis every 60s. Serve a cached snapshot
-    // and refresh it in the background: requests return instantly and no number
-    // changes (this is a timing optimisation only).
-    private static final long TTP_CACHE_TTL_MS = 120_000;
+    // advertised totals stay exact) and is relatively expensive - the 91.5k-row
+    // hydration triggers a GC pause that briefly stalls every concurrent request.
+    // So requests ALWAYS return the last cached snapshot (instant, never block on
+    // the compute), and the heavy recompute runs only on a background @Scheduled
+    // tick every 5 minutes, off the request path. No number changes - timing only.
+    private static final long TTP_REFRESH_MS = 300_000; // background recompute cadence
     private volatile Map<String, Object> cachedReport;
-    private volatile long cachedAtMs;
 
-    /** Cached accessor used by the /api/honeypot/ttp-analysis endpoint. */
+    /** Cached accessor for /api/honeypot/ttp-analysis - returns the last snapshot
+     *  instantly; only the very first call (before the scheduler has run) computes. */
     public Map<String, Object> buildTTPReport() {
         Map<String, Object> c = cachedReport;
-        if (c != null && System.currentTimeMillis() - cachedAtMs < TTP_CACHE_TTL_MS) {
-            return c;
-        }
-        return refreshReport();
+        return (c != null) ? c : refreshReport();
     }
 
-    /** Keep the snapshot warm so dashboard polls are served from cache. */
-    @Scheduled(fixedDelay = TTP_CACHE_TTL_MS, initialDelay = 25_000)
+    /** Recompute the snapshot in the background so polls stay served from cache. */
+    @Scheduled(fixedDelay = TTP_REFRESH_MS, initialDelay = 20_000)
     public void scheduledRefresh() {
         try { refreshReport(); } catch (Exception ignored) { /* next tick retries */ }
     }
 
     private synchronized Map<String, Object> refreshReport() {
-        Map<String, Object> c = cachedReport;
-        if (c != null && System.currentTimeMillis() - cachedAtMs < TTP_CACHE_TTL_MS) {
-            return c; // another thread refreshed while we waited on the lock
-        }
         Map<String, Object> report = computeReport();
         cachedReport = report;
-        cachedAtMs = System.currentTimeMillis();
         return report;
     }
 
