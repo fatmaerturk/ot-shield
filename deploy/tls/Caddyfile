@@ -1,7 +1,7 @@
 # Automatic HTTPS for OTShield. Caddy fetches/renews Let's Encrypt certs on its
 # own and reverse-proxies to the frontend / Splunk containers.
 #
-# ACCESS RESTRICTED (2026-10-25) to the operator's ISP block 37.203.167.0/24.
+# ACCESS RESTRICTED to the operator's ISP block (updated 2026-11-22 to 217.131.118.0/24).
 # Everyone else gets 403. /api/honeypot/* stays open on the SOC host so the
 # honeypot forwarder can keep ingesting (it is bearer-token protected). ACME
 # challenges are served by Caddy on :80 / TLS-ALPN and are NOT affected by
@@ -12,7 +12,7 @@
 
 {$OTSHIELD_DOMAIN} {
 	encode zstd gzip
-	@operator remote_ip 37.203.167.0/24
+	@operator remote_ip 217.131.118.0/24
 	handle /api/honeypot/* {
 		reverse_proxy frontend:80
 	}
@@ -26,13 +26,13 @@
 
 {$SPLUNK_DOMAIN} {
 	encode zstd gzip
-	@operator remote_ip 37.203.167.0/24
+	@operator remote_ip 217.131.118.0/24
 	# Splunk HEC for the Conpot watchdog on the honeypot VM (static IP 136.71.85.236),
 	# plus the operator. Bearer-token protected inside Splunk; proxied to the
 	# in-network HEC listener on 8088 (self-signed, hence tls_insecure_skip_verify).
 	@hec {
 		path /services/collector*
-		remote_ip 136.71.85.236/32 37.203.167.0/24
+		remote_ip 136.71.85.236/32 217.131.118.0/24
 	}
 	handle @hec {
 		reverse_proxy https://splunk:8088 {
