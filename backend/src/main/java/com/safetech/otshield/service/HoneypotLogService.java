@@ -166,7 +166,13 @@ public class HoneypotLogService {
     }
 
     public List<HoneypotLog> getRecentLogs(int count) {
-        return honeypotLogRepository.findAllByOrderByTimestampDesc().stream()
+        // Fetch only a small recent tail from SQL (served by the timestamp index)
+        // and over-fetch a little so the internal-noise filter still leaves
+        // `count` real rows - instead of hydrating the entire honeypot_logs table.
+        int fetch = Math.max(count * 5, 100);
+        return honeypotLogRepository
+            .findByOrderByTimestampDesc(org.springframework.data.domain.PageRequest.of(0, fetch))
+            .stream()
             .filter(l -> !isInternalNoise(l))
             .limit(count)
             .collect(Collectors.toList());
@@ -350,7 +356,11 @@ public class HoneypotLogService {
     }
 
     public List<Map<String, Object>> getAttackAttempts() {
-        return honeypotLogRepository.findAllByOrderByTimestampDesc().stream()
+        // Only the recent tail is needed for the 20-row feed; fetch ~100 recent
+        // rows via the timestamp index rather than the whole honeypot_logs table.
+        return honeypotLogRepository
+            .findByOrderByTimestampDesc(org.springframework.data.domain.PageRequest.of(0, 100))
+            .stream()
             .filter(l -> !isInternalNoise(l))
             .limit(20)
             .map(this::toEventMap)

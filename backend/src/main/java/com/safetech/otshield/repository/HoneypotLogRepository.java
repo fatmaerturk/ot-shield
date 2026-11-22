@@ -1,6 +1,7 @@
 package com.safetech.otshield.repository;
 
 import com.safetech.otshield.model.HoneypotLog;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
@@ -44,4 +45,9 @@ public interface HoneypotLogRepository extends JpaRepository<HoneypotLog, Long> 
      *  (24h / 7d / 30d) pull only the selected window from SQL (served by
      *  idx_honeypot_logs_timestamp) instead of hydrating the whole table. */
     List<HoneypotLog> findByTimestampGreaterThanEqual(LocalDateTime cutoff);
+
+    /** Most-recent N rows (pass a PageRequest of size N), served by
+     *  idx_honeypot_logs_timestamp - for "recent events" style endpoints that
+     *  only need a small tail, so they stop hydrating the whole table. */
+    List<HoneypotLog> findByOrderByTimestampDesc(Pageable pageable);
 }

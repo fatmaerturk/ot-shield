@@ -2,6 +2,7 @@ package com.safetech.otshield.service;
 
 import com.safetech.otshield.model.HoneypotLog;
 import com.safetech.otshield.repository.HoneypotLogRepository;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -24,7 +25,42 @@ public class TTPAnalysisService {
         this.repo = repo;
     }
 
+    // computeReport() scans the full honeypot_logs table (all-time, so the
+    // advertised totals stay exact) and is relatively expensive, while the
+    // Executive dashboard polls ttp-analysis every 60s. Serve a cached snapshot
+    // and refresh it in the background: requests return instantly and no number
+    // changes (this is a timing optimisation only).
+    private static final long TTP_CACHE_TTL_MS = 120_000;
+    private volatile Map<String, Object> cachedReport;
+    private volatile long cachedAtMs;
+
+    /** Cached accessor used by the /api/honeypot/ttp-analysis endpoint. */
     public Map<String, Object> buildTTPReport() {
+        Map<String, Object> c = cachedReport;
+        if (c != null && System.currentTimeMillis() - cachedAtMs < TTP_CACHE_TTL_MS) {
+            return c;
+        }
+        return refreshReport();
+    }
+
+    /** Keep the snapshot warm so dashboard polls are served from cache. */
+    @Scheduled(fixedDelay = TTP_CACHE_TTL_MS, initialDelay = 25_000)
+    public void scheduledRefresh() {
+        try { refreshReport(); } catch (Exception ignored) { /* next tick retries */ }
+    }
+
+    private synchronized Map<String, Object> refreshReport() {
+        Map<String, Object> c = cachedReport;
+        if (c != null && System.currentTimeMillis() - cachedAtMs < TTP_CACHE_TTL_MS) {
+            return c; // another thread refreshed while we waited on the lock
+        }
+        Map<String, Object> report = computeReport();
+        cachedReport = report;
+        cachedAtMs = System.currentTimeMillis();
+        return report;
+    }
+
+    private Map<String, Object> computeReport() {
         // Apply the same internal-noise filter used by /api/honeypot/stats so
         // the two endpoints agree on totals. Without this, RFC1918 / Docker
         // bridge / loopback / null-IP rows show up here and inflate the
