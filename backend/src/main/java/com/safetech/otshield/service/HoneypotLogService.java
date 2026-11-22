@@ -3,6 +3,7 @@ package com.safetech.otshield.service;
 import com.safetech.otshield.model.HoneypotLog;
 import com.safetech.otshield.repository.HoneypotLogRepository;
 
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -201,11 +202,17 @@ public class HoneypotLogService {
         return getStats(null);
     }
 
-    // Short per-range cache: repeated loads and the 60s dashboard poll return the
-    // last snapshot instead of recomputing the window aggregation every time.
-    // Keyed by sinceDays (-1 = all time); entry is {Map result, Long builtAtMs}.
-    // Up to 60s stale, which is fine for a honeypot overview.
-    private static final long STATS_CACHE_TTL_MS = 60_000L;
+    // Serve-from-cache per-range stats. The dashboard polls every 60s, so the
+    // old 60s TTL meant most polls found the entry just expired and recomputed
+    // the ~750ms window aggregation ON the request thread - the last /executive
+    // blip. Now the bounded ranges the dashboard asks for (1/7/30d) are kept warm
+    // by a background @Scheduled sweep (refreshStatsCache) and served instantly
+    // from cache regardless of request timing; nothing is recomputed on a request
+    // thread for them. All-time (-1) is deliberately NOT swept (it's a full-table
+    // scan and effectively unused by callers), so it stays on the age-checked
+    // lazy path below. Keyed by sinceDays (-1 = all time); entry is
+    // {Map result, Long builtAtMs}. Numbers are unchanged - timing only.
+    private static final long STATS_CACHE_TTL_MS = 120_000L;
     private final java.util.concurrent.ConcurrentHashMap<Integer, Object[]> statsCache
         = new java.util.concurrent.ConcurrentHashMap<>();
 
@@ -218,12 +225,35 @@ public class HoneypotLogService {
     public Map<String, Object> getStats(Integer sinceDays) {
         final int key = (sinceDays == null) ? -1 : sinceDays;
         Object[] entry = statsCache.get(key);
-        if (entry != null && System.currentTimeMillis() - (long) entry[1] < STATS_CACHE_TTL_MS) {
-            return (Map<String, Object>) entry[0];
+        if (entry != null) {
+            // Bounded ranges: always serve cache (the sweep keeps them <60s fresh,
+            // off the request path). All-time: serve only within the TTL, else
+            // fall through and recompute lazily on this thread.
+            if (key > 0 || System.currentTimeMillis() - (long) entry[1] < STATS_CACHE_TTL_MS) {
+                return (Map<String, Object>) entry[0];
+            }
         }
         Map<String, Object> stats = computeStats(sinceDays);
         statsCache.put(key, new Object[]{ stats, System.currentTimeMillis() });
         return stats;
+    }
+
+    /**
+     * Keep the bounded-range stats snapshots the dashboard polls (1/7/30d) warm
+     * off the request path, so a 60s poll never recomputes the ~750ms window
+     * aggregation on its own thread. Only ranges already requested (and so present
+     * in the cache) are refreshed; all-time (-1) is skipped on purpose (full-table
+     * scan, effectively unused). Timing only - no displayed figure changes.
+     */
+    @Scheduled(fixedDelay = 60_000, initialDelay = 30_000)
+    public void refreshStatsCache() {
+        for (Integer key : statsCache.keySet()) {
+            if (key == null || key <= 0) continue;
+            try {
+                Map<String, Object> stats = computeStats(key);
+                statsCache.put(key, new Object[]{ stats, System.currentTimeMillis() });
+            } catch (Exception ignored) { /* next tick retries */ }
+        }
     }
 
     private Map<String, Object> computeStats(Integer sinceDays) {

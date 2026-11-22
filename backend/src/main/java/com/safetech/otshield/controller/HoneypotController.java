@@ -123,13 +123,24 @@ public class HoneypotController {
      *  - behavioral anomalies (burst, slow-low, multi-protocol pivot)
      */
     @GetMapping("/ttp-analysis")
-    public ResponseEntity<Map<String, Object>> getTTPAnalysis() {
+    public ResponseEntity<?> getTTPAnalysis() {
         if (ttpAnalysisService == null) {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(Map.of("error", "TTPAnalysisService not available"));
         }
         try {
+            // Serve the pre-serialized snapshot (serialized once per 5-min refresh)
+            // so a 60s poll doesn't re-serialize the large report Map every time.
+            String json = ttpAnalysisService.buildTTPReportJson();
+            if (json != null) {
+                return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(json);
+            }
+            // Fallback: pre-serialization unavailable - let Jackson serialize the Map.
             Map<String, Object> report = ttpAnalysisService.buildTTPReport();
+            if (report == null) {
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(Map.of("error", "TTP report not ready"));
+            }
             return ResponseEntity.ok(report);
         } catch (Exception e) {
             log.error("Failed to build TTP analysis report", e);

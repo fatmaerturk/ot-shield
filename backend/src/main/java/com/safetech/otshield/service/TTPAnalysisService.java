@@ -1,5 +1,6 @@
 package com.safetech.otshield.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.safetech.otshield.dto.TtpLogRow;
 import com.safetech.otshield.repository.HoneypotLogRepository;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -20,9 +21,11 @@ import java.util.stream.Collectors;
 public class TTPAnalysisService {
 
     private final HoneypotLogRepository repo;
+    private final ObjectMapper objectMapper;
 
-    public TTPAnalysisService(HoneypotLogRepository repo) {
+    public TTPAnalysisService(HoneypotLogRepository repo, ObjectMapper objectMapper) {
         this.repo = repo;
+        this.objectMapper = objectMapper;
     }
 
     // computeReport() scans the full honeypot_logs table (all-time, so the
@@ -33,12 +36,27 @@ public class TTPAnalysisService {
     // tick every 5 minutes, off the request path. No number changes - timing only.
     private static final long TTP_REFRESH_MS = 300_000; // background recompute cadence
     private volatile Map<String, Object> cachedReport;
+    // The report is large and only changes every 5 min, so we also cache it
+    // pre-serialized: /ttp-analysis then returns the ready JSON string instead of
+    // making Jackson re-serialize the same big Map on every 60s dashboard poll.
+    private volatile String cachedReportJson;
 
     /** Cached accessor for /api/honeypot/ttp-analysis - returns the last snapshot
      *  instantly; only the very first call (before the scheduler has run) computes. */
     public Map<String, Object> buildTTPReport() {
         Map<String, Object> c = cachedReport;
         return (c != null) ? c : refreshReport();
+    }
+
+    /** Pre-serialized form of {@link #buildTTPReport()} - the exact same snapshot
+     *  as a JSON string (serialized once per background refresh), so request
+     *  threads skip re-serializing the large Map. Null only before the first
+     *  successful build; the controller then returns 503. */
+    public String buildTTPReportJson() {
+        String j = cachedReportJson;
+        if (j != null) return j;
+        refreshReport();
+        return cachedReportJson;
     }
 
     /** Recompute the snapshot in the background so polls stay served from cache. */
@@ -50,6 +68,11 @@ public class TTPAnalysisService {
     private synchronized Map<String, Object> refreshReport() {
         Map<String, Object> report = computeReport();
         cachedReport = report;
+        try {
+            cachedReportJson = objectMapper.writeValueAsString(report);
+        } catch (Exception e) {
+            cachedReportJson = null; // fall back to Map serialization in the controller
+        }
         return report;
     }
 
