@@ -1,6 +1,7 @@
 package com.safetech.otshield.repository;
 
 import com.safetech.otshield.model.HoneypotLog;
+import com.safetech.otshield.dto.TtpLogRow;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -50,4 +51,17 @@ public interface HoneypotLogRepository extends JpaRepository<HoneypotLog, Long> 
      *  idx_honeypot_logs_timestamp - for "recent events" style endpoints that
      *  only need a small tail, so they stop hydrating the whole table. */
     List<HoneypotLog> findByOrderByTimestampDesc(Pageable pageable);
+
+    /** All-time TTP scan as a lightweight projection: selects ONLY the columns
+     *  TTPAnalysisService reads, so the ~91.5k-row recompute no longer hydrates
+     *  the heavy {@code payload}/full-entity data. Row count and every field it
+     *  keeps are identical to the full scan, so the advertised TTP totals are
+     *  unchanged - this is an allocation/GC optimization only. Ordered newest
+     *  first (served by idx_honeypot_logs_timestamp), matching the prior
+     *  findAllByOrderByTimestampDesc() the TTP code relied on. */
+    @Query("SELECT new com.safetech.otshield.dto.TtpLogRow("
+         + "h.sourceIp, h.attackType, h.timestamp, h.description, h.protocol, "
+         + "h.usernameAttempt, h.userAgent, h.passwordAttempt, h.severity, h.country, h.decoySource) "
+         + "FROM HoneypotLog h ORDER BY h.timestamp DESC")
+    List<TtpLogRow> findTtpRows();
 }

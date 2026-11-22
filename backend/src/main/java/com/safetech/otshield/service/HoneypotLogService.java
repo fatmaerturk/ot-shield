@@ -80,13 +80,22 @@ public class HoneypotLogService {
      */
     public static boolean isInternalNoise(HoneypotLog l) {
         if (l == null) return false;
-        if ("internal-decoy".equalsIgnoreCase(l.getDecoySource())) return false;
-        if (isInternalIp(l.getSourceIp())) return true;
+        return isInternalNoise(l.getSourceIp(), l.getCountry(), l.getDecoySource());
+    }
+
+    /**
+     * Field-level variant of {@link #isInternalNoise(HoneypotLog)} for lightweight
+     * projections (e.g. {@code TtpLogRow}) that carry only these three columns.
+     * Identical rule - the entity overload above now delegates here, so the two
+     * stay in lock-step.
+     */
+    public static boolean isInternalNoise(String sourceIp, String country, String decoySource) {
+        if ("internal-decoy".equalsIgnoreCase(decoySource)) return false;
+        if (isInternalIp(sourceIp)) return true;
         // Geo also resolves link-local/CGNAT/reserved ranges that the IP test
         // above misses to the "Internal (RFC 1918)" pseudo-country - treat those
         // as noise too, so they never show up as a real country/attacker.
-        String c = l.getCountry();
-        return c != null && c.trim().toLowerCase().startsWith("internal");
+        return country != null && country.trim().toLowerCase().startsWith("internal");
     }
 
     /** True for RFC1918 / loopback / Docker-bridge ranges. Null/blank => true (treat as noise). */

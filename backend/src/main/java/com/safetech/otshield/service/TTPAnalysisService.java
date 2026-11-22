@@ -1,6 +1,6 @@
 package com.safetech.otshield.service;
 
-import com.safetech.otshield.model.HoneypotLog;
+import com.safetech.otshield.dto.TtpLogRow;
 import com.safetech.otshield.repository.HoneypotLogRepository;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -59,15 +59,16 @@ public class TTPAnalysisService {
         // bridge / loopback / null-IP rows show up here and inflate the
         // numbers vs. the Overview tab. Tripwire (internal-decoy) rows are
         // intentionally kept because their attacker IP is real.
-        List<HoneypotLog> logs = repo.findAllByOrderByTimestampDesc().stream()
-            .filter(l -> !HoneypotLogService.isInternalNoise(l))
+        List<TtpLogRow> logs = repo.findTtpRows().stream()
+            .filter(l -> !HoneypotLogService.isInternalNoise(
+                l.getSourceIp(), l.getCountry(), l.getDecoySource()))
             .collect(Collectors.toList());
         Map<String, Object> out = new LinkedHashMap<>();
 
         out.put("totalEvents", logs.size());
         out.put("uniqueAttackers",
             logs.stream()
-                .map(HoneypotLog::getSourceIp)
+                .map(TtpLogRow::getSourceIp)
                 .filter(Objects::nonNull)
                 .distinct()
                 .count());
@@ -85,27 +86,27 @@ public class TTPAnalysisService {
     // ───────────────────────────────────────────────────────────
     // 1. ATTACKER PROFILES - per-IP behavior summary
     // ───────────────────────────────────────────────────────────
-    private List<Map<String, Object>> buildAttackerProfiles(List<HoneypotLog> logs) {
-        Map<String, List<HoneypotLog>> byIp = logs.stream()
+    private List<Map<String, Object>> buildAttackerProfiles(List<TtpLogRow> logs) {
+        Map<String, List<TtpLogRow>> byIp = logs.stream()
             .filter(l -> l.getSourceIp() != null)
-            .collect(Collectors.groupingBy(HoneypotLog::getSourceIp));
+            .collect(Collectors.groupingBy(TtpLogRow::getSourceIp));
 
         List<Map<String, Object>> profiles = new ArrayList<>();
-        for (Map.Entry<String, List<HoneypotLog>> e : byIp.entrySet()) {
+        for (Map.Entry<String, List<TtpLogRow>> e : byIp.entrySet()) {
             String ip = e.getKey();
-            List<HoneypotLog> events = e.getValue();
+            List<TtpLogRow> events = e.getValue();
             if (events.size() < 2) continue; // skip noise
 
             Set<String> protocols = events.stream()
-                .map(HoneypotLog::getProtocol).filter(Objects::nonNull)
+                .map(TtpLogRow::getProtocol).filter(Objects::nonNull)
                 .collect(Collectors.toCollection(TreeSet::new));
             Set<String> attackTypes = events.stream()
-                .map(HoneypotLog::getAttackType).filter(Objects::nonNull)
+                .map(TtpLogRow::getAttackType).filter(Objects::nonNull)
                 .collect(Collectors.toCollection(TreeSet::new));
 
-            LocalDateTime first = events.stream().map(HoneypotLog::getTimestamp)
+            LocalDateTime first = events.stream().map(TtpLogRow::getTimestamp)
                 .filter(Objects::nonNull).min(LocalDateTime::compareTo).orElse(null);
-            LocalDateTime last = events.stream().map(HoneypotLog::getTimestamp)
+            LocalDateTime last = events.stream().map(TtpLogRow::getTimestamp)
                 .filter(Objects::nonNull).max(LocalDateTime::compareTo).orElse(null);
             long activeMinutes = (first != null && last != null)
                 ? ChronoUnit.MINUTES.between(first, last) : 0;
@@ -113,7 +114,7 @@ public class TTPAnalysisService {
             String tier = scoreSophistication(events, protocols, attackTypes);
             String suspectedTool = guessTool(events);
             String country = events.stream()
-                .map(HoneypotLog::getCountry).filter(Objects::nonNull)
+                .map(TtpLogRow::getCountry).filter(Objects::nonNull)
                 .findFirst().orElse(null);
 
             long credAttempts = events.stream()
@@ -152,7 +153,7 @@ public class TTPAnalysisService {
      * INTERMEDIATE: 2 protocols OR write attempt OR sustained brute-force
      * ADVANCED: 3+ protocols OR ICS-write OR multi-tactic chain
      */
-    private String scoreSophistication(List<HoneypotLog> events, Set<String> protos, Set<String> types) {
+    private String scoreSophistication(List<TtpLogRow> events, Set<String> protos, Set<String> types) {
         boolean writeAttempt = types.stream().anyMatch(t ->
             t != null && (t.toLowerCase().contains("write") || t.toLowerCase().contains("control")));
         boolean icsProto = protos.stream().anyMatch(p ->
@@ -173,7 +174,7 @@ public class TTPAnalysisService {
     // ───────────────────────────────────────────────────────────
     // 2. MITRE ATT&CK ICS TACTIC HEATMAP
     // ───────────────────────────────────────────────────────────
-    private List<Map<String, Object>> buildMitreTactics(List<HoneypotLog> logs) {
+    private List<Map<String, Object>> buildMitreTactics(List<TtpLogRow> logs) {
         // tactic name -> [count, technique IDs set, attacker IPs set]
         Map<String, long[]> count = new LinkedHashMap<>();
         Map<String, Set<String>> techniques = new LinkedHashMap<>();
@@ -189,7 +190,7 @@ public class TTPAnalysisService {
             attackers.put(t, new HashSet<>());
         }
 
-        for (HoneypotLog l : logs) {
+        for (TtpLogRow l : logs) {
             String t = mapToTactic(l);
             if (t == null) continue;
             count.get(t)[0]++;
@@ -210,7 +211,7 @@ public class TTPAnalysisService {
     }
 
     /** Map a single honeypot log to one MITRE ICS tactic. */
-    private String mapToTactic(HoneypotLog l) {
+    private String mapToTactic(TtpLogRow l) {
         String type = l.getAttackType() == null ? "" : l.getAttackType().toLowerCase();
         String desc = l.getDescription() == null ? "" : l.getDescription().toLowerCase();
         String proto = l.getProtocol() == null ? "" : l.getProtocol().toUpperCase();
@@ -241,7 +242,7 @@ public class TTPAnalysisService {
     }
 
     /** Map to a MITRE ICS technique ID (T08xx series). */
-    private String mapToTechnique(HoneypotLog l) {
+    private String mapToTechnique(TtpLogRow l) {
         String type = l.getAttackType() == null ? "" : l.getAttackType().toLowerCase();
         if (type.contains("brute")) return "T0812 Default Credentials";
         if (type.contains("write") || type.contains("control")) return "T0855 Unauthorized Command Message";
@@ -255,9 +256,9 @@ public class TTPAnalysisService {
     // ───────────────────────────────────────────────────────────
     // 3. TOOL / WORDLIST FINGERPRINTING
     // ───────────────────────────────────────────────────────────
-    private List<Map<String, Object>> buildToolFingerprints(List<HoneypotLog> logs) {
+    private List<Map<String, Object>> buildToolFingerprints(List<TtpLogRow> logs) {
         Map<String, Long> ua = logs.stream()
-            .map(HoneypotLog::getUserAgent)
+            .map(TtpLogRow::getUserAgent)
             .filter(Objects::nonNull).filter(s -> !s.isBlank())
             .collect(Collectors.groupingBy(s -> s, Collectors.counting()));
 
@@ -267,7 +268,7 @@ public class TTPAnalysisService {
         Map<String, Long> toolCount = new LinkedHashMap<>();
         Map<String, Set<String>> toolIps = new LinkedHashMap<>();
 
-        for (HoneypotLog l : logs) {
+        for (TtpLogRow l : logs) {
             String tool = guessTool(Collections.singletonList(l));
             if (tool == null || tool.equals("Unknown")) continue;
             toolCount.merge(tool, 1L, Long::sum);
@@ -298,8 +299,8 @@ public class TTPAnalysisService {
         return Collections.singletonList(wrapper);
     }
 
-    private String guessTool(List<HoneypotLog> events) {
-        for (HoneypotLog l : events) {
+    private String guessTool(List<TtpLogRow> events) {
+        for (TtpLogRow l : events) {
             String ua = (l.getUserAgent() == null ? "" : l.getUserAgent()).toLowerCase();
             String type = (l.getAttackType() == null ? "" : l.getAttackType()).toLowerCase();
             String desc = (l.getDescription() == null ? "" : l.getDescription()).toLowerCase();
@@ -360,22 +361,22 @@ public class TTPAnalysisService {
     // ───────────────────────────────────────────────────────────
     // 4. KILL CHAINS - per-attacker timeline of tactic progression
     // ───────────────────────────────────────────────────────────
-    private List<Map<String, Object>> buildKillChains(List<HoneypotLog> logs) {
-        Map<String, List<HoneypotLog>> byIp = logs.stream()
+    private List<Map<String, Object>> buildKillChains(List<TtpLogRow> logs) {
+        Map<String, List<TtpLogRow>> byIp = logs.stream()
             .filter(l -> l.getSourceIp() != null)
-            .collect(Collectors.groupingBy(HoneypotLog::getSourceIp));
+            .collect(Collectors.groupingBy(TtpLogRow::getSourceIp));
 
         List<Map<String, Object>> chains = new ArrayList<>();
-        for (Map.Entry<String, List<HoneypotLog>> e : byIp.entrySet()) {
-            List<HoneypotLog> events = new ArrayList<>(e.getValue());
+        for (Map.Entry<String, List<TtpLogRow>> e : byIp.entrySet()) {
+            List<TtpLogRow> events = new ArrayList<>(e.getValue());
             if (events.size() < 3) continue;
-            events.sort(Comparator.comparing(HoneypotLog::getTimestamp,
+            events.sort(Comparator.comparing(TtpLogRow::getTimestamp,
                 Comparator.nullsLast(Comparator.naturalOrder())));
 
             // Build a sequence of distinct tactics as the IP progressed
             List<Map<String, Object>> steps = new ArrayList<>();
             String prevTactic = null;
-            for (HoneypotLog l : events) {
+            for (TtpLogRow l : events) {
                 String tactic = mapToTactic(l);
                 if (tactic == null) continue;
                 if (tactic.equals(prevTactic)) continue;
@@ -407,14 +408,14 @@ public class TTPAnalysisService {
     // ───────────────────────────────────────────────────────────
     // 5. GEOGRAPHIC DISTRIBUTION
     // ───────────────────────────────────────────────────────────
-    private List<Map<String, Object>> buildGeoDistribution(List<HoneypotLog> logs) {
+    private List<Map<String, Object>> buildGeoDistribution(List<TtpLogRow> logs) {
         Map<String, long[]> byCountry = new LinkedHashMap<>(); // [events, uniqueIps]
         Map<String, Set<String>> ipsByCountry = new HashMap<>();
 
         // Skip rows without a resolved country so the count here matches the
         // "Countries" KPI on the Overview tab (which counts only country-tagged
         // attackers, not "Unknown" buckets).
-        for (HoneypotLog l : logs) {
+        for (TtpLogRow l : logs) {
             String c = l.getCountry();
             if (c == null || c.isBlank()) continue;
             byCountry.computeIfAbsent(c, k -> new long[]{0})[0]++;
@@ -438,7 +439,7 @@ public class TTPAnalysisService {
     // ───────────────────────────────────────────────────────────
     // 6. CREDENTIAL INTELLIGENCE - wordlist family detection
     // ───────────────────────────────────────────────────────────
-    private Map<String, Object> buildCredentialIntelligence(List<HoneypotLog> logs) {
+    private Map<String, Object> buildCredentialIntelligence(List<TtpLogRow> logs) {
         // Families inferred from credential overlap
         Set<String> miraiCreds = new HashSet<>(Arrays.asList(
             "root:root", "root:admin", "admin:admin", "root:xc3511", "root:vizxv",
@@ -457,7 +458,7 @@ public class TTPAnalysisService {
         Set<String> miraiAttackers = new HashSet<>();
         Set<String> icsAttackers = new HashSet<>();
 
-        for (HoneypotLog l : logs) {
+        for (TtpLogRow l : logs) {
             String u = sanitizeCredential(l.getUsernameAttempt());
             String p = sanitizeCredential(l.getPasswordAttempt());
             if (u == null || p == null) continue;
@@ -506,28 +507,28 @@ public class TTPAnalysisService {
     // ───────────────────────────────────────────────────────────
     // 7. BEHAVIORAL ANOMALIES - burst, slow-low, multi-protocol pivot
     // ───────────────────────────────────────────────────────────
-    private Map<String, Object> buildBehavioralAnomalies(List<HoneypotLog> logs) {
-        Map<String, List<HoneypotLog>> byIp = logs.stream()
+    private Map<String, Object> buildBehavioralAnomalies(List<TtpLogRow> logs) {
+        Map<String, List<TtpLogRow>> byIp = logs.stream()
             .filter(l -> l.getSourceIp() != null && l.getTimestamp() != null)
-            .collect(Collectors.groupingBy(HoneypotLog::getSourceIp));
+            .collect(Collectors.groupingBy(TtpLogRow::getSourceIp));
 
         List<Map<String, Object>> burstAttackers = new ArrayList<>();
         List<Map<String, Object>> slowLowAttackers = new ArrayList<>();
         List<Map<String, Object>> pivotAttackers = new ArrayList<>();
 
-        for (Map.Entry<String, List<HoneypotLog>> e : byIp.entrySet()) {
+        for (Map.Entry<String, List<TtpLogRow>> e : byIp.entrySet()) {
             String ip = e.getKey();
-            List<HoneypotLog> events = e.getValue();
+            List<TtpLogRow> events = e.getValue();
             if (events.size() < 3) continue;
 
-            events.sort(Comparator.comparing(HoneypotLog::getTimestamp));
+            events.sort(Comparator.comparing(TtpLogRow::getTimestamp));
             LocalDateTime first = events.get(0).getTimestamp();
             LocalDateTime last = events.get(events.size() - 1).getTimestamp();
             long minutes = Math.max(1, ChronoUnit.MINUTES.between(first, last));
             double eventsPerMin = events.size() / (double) minutes;
 
             Set<String> protos = events.stream()
-                .map(HoneypotLog::getProtocol).filter(Objects::nonNull)
+                .map(TtpLogRow::getProtocol).filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
             // Burst - high event rate (>10 events/min sustained)
