@@ -192,12 +192,32 @@ public class HoneypotLogService {
         return getStats(null);
     }
 
+    // Short per-range cache: repeated loads and the 60s dashboard poll return the
+    // last snapshot instead of recomputing the window aggregation every time.
+    // Keyed by sinceDays (-1 = all time); entry is {Map result, Long builtAtMs}.
+    // Up to 60s stale, which is fine for a honeypot overview.
+    private static final long STATS_CACHE_TTL_MS = 60_000L;
+    private final java.util.concurrent.ConcurrentHashMap<Integer, Object[]> statsCache
+        = new java.util.concurrent.ConcurrentHashMap<>();
+
     /**
      * @param sinceDays when non-null and positive, restrict every statistic to
      *                  logs from the last N days (used by the dashboard's
      *                  24h / 7d / 30d selector); null or 0 means all time.
      */
+    @SuppressWarnings("unchecked")
     public Map<String, Object> getStats(Integer sinceDays) {
+        final int key = (sinceDays == null) ? -1 : sinceDays;
+        Object[] entry = statsCache.get(key);
+        if (entry != null && System.currentTimeMillis() - (long) entry[1] < STATS_CACHE_TTL_MS) {
+            return (Map<String, Object>) entry[0];
+        }
+        Map<String, Object> stats = computeStats(sinceDays);
+        statsCache.put(key, new Object[]{ stats, System.currentTimeMillis() });
+        return stats;
+    }
+
+    private Map<String, Object> computeStats(Integer sinceDays) {
         // Pull only the requested window from SQL (served by
         // idx_honeypot_logs_timestamp) instead of hydrating the entire
         // honeypot_logs table on every 60s dashboard refresh. The Executive
