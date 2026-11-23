@@ -607,18 +607,11 @@ const Anomalies: React.FC = () => {
   // Render.
   // ------------------------------------------------------------------------
 
-  if (loading) {
-    return (
-      <PageShell>
-        <div className="flex items-center justify-center py-24">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-violet-600 mx-auto" />
-            <p className="mt-4 text-slate-600 text-sm">Loading anomaly data…</p>
-          </div>
-        </div>
-      </PageShell>
-    );
-  }
+  // Shell-first: we no longer block the whole page on a spinner while the
+  // initial fetch runs. The hero, KPI strip, chart panels and table render
+  // immediately; live values stream in and show pulsing skeletons (not a
+  // misleading "0" / "No data yet") until the backend responds. Only a hard
+  // error swaps the page for the retry state below.
 
   if (error) {
     return (
@@ -646,6 +639,13 @@ const Anomalies: React.FC = () => {
   const activeInWindow = anomalies.filter(a => a.isActive !== false && !a.isResolved).length;
   const resolvedInWindow = anomalies.filter(a => a.isResolved).length;
   const criticalInWindow = anomalies.filter(a => a.severity === 'CRITICAL').length;
+
+  // While the initial fetch is in flight, show a pulsing skeleton in place of a
+  // value rather than a literal 0 (which would read as "zero anomalies").
+  const lv = (node: React.ReactNode, w: string = 'w-10') =>
+    loading
+      ? <span className={`inline-block align-middle rounded bg-slate-200 animate-pulse h-[0.9em] ${w}`} aria-hidden="true" />
+      : <>{node}</>;
 
   return (
     <PageShell>
@@ -682,7 +682,13 @@ const Anomalies: React.FC = () => {
       {/* Live-data banner - same shape as on Network Topology so the user
           always knows whether what they're looking at comes from the backend. */}
       <div className="mb-6">
-        {allEmpty ? (
+        {loading ? (
+          <div className="rounded-2xl ring-1 ring-violet-200 bg-violet-50 p-3 flex items-center gap-3">
+            <span className="h-2.5 w-2.5 rounded-full bg-violet-500 animate-pulse"></span>
+            <div className="text-sm font-semibold text-violet-900">Loading live data…</div>
+            <div className="text-xs text-violet-700">Querying anomalies, assets and DPI telemetry</div>
+          </div>
+        ) : allEmpty ? (
           <div className="rounded-2xl ring-1 ring-amber-200 bg-amber-50 p-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <span className="h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse"></span>
@@ -716,29 +722,29 @@ const Anomalies: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <KpiCard
           label="Total Anomalies"
-          value={anomalyStats?.total ?? 0}
-          hint={`${totalAnomaliesInWindow} in ${rangeLabel}`}
+          value={lv(anomalyStats?.total ?? 0)}
+          hint={loading ? 'Loading…' : `${totalAnomaliesInWindow} in ${rangeLabel}`}
           color="violet"
           icon={<Icon.Activity className="w-5 h-5" />}
         />
         <KpiCard
           label="Critical"
-          value={anomalyStats?.critical ?? 0}
-          hint={`${criticalInWindow} in ${rangeLabel}`}
+          value={lv(anomalyStats?.critical ?? 0)}
+          hint={loading ? 'Loading…' : `${criticalInWindow} in ${rangeLabel}`}
           color="rose"
           icon={<Icon.Alert className="w-5 h-5" />}
         />
         <KpiCard
           label="Active"
-          value={anomalyStats?.active ?? activeInWindow}
-          hint={`${activeInWindow} in ${rangeLabel}`}
+          value={lv(anomalyStats?.active ?? activeInWindow)}
+          hint={loading ? 'Loading…' : `${activeInWindow} in ${rangeLabel}`}
           color="fuchsia"
           icon={<Icon.Clock className="w-5 h-5" />}
         />
         <KpiCard
           label="Resolved"
-          value={anomalyStats?.resolved ?? 0}
-          hint={`${resolvedInWindow} in ${rangeLabel}`}
+          value={lv(anomalyStats?.resolved ?? 0)}
+          hint={loading ? 'Loading…' : `${resolvedInWindow} in ${rangeLabel}`}
           color="pink"
           icon={<Icon.CheckCircle className="w-5 h-5" />}
         />
@@ -755,7 +761,9 @@ const Anomalies: React.FC = () => {
               icon={<Icon.Alert className="w-5 h-5" />}
             >
               <div className="h-48">
-                {totalAnomaliesInWindow === 0 ? (
+                {loading ? (
+                  <ChartLoading />
+                ) : totalAnomaliesInWindow === 0 ? (
                   <EmptyChart hint="No anomalies in this window" />
                 ) : (
                   <Bar data={severityChartData} options={severityChartOptions} />
@@ -765,14 +773,20 @@ const Anomalies: React.FC = () => {
 
             <Panel
               title="Hygiene Score"
-              subtitle={`${hygieneScore}/100 · higher is healthier`}
+              subtitle={loading ? 'Scoring open anomalies…' : `${hygieneScore}/100 · higher is healthier`}
               icon={<Icon.Shield className="w-5 h-5" />}
             >
               <div className="h-48 relative">
-                <Doughnut data={hygieneChartData} options={hygieneChartOptions} />
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="text-2xl font-bold text-slate-900 leading-none">{hygieneScore}</div>
-                </div>
+                {loading ? (
+                  <ChartLoading />
+                ) : (
+                  <>
+                    <Doughnut data={hygieneChartData} options={hygieneChartOptions} />
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="text-2xl font-bold text-slate-900 leading-none">{hygieneScore}</div>
+                    </div>
+                  </>
+                )}
               </div>
               <p className="text-[11px] text-slate-500 mt-2 text-center">
                 Starts at 100. Loses 25 per open CRITICAL, 5 per HIGH, 1 per MEDIUM.
@@ -785,7 +799,9 @@ const Anomalies: React.FC = () => {
               icon={<Icon.Layers className="w-5 h-5" />}
             >
               <div className="h-48">
-                {assets.length === 0 ? (
+                {loading ? (
+                  <ChartLoading />
+                ) : assets.length === 0 ? (
                   <EmptyChart hint="No assets discovered" />
                 ) : (
                   <Doughnut
@@ -822,7 +838,9 @@ const Anomalies: React.FC = () => {
               icon={<Icon.Server className="w-5 h-5" />}
             >
               <div className="h-64">
-                {assets.length === 0 ? (
+                {loading ? (
+                  <ChartLoading />
+                ) : assets.length === 0 ? (
                   <EmptyChart hint="No assets discovered" />
                 ) : (
                   <Bar
@@ -855,7 +873,9 @@ const Anomalies: React.FC = () => {
               icon={<Icon.TrendingUp className="w-5 h-5" />}
             >
               <div className="h-64">
-                {totalAnomaliesInWindow === 0 ? (
+                {loading ? (
+                  <ChartLoading />
+                ) : totalAnomaliesInWindow === 0 ? (
                   <EmptyChart hint="No anomalies in this window" />
                 ) : (
                   <Line data={activityChartData} options={activityChartOptions} />
@@ -917,17 +937,17 @@ const Anomalies: React.FC = () => {
             <div className="space-y-3">
               <SidebarStat
                 label="OT Assets"
-                value={assets.length}
+                value={lv(assets.length, 'w-8')}
                 tone="violet"
               />
               <SidebarStat
                 label="Read Operations"
-                value={dpiReadCount}
+                value={lv(dpiReadCount, 'w-8')}
                 tone="fuchsia"
               />
               <SidebarStat
                 label="Write Operations"
-                value={dpiWriteCount}
+                value={lv(dpiWriteCount, 'w-8')}
                 tone="rose"
               />
             </div>
@@ -939,10 +959,19 @@ const Anomalies: React.FC = () => {
             icon={<Icon.Target className="w-5 h-5" />}
           >
             <div className="h-80 overflow-y-auto space-y-2 pr-1">
-              {topAlertedZones.length === 0 && (
+              {loading && [0, 1, 2, 3].map((i) => (
+                <div key={`z-skel-${i}`} className="flex justify-between items-center p-2.5 rounded-xl bg-slate-50 ring-1 ring-slate-100">
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-3 w-2/5 rounded bg-slate-200 animate-pulse" />
+                    <div className="h-2.5 w-1/4 rounded bg-slate-200 animate-pulse" />
+                  </div>
+                  <div className="h-4 w-8 rounded bg-slate-200 animate-pulse" />
+                </div>
+              ))}
+              {!loading && topAlertedZones.length === 0 && (
                 <div className="text-sm text-slate-500 text-center pt-8">No anomalies in this window</div>
               )}
-              {topAlertedZones.map((zone, index) => {
+              {!loading && topAlertedZones.map((zone, index) => {
                 const sevLabel =
                   zone.worst === 'CRITICAL' || zone.worst === 'HIGH' ? 'High' :
                   zone.worst === 'MEDIUM' ? 'Medium' : 'Low';
@@ -973,7 +1002,7 @@ const Anomalies: React.FC = () => {
       {/* Recent Anomalies Table */}
       <Panel
         title="Recent Anomalies"
-        subtitle={`Showing ${Math.min(anomalies.length, 10)} of ${totalAnomaliesInWindow} in ${rangeLabel}`}
+        subtitle={loading ? 'Loading recent anomalies…' : `Showing ${Math.min(anomalies.length, 10)} of ${totalAnomaliesInWindow} in ${rangeLabel}`}
         icon={<Icon.Search className="w-5 h-5" />}
       >
         <div className="overflow-x-auto overflow-y-auto max-h-96 -mx-2">
@@ -989,10 +1018,19 @@ const Anomalies: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {anomalies.length === 0 && (
+              {loading && [0, 1, 2, 3, 4].map((i) => (
+                <tr key={`row-skel-${i}`} className="border-b border-slate-100">
+                  {[0, 1, 2, 3, 4, 5].map((c) => (
+                    <td key={c} className="py-3 px-3">
+                      <div className="h-3 w-full max-w-[120px] rounded bg-slate-200 animate-pulse" />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              {!loading && anomalies.length === 0 && (
                 <tr><td colSpan={6} className="px-3 py-8 text-center text-sm text-slate-500">No anomalies in this time window.</td></tr>
               )}
-              {anomalies.slice(0, 10).map((anomaly) => {
+              {!loading && anomalies.slice(0, 10).map((anomaly) => {
                 const sevBadge =
                   anomaly.severity === 'CRITICAL' ? 'bg-rose-100 text-rose-700 ring-rose-200' :
                   anomaly.severity === 'HIGH'     ? 'bg-orange-100 text-orange-700 ring-orange-200' :
@@ -1097,7 +1135,7 @@ const Anomalies: React.FC = () => {
 // ---------------------------------------------------------------------------
 
 /** One row in the DPI-activity sidebar panel. */
-const SidebarStat: React.FC<{ label: string; value: number; tone: 'violet' | 'fuchsia' | 'rose' }> = ({ label, value, tone }) => {
+const SidebarStat: React.FC<{ label: string; value: React.ReactNode; tone: 'violet' | 'fuchsia' | 'rose' }> = ({ label, value, tone }) => {
   const toneClass =
     tone === 'violet'  ? 'bg-violet-50 ring-violet-200 text-violet-700' :
     tone === 'fuchsia' ? 'bg-fuchsia-50 ring-fuchsia-200 text-fuchsia-700' :
@@ -1109,6 +1147,17 @@ const SidebarStat: React.FC<{ label: string; value: number; tone: 'violet' | 'fu
     </div>
   );
 };
+
+/** Shown in a chart panel while the initial fetch is still running. */
+const ChartLoading: React.FC = () => (
+  <div className="h-full w-full flex items-center justify-center">
+    <div className="w-full space-y-2 px-2">
+      <div className="h-3 w-3/4 rounded bg-slate-200 animate-pulse" />
+      <div className="h-3 w-1/2 rounded bg-slate-200 animate-pulse" />
+      <div className="h-3 w-2/3 rounded bg-slate-200 animate-pulse" />
+    </div>
+  </div>
+);
 
 /** Placeholder used when a chart has nothing to draw. */
 const EmptyChart: React.FC<{ hint: string }> = ({ hint }) => (
