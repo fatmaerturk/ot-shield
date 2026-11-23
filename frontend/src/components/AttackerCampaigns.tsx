@@ -5,7 +5,7 @@ import {
   KillChainPhase, TimelineSource,
   KILL_CHAIN_ORDER, PHASE_LABEL,
 } from '../services/attackerService';
-import { PageHero, KpiCard, Panel, Icon, pageContainer, pageItem, PageLoading } from './theme';
+import { PageHero, KpiCard, Panel, Icon, pageContainer, pageItem } from './theme';
 
 // ---------- small visual helpers ----------
 
@@ -128,13 +128,13 @@ const AttackerCampaigns: React.FC = () => {
     return best;
   }, [attackers]);
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <PageLoading label="Loading attack campaigns…" />
-      </div>
-    );
-  }
+  // Shell-first: render the hero and both columns immediately. Hero stats, the
+  // attacker list and the timeline panel show pulsing skeletons (not 0 / "0/6"
+  // or a misleading empty state) until the first fetch resolves.
+  const lv = (node: React.ReactNode, w: string = 'w-10') =>
+    loading
+      ? <span className={`inline-block align-middle rounded bg-white/30 animate-pulse h-[0.9em] ${w}`} aria-hidden="true" />
+      : <>{node}</>;
 
   return (
     <motion.div variants={pageContainer} initial="hidden" animate="visible" className="space-y-6">
@@ -144,9 +144,9 @@ const AttackerCampaigns: React.FC = () => {
         subtitle="Every real signal we hold for one attacker - internet-exposed decoy hits, decoy-twin trips, captured traffic, anomalies and cases - stitched into a single kill-chain, mapped to MITRE ATT&CK for ICS."
         icon={<Icon.Target className="w-6 h-6" />}
         stats={[
-          { label: 'Attackers', value: attackers.length },
-          { label: 'Reached impact', value: breachedCount },
-          { label: 'Deepest chain', value: `${deepest}/6` },
+          { label: 'Attackers', value: lv(attackers.length) },
+          { label: 'Reached impact', value: lv(breachedCount) },
+          { label: 'Deepest chain', value: lv(`${deepest}/6`) },
         ]}
       />
 
@@ -159,7 +159,15 @@ const AttackerCampaigns: React.FC = () => {
         <div className="xl:col-span-1">
           <Panel title="Attackers" subtitle="Ranked by activity" icon={<Icon.Network className="w-4 h-4" />}>
             {loading ? (
-              <div className="py-10 text-center text-sm text-slate-400">Loading attackers...</div>
+              <div className="space-y-2">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <div key={`atk-skel-${i}`} className="rounded-xl p-3 ring-1 ring-slate-200 bg-white">
+                    <div className="h-3.5 w-24 rounded bg-slate-200 animate-pulse" />
+                    <div className="mt-2 h-2.5 w-full rounded bg-slate-200 animate-pulse" />
+                    <div className="mt-2 h-2.5 w-2/3 rounded bg-slate-200 animate-pulse" />
+                  </div>
+                ))}
+              </div>
             ) : attackers.length === 0 ? (
               <div className="py-10 text-center text-sm text-slate-400">
                 No attacker activity yet. Upload a capture or expose a decoy to populate this view.
@@ -200,7 +208,26 @@ const AttackerCampaigns: React.FC = () => {
 
         {/* Right: selected attacker timeline */}
         <div className="xl:col-span-2 space-y-6">
-          {!selectedIp ? (
+          {loading ? (
+            <>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={`kpi-skel-${i}`} className="rounded-2xl ring-1 ring-slate-200 bg-white p-5">
+                    <div className="h-3 w-16 rounded bg-slate-200 animate-pulse" />
+                    <div className="mt-3 h-6 w-12 rounded bg-slate-200 animate-pulse" />
+                  </div>
+                ))}
+              </div>
+              <Panel>
+                <div className="py-10 space-y-3">
+                  <div className="h-3 w-full rounded bg-slate-200 animate-pulse" />
+                  <div className="h-3 w-5/6 rounded bg-slate-200 animate-pulse" />
+                  <div className="h-3 w-3/4 rounded bg-slate-200 animate-pulse" />
+                  <div className="h-3 w-2/3 rounded bg-slate-200 animate-pulse" />
+                </div>
+              </Panel>
+            </>
+          ) : !selectedIp ? (
             <Panel><div className="py-16 text-center text-sm text-slate-400">Select an attacker to see its kill-chain.</div></Panel>
           ) : timelineLoading ? (
             <Panel><div className="py-16 text-center text-sm text-slate-400">Building timeline for {selectedIp}...</div></Panel>
