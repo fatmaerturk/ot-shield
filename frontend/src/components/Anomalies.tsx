@@ -102,6 +102,22 @@ function rangeStart(range: TimeRange): Date {
   return new Date(now.getTime() - h * 3600 * 1000);
 }
 
+/**
+ * Timestamp the time-range selector filters on.
+ *
+ * DPI-derived anomalies set `detectedAt` to the *packet's* event time (which,
+ * for a historical pcap, can be years old), while `createdAt` is when the row
+ * was ingested - i.e. when the analyst actually uploaded the capture. Windowing
+ * on ingestion time means a pcap uploaded just now always shows up under
+ * "last 24h", even when its traffic was captured long ago. The table still
+ * surfaces the true packet time in its "Detected" column.
+ */
+function windowTimeMs(a: Anomaly): number {
+  const raw = a.createdAt || a.detectedAt;
+  const t = raw ? new Date(raw).getTime() : NaN;
+  return Number.isFinite(t) ? t : NaN;
+}
+
 /** Map Asset.PurdueLevel enum name ("LEVEL_3") to numeric 3. */
 function parsePurdueLevel(name?: string): number | null {
   if (!name) return null;
@@ -184,8 +200,8 @@ const Anomalies: React.FC = () => {
           anomalyList = Array.isArray(raw) ? raw : (raw.content ?? []);
         }
         const windowed = anomalyList.filter((a) => {
-          if (!a.detectedAt) return false;
-          const t = new Date(a.detectedAt).getTime();
+          const t = windowTimeMs(a);
+          if (!Number.isFinite(t)) return false;
           return t >= since.getTime() && t <= until.getTime();
         });
         setAnomalies(windowed);
@@ -243,7 +259,8 @@ const Anomalies: React.FC = () => {
           );
         }
         for (const a of windowed) {
-          const t = new Date(a.detectedAt).getTime();
+          const t = windowTimeMs(a);
+          if (!Number.isFinite(t)) continue;
           const idx = Math.min(buckets - 1, Math.max(0, Math.floor((t - startMs) / bucketMs)));
           counts[idx] += 1;
         }
@@ -347,7 +364,10 @@ const Anomalies: React.FC = () => {
       const statsData = statsResponse as AnomalyStatistics;
       const anomalyList = anomaliesData.content || (Array.isArray(anomaliesData) ? anomaliesData as Anomaly[] : []);
       const since = rangeStart(timeRange);
-      setAnomalies(anomalyList.filter((a) => new Date(a.detectedAt).getTime() >= since.getTime()));
+      setAnomalies(anomalyList.filter((a) => {
+        const t = windowTimeMs(a);
+        return Number.isFinite(t) && t >= since.getTime();
+      }));
       setAnomalyStats(statsData);
     } catch (err) {
       console.error('Error refreshing anomalies:', err);
