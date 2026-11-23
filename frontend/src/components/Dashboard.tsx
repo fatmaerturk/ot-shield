@@ -2312,6 +2312,30 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* --- 1b) Live ingestion (SPAN sensors) CTA - additive; does not alter the upload/live-capture panels above --- */}
+      <div className="rounded-2xl p-5 ring-1 ring-violet-200/70 bg-gradient-to-r from-violet-50 to-fuchsia-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white flex items-center justify-center flex-shrink-0">
+            <Icon.Network className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-slate-900">Live ingestion from SPAN sensors</h3>
+              <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-white text-violet-700 ring-1 ring-violet-200">New</span>
+            </div>
+            <p className="text-xs text-slate-600 mt-1 max-w-2xl">
+              Mirror your OT segment to a sensor and OTShield ingests it continuously - the same analysis pipeline as a manual upload, hands-free. Track which sensors are feeding the platform and how much.
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => navigate('/ingestion')}
+          className="flex-shrink-0 px-4 py-2 text-sm font-semibold text-white rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 transition"
+        >
+          Open Live Ingestion
+        </button>
+      </div>
+
       {/* --- 1a) KPI Grafları + Purdue Flow Ribbon --- */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <Panel

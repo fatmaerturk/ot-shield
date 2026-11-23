@@ -13,6 +13,7 @@ import { AppModeProvider, useAppMode } from './contexts/AppModeContext';
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const ExecutiveDashboard = lazy(() => import('./components/ExecutiveDashboard'));
 const Assets = lazy(() => import('./components/Assets'));
+const IngestionSensors = lazy(() => import('./components/IngestionSensors'));
 const Anomalies = lazy(() => import('./components/Anomalies'));
 const AttackerCampaigns = lazy(() => import('./components/AttackerCampaigns'));
 const Honeypot = lazy(() => import('./components/Honeypot'));
@@ -83,6 +84,7 @@ const App: React.FC = () => {
             <Route path="/executive" element={<PrivateRoute><ExecutiveDashboard/></PrivateRoute>} />
             <Route path="/dashboard" element={<PrivateRoute><Dashboard/></PrivateRoute>} />
             <Route path="/assets" element={<PrivateRoute><Assets /></PrivateRoute>} />
+            <Route path="/ingestion" element={<PrivateRoute><IngestionSensors /></PrivateRoute>} />
             <Route path="/anomalies" element={<PrivateRoute><Anomalies /></PrivateRoute>} />
             <Route path="/campaigns" element={<PrivateRoute><AttackerCampaigns /></PrivateRoute>} />
             <Route path="/alerts" element={<PrivateRoute><Alerts /></PrivateRoute>} />

@@ -61,13 +61,19 @@ const NAV: NavItem[] = [
     label: 'Operate',
     modes: 'soc',
     icon: <Icon.Activity className="w-4 h-4" />,
-    match: (p) => p === '/dashboard' || p === '/assets' || p === '/network-topology',
+    match: (p) => p === '/dashboard' || p === '/assets' || p === '/network-topology' || p === '/ingestion',
     children: [
       {
         label: 'Traffic Analysis',
         path: '/dashboard',
         description: 'PCAP capture & live traffic analysis',
         icon: <Icon.Activity className="w-4 h-4" />,
+      },
+      {
+        label: 'Live Ingestion',
+        path: '/ingestion',
+        description: 'SPAN sensors streaming live OT traffic into the pipeline',
+        icon: <Icon.Network className="w-4 h-4" />,
       },
       {
         label: 'Assets',

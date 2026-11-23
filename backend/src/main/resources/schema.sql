@@ -44,6 +44,7 @@ CREATE TABLE users (
     timezone      VARCHAR(100),
     language      VARCHAR(10),
     failed_login_attempts INTEGER DEFAULT 0,
+    locked_until  TIMESTAMP,
     password_changed_at TIMESTAMP,
     requires_password_change BOOLEAN DEFAULT FALSE,
     manager_id    VARCHAR(36),

@@ -3,6 +3,8 @@ package com.safetech.otshield.controller;
 import com.safetech.otshield.model.PacketInfo;
 import com.safetech.otshield.service.PcapAnalysisService;
 import com.safetech.otshield.service.AssetService;
+import com.safetech.otshield.service.IngestionMonitorService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -26,11 +28,14 @@ public class FileController {
     private static final Logger logger = LoggerFactory.getLogger(FileController.class);
     private final PcapAnalysisService pcapAnalysisService;
     private final AssetService assetService;
+    private final IngestionMonitorService ingestionMonitor;
     private final String uploadDir;
 
-    public FileController(PcapAnalysisService pcapAnalysisService, AssetService assetService) {
+    public FileController(PcapAnalysisService pcapAnalysisService, AssetService assetService,
+                          IngestionMonitorService ingestionMonitor) {
         this.pcapAnalysisService = pcapAnalysisService;
         this.assetService = assetService;
+        this.ingestionMonitor = ingestionMonitor;
         // Use absolute path for uploads directory
         this.uploadDir = System.getProperty("user.dir") + "/uploads";
         
@@ -72,7 +77,11 @@ public class FileController {
     public ResponseEntity<Map<String, Object>> uploadPcapFile(
             @RequestParam("pcap") MultipartFile file,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "500") int size) {
+            @RequestParam(defaultValue = "500") int size,
+            @RequestHeader(value = "X-Sensor-Id", required = false) String sensorId,
+            @RequestHeader(value = "X-Sensor-Host", required = false) String sensorHost,
+            @RequestHeader(value = "X-Sensor-Iface", required = false) String sensorIface,
+            HttpServletRequest request) {
         try {
             if (file.isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Dosya boş olamaz"));
@@ -107,7 +116,15 @@ public class FileController {
                 // Log error but don't fail the upload
                 System.err.println("Error during asset detection: " + e.getMessage());
             }
-            
+
+            // Record this upload for the live-ingestion monitor (which sensor fed
+            // us, how many packets/bytes). Real data only; never fails the upload.
+            try {
+                ingestionMonitor.track(sensorId, sensorHost, sensorIface,
+                        request.getRemoteAddr(), file.getOriginalFilename(),
+                        file.getSize(), total, total > 0);
+            } catch (Exception ignore) { /* monitoring must never break ingest */ }
+
             // Calculate slice for pagination
             int fromIndex = Math.min(page * size, total);
             int toIndex = Math.min(fromIndex + size, total);
