@@ -49,13 +49,9 @@ const MitreMatrix: React.FC<MitreMatrixProps> = ({ highlightedTechniqueIds = [] 
     return () => { cancelled = true; };
   }, []);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-violet-200 border-t-violet-600"></div>
-      </div>
-    );
-  }
+  // Shell-first: render the hero and matrix panel immediately. The hero stats
+  // and the matrix grid show pulsing skeletons (not 0 / "No matrix data yet")
+  // until the backend taxonomy resolves. Only a hard error swaps the page.
 
   if (error) {
     return (
@@ -79,6 +75,12 @@ const MitreMatrix: React.FC<MitreMatrixProps> = ({ highlightedTechniqueIds = [] 
   const observedCount = tactics.reduce((sum, t) => sum + t.techniques.filter(isObserved).length, 0);
   const maxTechniques = Math.max(1, ...tactics.map(t => t.techniques.length));
 
+  // Pulsing skeleton in place of a value while the first fetch is in flight.
+  const lv = (node: React.ReactNode, w: string = 'w-8') =>
+    loading
+      ? <span className={`inline-block align-middle rounded bg-white/30 animate-pulse h-[0.9em] ${w}`} aria-hidden="true" />
+      : <>{node}</>;
+
   return (
     <motion.div variants={pageContainer} initial="hidden" animate="visible" className="space-y-6">
       <PageHero
@@ -87,9 +89,9 @@ const MitreMatrix: React.FC<MitreMatrixProps> = ({ highlightedTechniqueIds = [] 
         title="MITRE ATT&CK for ICS"
         subtitle="The tactics and techniques the platform tracks, with the ones actually observed on your deception fabric highlighted from real telemetry."
         stats={[
-          { label: 'Tactics', value: totalTactics },
-          { label: 'Techniques', value: totalTechniques },
-          { label: 'Observed', value: observedCount },
+          { label: 'Tactics', value: lv(totalTactics) },
+          { label: 'Techniques', value: lv(totalTechniques) },
+          { label: 'Observed', value: lv(observedCount) },
         ]}
       />
 
@@ -99,7 +101,23 @@ const MitreMatrix: React.FC<MitreMatrixProps> = ({ highlightedTechniqueIds = [] 
           subtitle="Highlighted cells were observed in your environment (real attacker telemetry). The number is the observation count."
           icon={<Icon.Layers className="w-5 h-5" />}
         >
-          {tactics.length === 0 ? (
+          {loading ? (
+            <div className="overflow-hidden rounded-xl ring-1 ring-slate-200/70">
+              <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6">
+                {Array.from({ length: 6 }).map((_, c) => (
+                  <div key={`h-skel-${c}`} className="bg-gradient-to-b from-slate-50 to-slate-100 border-b border-r border-slate-200 p-3">
+                    <div className="h-3 w-3/4 mx-auto rounded bg-slate-200 animate-pulse" />
+                    <div className="mt-1.5 h-2 w-1/3 mx-auto rounded bg-slate-200 animate-pulse" />
+                  </div>
+                ))}
+                {Array.from({ length: 36 }).map((_, i) => (
+                  <div key={`c-skel-${i}`} className="border-b border-r border-slate-200/70 p-1.5">
+                    <div className="h-7 w-full rounded-lg bg-slate-100 animate-pulse" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : tactics.length === 0 ? (
             <div className="py-10 text-center text-sm text-slate-400">No matrix data available yet.</div>
           ) : (
             <div className="overflow-x-auto rounded-xl ring-1 ring-slate-200/70">
