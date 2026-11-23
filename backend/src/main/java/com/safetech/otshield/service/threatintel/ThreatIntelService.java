@@ -159,17 +159,50 @@ public class ThreatIntelService {
         return detail;
     }
 
-    /** List of campaign clusters across all attackers. */
+    // Campaign clustering is the single most expensive call on the Attacker-TTP
+    // page: it fingerprints every attacker, and getAttackerDetail() invokes it
+    // again (via findCampaigns) on every attacker selection. The underlying
+    // engagement fabric is itself only rebuilt about once a minute (DecoyService
+    // @Scheduled refresh), so recomputing the clustering more often than that
+    // produces identical output. Cache it for that same window.
+    private volatile List<CampaignClusterDTO> cachedCampaigns;
+    private volatile long cachedCampaignsAt;
+    private static final long CAMPAIGNS_TTL_MS = 60_000L;
+
+    /** List of campaign clusters across all attackers (cached ~60s, matching the
+     *  decoy fabric's own refresh cadence - the result is byte-for-byte the same
+     *  as recomputing within that window). */
     public List<CampaignClusterDTO> listCampaigns() {
+        long now = System.currentTimeMillis();
+        List<CampaignClusterDTO> cached = cachedCampaigns;
+        if (cached != null && (now - cachedCampaignsAt) < CAMPAIGNS_TTL_MS) {
+            return cached;
+        }
+        List<CampaignClusterDTO> fresh = computeCampaigns();
+        cachedCampaigns = fresh;
+        cachedCampaignsAt = now;
+        return fresh;
+    }
+
+    private List<CampaignClusterDTO> computeCampaigns() {
         List<AttackerIntelSummaryDTO> attackers = listAttackers(null, null, null);
+
+        // Load the full engagement list ONCE and group it by attacker IP, instead
+        // of re-querying (and re-sorting/copying) the entire fabric for every
+        // attacker in the loop below. groupingBy preserves the encounter order of
+        // the (lastActivity-desc) stream, so each IP's engagement order - and thus
+        // every fingerprint - is identical to the per-attacker filter it replaces.
+        Map<String, List<EngagementDTO>> summariesByIp = decoyService
+            .listEngagements(null, null, 0, 10_000).stream()
+            .filter(e -> e.getAttackerIp() != null)
+            .collect(Collectors.groupingBy(EngagementDTO::getAttackerIp));
 
         // Build fingerprints without recursing through getAttackerDetail
         Map<String, BehavioralFingerprintDTO> fps = new HashMap<>();
         for (AttackerIntelSummaryDTO a : attackers) {
             AttackerProfileDTO p = decoyService.getAttacker(a.getIp());
             if (p == null) continue;
-            List<EngagementDTO> full = decoyService.listEngagements(null, null, 0, 10_000).stream()
-                .filter(e -> a.getIp().equals(e.getAttackerIp()))
+            List<EngagementDTO> full = summariesByIp.getOrDefault(a.getIp(), List.of()).stream()
                 .map(e -> decoyService.getEngagement(e.getId()))
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
