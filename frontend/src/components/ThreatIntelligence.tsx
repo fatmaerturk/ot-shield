@@ -36,7 +36,9 @@ const logAudit = (actionType: string, details: string) => {
 
 const ThreatIntelligence: React.FC = () => {
   const [threats, setThreats] = useState<Threat[]>([]);
-  const [loading, setLoading] = useState(false);
+  // Start in the loading state so the KPI numbers and table rows show skeletons
+  // on the very first paint (shell renders immediately), not a flash of 0 / empty.
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedThreat, setSelectedThreat] = useState<Threat | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditRecord[]>([]);
@@ -441,7 +443,7 @@ const ThreatIntelligence: React.FC = () => {
                 </svg>
               </div>
             </div>
-            <p className="mt-3 text-3xl font-bold text-slate-900">{totalCount}</p>
+            <p className="mt-3 text-3xl font-bold text-slate-900">{loading ? <Skeleton width={64} /> : totalCount}</p>
             <p className="text-xs text-slate-500 mt-1">Indicators in current view</p>
           </div>
         </motion.div>
@@ -463,7 +465,7 @@ const ThreatIntelligence: React.FC = () => {
               </div>
             </div>
             <p className="mt-3 text-3xl font-bold text-slate-900">
-              {totalCount ? ((criticalCount / totalCount) * 100).toFixed(0) : '0'}%
+              {loading ? <Skeleton width={64} /> : `${totalCount ? ((criticalCount / totalCount) * 100).toFixed(0) : '0'}%`}
             </p>
             <p className="text-xs text-slate-500 mt-1">Severity-high share</p>
           </div>
@@ -485,7 +487,7 @@ const ThreatIntelligence: React.FC = () => {
                 </svg>
               </div>
             </div>
-            <p className="mt-3 text-3xl font-bold text-slate-900">{last24hCount}</p>
+            <p className="mt-3 text-3xl font-bold text-slate-900">{loading ? <Skeleton width={64} /> : last24hCount}</p>
             <p className="text-xs text-slate-500 mt-1">New in the last day</p>
           </div>
         </motion.div>
