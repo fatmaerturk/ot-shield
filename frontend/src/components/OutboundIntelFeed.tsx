@@ -57,12 +57,18 @@ const OutboundIntelFeed: React.FC = () => {
     try { await navigator.clipboard.writeText(feedUrl); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* ignore */ }
   };
 
-  if (loading) {
-    return <div className="flex items-center justify-center min-h-[60vh]"><div className="animate-spin rounded-full h-12 w-12 border-4 border-violet-200 border-t-violet-600" /></div>;
+  // Shell-first: render the hero and panels immediately; values stream in behind
+  // pulsing skeletons instead of a full-page spinner. Only a hard error bails.
+  if (error) {
+    return <div className="flex items-center justify-center min-h-[60vh]"><div className="rounded-xl bg-rose-50 ring-1 ring-rose-200 text-rose-700 px-6 py-4 font-medium">{error}</div></div>;
   }
-  if (error || !summary) {
-    return <div className="flex items-center justify-center min-h-[60vh]"><div className="rounded-xl bg-rose-50 ring-1 ring-rose-200 text-rose-700 px-6 py-4 font-medium">{error || 'No data'}</div></div>;
-  }
+
+  // Pulsing skeleton in place of a value while the first fetch is in flight.
+  // Light tint for the hero (dark bg); callers pass a slate tint for white panels.
+  const lv = (node: React.ReactNode, w: string = 'w-10', tint: string = 'bg-white/30') =>
+    loading
+      ? <span className={`inline-block align-middle rounded ${tint} animate-pulse h-[0.9em] ${w}`} aria-hidden="true" />
+      : <>{node}</>;
 
   const riskTone = (s?: number | null) =>
     s == null ? 'text-slate-400' : s >= 70 ? 'text-rose-600' : s >= 40 ? 'text-amber-600' : 'text-emerald-600';
@@ -75,16 +81,16 @@ const OutboundIntelFeed: React.FC = () => {
         subtitle="You do not just consume threat intel - you produce it. Every attacker that engages the decoy fabric becomes a first-party, OT-specific IOC, published here as a live STIX feed you can share with your ISAC, SIEM or peers."
         icon={<Icon.Bolt className="w-6 h-6" />}
         stats={[
-          { label: 'Produced IOCs', value: summary.producedIocs },
-          { label: 'High-risk', value: summary.highRisk },
-          { label: 'Countries', value: summary.countries },
-          { label: 'Tactics covered', value: summary.tacticsCovered },
+          { label: 'Produced IOCs', value: lv(summary?.producedIocs ?? 0) },
+          { label: 'High-risk', value: lv(summary?.highRisk ?? 0) },
+          { label: 'Countries', value: lv(summary?.countries ?? 0) },
+          { label: 'Tactics covered', value: lv(summary?.tacticsCovered ?? 0) },
         ]}
       />
 
       {/* Publish / subscribe */}
       <motion.div variants={pageItem}>
-        <Panel title="Publish & subscribe" subtitle={`Live feed · updated ${fmt(summary.lastUpdated)} · formats: ${summary.formats.join(', ')}`} icon={<Icon.Network className="w-4 h-4" />}>
+        <Panel title="Publish & subscribe" subtitle={loading ? 'Loading live feed…' : `Live feed · updated ${fmt(summary?.lastUpdated ?? null)} · formats: ${(summary?.formats ?? []).join(', ')}`} icon={<Icon.Network className="w-4 h-4" />}>
           <div className="flex flex-wrap items-center gap-3">
             <button onClick={downloadStix} disabled={downloading}
               className="px-4 py-2 text-sm font-semibold text-white rounded-lg bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:shadow-md transition disabled:opacity-50">
@@ -96,7 +102,7 @@ const OutboundIntelFeed: React.FC = () => {
             </div>
             <span className="text-xs text-slate-500">Poll this URL (with your API token) to subscribe.</span>
           </div>
-          {summary.protocols.length > 0 && (
+          {!loading && summary?.protocols && summary.protocols.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-1.5">
               {summary.protocols.map((p) => (
                 <span key={p} className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold bg-violet-50 text-violet-700 ring-1 ring-violet-200">{p}</span>
@@ -108,15 +114,15 @@ const OutboundIntelFeed: React.FC = () => {
 
       {/* The produced IOC feed */}
       <motion.div variants={pageItem}>
-        <Panel title="Published IOCs" subtitle={`${iocs.length} first-party attacker indicators observed on your decoys`} icon={<Icon.Target className="w-4 h-4" />}>
-          {iocs.length === 0 ? (
+        <Panel title="Published IOCs" subtitle={loading ? 'Loading indicators…' : `${iocs.length} first-party attacker indicators observed on your decoys`} icon={<Icon.Target className="w-4 h-4" />}>
+          {!loading && iocs.length === 0 ? (
             <div className="py-10 text-center text-sm text-slate-400">No attacker IOCs observed yet. As attackers engage the decoy fabric they appear here automatically.</div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-y-auto max-h-[60vh] rounded-lg ring-1 ring-slate-100">
               <table className="min-w-full text-sm">
-                <thead>
+                <thead className="sticky top-0 z-10 bg-white">
                   <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-200">
-                    <th className="py-2 pr-4">Indicator (IP)</th>
+                    <th className="py-2 pr-4 pl-3">Indicator (IP)</th>
                     <th className="py-2 pr-4">Country</th>
                     <th className="py-2 pr-4">Origin</th>
                     <th className="py-2 pr-4">Score</th>
@@ -127,18 +133,28 @@ const OutboundIntelFeed: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {iocs.map((a) => (
-                    <tr key={a.ip} className="hover:bg-slate-50">
-                      <td className="py-2 pr-4 font-mono text-slate-800">{a.ip}</td>
-                      <td className="py-2 pr-4 text-slate-600">{a.countryName || a.country || '-'}</td>
-                      <td className="py-2 pr-4"><AnonymityBadge a={a} /></td>
-                      <td className={`py-2 pr-4 font-bold ${riskTone(a.threatScore)}`}>{a.threatScore ?? '-'}</td>
-                      <td className="py-2 pr-4 text-slate-600">{(a.protocols || []).join(', ') || '-'}</td>
-                      <td className="py-2 pr-4 text-slate-600">{a.dominantTactic || '-'}</td>
-                      <td className="py-2 pr-4 text-slate-600">{a.distinctTechniques ?? 0}</td>
-                      <td className="py-2 pr-4 text-slate-500 whitespace-nowrap">{fmt(a.lastSeen)}</td>
-                    </tr>
-                  ))}
+                  {loading
+                    ? Array.from({ length: 8 }).map((_, i) => (
+                        <tr key={`ioc-skel-${i}`}>
+                          {Array.from({ length: 8 }).map((__, c) => (
+                            <td key={c} className={`py-2 pr-4 ${c === 0 ? 'pl-3' : ''}`}>
+                              <div className="h-3 w-full max-w-[110px] rounded bg-slate-200 animate-pulse" />
+                            </td>
+                          ))}
+                        </tr>
+                      ))
+                    : iocs.map((a) => (
+                        <tr key={a.ip} className="hover:bg-slate-50">
+                          <td className="py-2 pr-4 pl-3 font-mono text-slate-800">{a.ip}</td>
+                          <td className="py-2 pr-4 text-slate-600">{a.countryName || a.country || '-'}</td>
+                          <td className="py-2 pr-4"><AnonymityBadge a={a} /></td>
+                          <td className={`py-2 pr-4 font-bold ${riskTone(a.threatScore)}`}>{a.threatScore ?? '-'}</td>
+                          <td className="py-2 pr-4 text-slate-600">{(a.protocols || []).join(', ') || '-'}</td>
+                          <td className="py-2 pr-4 text-slate-600">{a.dominantTactic || '-'}</td>
+                          <td className="py-2 pr-4 text-slate-600">{a.distinctTechniques ?? 0}</td>
+                          <td className="py-2 pr-4 text-slate-500 whitespace-nowrap">{fmt(a.lastSeen)}</td>
+                        </tr>
+                      ))}
                 </tbody>
               </table>
             </div>
