@@ -498,45 +498,109 @@ const Dashboard: React.FC = () => {
       const formData = new FormData();
       formData.append('pcap', file);
 
+      // The POST only transfers the file and hands the parse to a background
+      // worker, so it returns in seconds regardless of capture size. The long
+      // part (windowed parsing of a multi-hundred-thousand-event capture, minutes
+      // of work) is then followed via the status endpoint below. This replaces
+      // the old "hold one request open for the whole parse" model, which timed
+      // out mid-parse and surfaced the misleading "Could not connect to server"
+      // even though the backend was ingesting successfully.
       const response = await api.post<{
-        total: number;
-        packets: PacketInfo[];
+        status?: string;
+        jobId?: string;
+        filename?: string;
+        message?: string;
+        // Legacy synchronous shape (older backend) - still handled below.
+        total?: number;
+        packets?: PacketInfo[];
         ioas?: IOA[];
-        assetDetection?: {
-          assetsDetected: boolean;
-          message: string;
-        };
+        assetDetection?: { assetsDetected: boolean; message: string };
       }>(
-        // Return the whole capture in one pass (the backend parses the full file
-        // regardless, and re-requesting pages would re-parse and duplicate the
-        // stored DPI events). Cap the on-screen table at MAX_TABLE_PACKETS so a
-        // very large capture stays responsive; the full parsed traffic is always
-        // available in the DPI / Network Topology views.
-        `/api/upload/pcap?page=0&size=${MAX_TABLE_PACKETS}`,
+        `/api/upload/pcap`,
         formData,
         {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          },
+          headers: { 'Content-Type': 'multipart/form-data' },
+          // Covers only the file transfer + accept, not the parse. Generous for
+          // a large file over a busy disk; the parse itself is polled, not awaited.
           timeout: 300000
         }
       );
 
-      const { total, packets, ioas: detectedIoas, assetDetection } = response.data;
-      setTotalPacketCount(total);
-      setPacketInfos(packets || []);
-      setIOAs(detectedIoas ? detectedIoas.map(mapIOAToMitre) : []);
+      const data = response.data;
 
-      // Handle asset detection message
-      const shown = packets ? packets.length : 0;
-      let statusMessage = shown >= total
-        ? `File analyzed: all ${total.toLocaleString()} packets loaded.`
-        : `File analyzed: ${total.toLocaleString()} packets found, showing ${shown.toLocaleString()} (full parsed traffic is in the Network Topology / DPI views).`;
-      if (assetDetection?.assetsDetected) {
-        statusMessage += ` ${assetDetection.message}`;
+      // --- Async contract: 202 Accepted with a jobId -> poll for progress ------
+      if (data && data.jobId && data.status === 'processing') {
+        const jobId = data.jobId;
+        setUploadStatus(`Upload received - parsing ${data.filename || 'capture'} in the background...`);
+
+        const startedAt = Date.now();
+        const MAX_WAIT_MS = 30 * 60 * 1000;   // 30-min safety cap on polling
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          await new Promise((r) => setTimeout(r, 2000));
+          let s: any;
+          try {
+            const statusRes = await api.get(`/api/upload/pcap/status/${jobId}`, { timeout: 30000 });
+            s = statusRes.data;
+          } catch (pollErr) {
+            // A transient poll failure shouldn't abort a healthy parse - keep
+            // trying until the safety cap, then surface a soft message.
+            if (Date.now() - startedAt > MAX_WAIT_MS) {
+              setUploadStatus('Still parsing in the background - check the Network Topology / DPI views for live results.');
+              setUploadCompleted(false);
+              break;
+            }
+            continue;
+          }
+
+          if (s.state === 'PROCESSING') {
+            const n = (s.packetsProcessed || 0).toLocaleString();
+            setTotalPacketCount(s.packetsProcessed || 0);
+            setUploadStatus(`Parsing ${s.filename || 'capture'}... ${n} packets processed so far.`);
+          } else if (s.state === 'DONE') {
+            const totalDone = s.total || 0;
+            let msg = `File analyzed: ${totalDone.toLocaleString()} packets parsed and saved.`;
+            if (s.newAssets) msg += ` ${s.newAssets} new asset(s) detected.`;
+            if (s.newAnomalies) msg += ` ${s.newAnomalies} anomaly(ies) raised.`;
+            msg += ' Full parsed traffic is in the Network Topology / DPI views.';
+            setTotalPacketCount(totalDone);
+            setPacketInfos([]);   // the dashboard table isn't streamed; DPI views hold it
+            setIOAs([]);
+            setUploadStatus(msg);
+            setUploadCompleted(true);
+            break;
+          } else if (s.state === 'ERROR') {
+            setUploadStatus(`Upload error: ${s.error || 'parsing failed on the backend'}`);
+            setUploadCompleted(false);
+            break;
+          }
+
+          if (Date.now() - startedAt > MAX_WAIT_MS) {
+            setUploadStatus('Upload is taking unusually long; it is still parsing in the background. Check the DPI / Ingestion views.');
+            setUploadCompleted(false);
+            break;
+          }
+        }
+      } else {
+        // --- Legacy synchronous contract ({ total, packets }) ------------------
+        const total = data.total || 0;
+        const packets = data.packets || [];
+        const detectedIoas = data.ioas;
+        const assetDetection = data.assetDetection;
+        setTotalPacketCount(total);
+        setPacketInfos(packets);
+        setIOAs(detectedIoas ? detectedIoas.map(mapIOAToMitre) : []);
+
+        const shown = packets.length;
+        let statusMessage = shown >= total
+          ? `File analyzed: all ${total.toLocaleString()} packets loaded.`
+          : `File analyzed: ${total.toLocaleString()} packets found, showing ${shown.toLocaleString()} (full parsed traffic is in the Network Topology / DPI views).`;
+        if (assetDetection?.assetsDetected) {
+          statusMessage += ` ${assetDetection.message}`;
+        }
+        setUploadStatus(statusMessage);
+        setUploadCompleted(true);
       }
-      setUploadStatus(statusMessage);
-      setUploadCompleted(true);
 
     } catch (error: any) {
       console.error('Upload error:', error);

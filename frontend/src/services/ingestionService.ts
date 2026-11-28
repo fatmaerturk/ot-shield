@@ -16,6 +16,9 @@ export interface SensorStat {
   lastFilename: string;
   lastPackets: number;
   lastParsed: boolean;
+  newAssets: number;       // assets this sensor's captures discovered (window)
+  newAnomalies: number;    // anomalies this sensor's captures raised (window)
+  protocols: string[];     // OT/IT protocols this sensor's traffic carried
 }
 
 export interface IngestionSummary {
@@ -25,6 +28,9 @@ export interface IngestionSummary {
   packetsPerMin: number;
   windowPackets: number;
   windowBytes: number;
+  windowAssets: number;    // assets discovered across all captures (window)
+  windowAnomalies: number; // anomalies raised across all captures (window)
+  protocols: string[];     // distinct protocols seen across all sensors (window)
   windowEvents: number;
   retainedMax: number;
 }
@@ -40,6 +46,9 @@ export interface IngestEvent {
   bytes: number;
   packets: number;
   parsed: boolean;
+  newAssets: number;       // assets this capture discovered
+  newAnomalies: number;    // anomalies this capture raised
+  protocols: string[];     // protocols observed in this capture
 }
 
 /**

@@ -202,4 +202,8 @@ public interface DpiEventRepository extends JpaRepository<DpiEvent, String> {
 
     long countByPcapSessionId(String pcapSessionId);
     void deleteByPcapSessionId(String pcapSessionId);
+
+    /** All DPI events persisted for one upload - used to run the anomaly rule
+     *  engine once over the whole session after windowed ingestion. */
+    List<DpiEvent> findByPcapSessionId(String pcapSessionId);
 }

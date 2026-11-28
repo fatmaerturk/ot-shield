@@ -19,3 +19,7 @@
 /.env
 .env.prod
 *.dump
+
+# Python bytecode cache
+__pycache__/
+*.pyc

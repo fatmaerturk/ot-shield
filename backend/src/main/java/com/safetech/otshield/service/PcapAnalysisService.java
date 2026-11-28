@@ -7,6 +7,7 @@ import com.safetech.otshield.dto.AssetDTO;
 import com.safetech.otshield.repository.DpiEventRepository;
 import com.safetech.otshield.service.dpi.ModbusDissector;
 import com.safetech.otshield.service.dpi.S7CommDissector;
+import com.safetech.otshield.service.dpi.IEC104Dissector;
 import com.safetech.otshield.service.dpi.rules.DpiAnomalyRuleEngine;
 import com.safetech.otshield.websocket.LivePacketHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -196,14 +197,82 @@ public class PcapAnalysisService {
         }
     }
 
-    public List<PacketInfo> analyzePcapFile(String filePath) {
+    /**
+     * Outcome of analysing one uploaded pcap. The whole capture is NEVER held in
+     * memory at once: packets are processed in bounded windows (see
+     * {@link #analyzePcapFile(String)}), so {@code sample} is only a capped preview
+     * for the UI while {@code total} and {@code protocols} describe the full file
+     * and every DPI event / asset has already been persisted.
+     */
+    public static final class PcapAnalysisResult {
+        private final List<PacketInfo> sample;
+        private final long total;
+        private final List<String> protocols;
+        private final String pcapSessionId;
+        public PcapAnalysisResult(List<PacketInfo> sample, long total, List<String> protocols, String pcapSessionId) {
+            this.sample = sample; this.total = total; this.protocols = protocols; this.pcapSessionId = pcapSessionId;
+        }
+        /** Bounded preview packets (first {@code SAMPLE_MAX}), for the upload response. */
+        public List<PacketInfo> getSample() { return sample; }
+        /** Total packets parsed from the whole file (may far exceed the sample). */
+        public long getTotal() { return total; }
+        /** Distinct protocols observed across the whole file (bounded set). */
+        public List<String> getProtocols() { return protocols; }
+        public String getPcapSessionId() { return pcapSessionId; }
+    }
+
+    /**
+     * Analyse an uploaded pcap with <b>bounded memory, regardless of file size</b>.
+     *
+     * <p>The capture is read in windows of {@code WINDOW} packets. Each window is
+     * dissected, its DPI events persisted and its assets detected, then discarded
+     * before the next window is read - so a 10-packet file and a 10-million-packet
+     * file use the same ~{@code WINDOW}-packet working set and neither can OOM the
+     * backend (an earlier all-in-memory version was killed by a 1M-packet upload).
+     *
+     * <p>Only the first {@code SAMPLE_MAX} packets are retained, purely to preview
+     * in the upload response; the returned {@link PcapAnalysisResult#getTotal()}
+     * and {@code getProtocols()} always reflect the entire file.
+     *
+     * <p>Trade-off of windowing: asset/router-MAC heuristics in
+     * {@link #detectAndSaveAssets(List)} run per window rather than over the whole
+     * capture. Cross-window duplicate assets are still collapsed by the DB
+     * existence check, so the inventory stays correct.
+     */
+    /**
+     * Progress sink for a running analysis. Invoked with the session id up front
+     * (count 0, done=false), then with the cumulative packet count after every
+     * persisted window, and finally once with done=true. Lets the upload
+     * endpoint return immediately and surface progress asynchronously.
+     */
+    @FunctionalInterface
+    public interface ProgressListener {
+        void onProgress(String pcapSessionId, long packetsProcessed, boolean done);
+    }
+
+    public PcapAnalysisResult analyzePcapFile(String filePath) {
+        return analyzePcapFile(filePath, null);
+    }
+
+    public PcapAnalysisResult analyzePcapFile(String filePath, ProgressListener progress) {
         logger.info("Starting PCAP analysis for file: {}", filePath);
-        List<PacketInfo> packets = new ArrayList<>();
         // One session id per upload - lets us later delete/replay a specific
         // pcap's DPI events without touching the rest.
-        String pcapSessionId = UUID.randomUUID().toString();
+        final String pcapSessionId = UUID.randomUUID().toString();
+        final int WINDOW = 50_000;      // packets processed (and freed) per window
+        final int SAMPLE_MAX = 5_000;   // packets kept only for the UI preview
+
+        final List<PacketInfo> sample = new ArrayList<>();
+        final java.util.LinkedHashSet<String> protocols = new java.util.LinkedHashSet<>();
+        final long[] total = {0L};
+
+        // Publish the session id immediately so an async caller can link to the
+        // DPI / topology views for this upload while it is still parsing.
+        if (progress != null) {
+            try { progress.onProgress(pcapSessionId, 0L, false); } catch (Exception ignore) { }
+        }
+
         try {
-            // Check if file exists
             java.io.File file = new java.io.File(filePath);
             if (!file.exists()) {
                 logger.error("PCAP file does not exist: {}", filePath);
@@ -214,21 +283,10 @@ public class PcapAnalysisService {
                 throw new RuntimeException("PCAP file is not readable: " + filePath);
             }
             logger.info("PCAP file exists and is readable, size: {} bytes", file.length());
-            
+
+            PcapHandle handle;
             try {
-                PcapHandle handle = Pcaps.openOffline(filePath);
-            PacketListener listener = packet -> {
-                try {
-                    PacketInfo info = convertPacketToInfo(packet, handle.getTimestamp());
-                    if (info != null) {
-                        packets.add(info);
-                    }
-                } catch (Exception e) {
-                    logger.warn("Error parsing packet: {}", e.getMessage());
-                }
-            };
-                handle.loop(-1, listener);
-                handle.close();
+                handle = Pcaps.openOffline(filePath);
             } catch (UnsatisfiedLinkError e) {
                 // Do NOT fabricate packets - returning simulated traffic as if it
                 // were the analyst's real capture is misleading. Surface the
@@ -236,37 +294,78 @@ public class PcapAnalysisService {
                 logger.error("PCAP native library (libpcap/Npcap) not available - cannot parse '{}'. "
                     + "Install libpcap (Linux) or Npcap (Windows) to enable PCAP analysis. "
                     + "Returning no packets rather than simulated data.", filePath, e);
-                return packets; // empty
+                return new PcapAnalysisResult(sample, 0L, java.util.List.of(), pcapSessionId);
+            }
+
+            // One reusable window buffer. readInWindow counts packets DISPATCHED
+            // (incl. ones dropped as unsupported) so we can tell a full window from
+            // end-of-file independently of how many converted.
+            final List<PacketInfo> window = new ArrayList<>();
+            final int[] readInWindow = {0};
+            final PcapHandle h = handle;
+            PacketListener listener = packet -> {
+                readInWindow[0]++;
+                try {
+                    PacketInfo info = convertPacketToInfo(packet, h.getTimestamp());
+                    if (info != null) {
+                        window.add(info);
+                        if (sample.size() < SAMPLE_MAX) sample.add(info);
+                        String pr = info.getProtocol();
+                        if (pr != null && !pr.trim().isEmpty() && protocols.size() < 64) protocols.add(pr.trim());
+                    }
+                } catch (Exception e) {
+                    logger.warn("Error parsing packet: {}", e.getMessage());
+                }
+            };
+
+            try {
+                while (true) {
+                    readInWindow[0] = 0;
+                    window.clear();
+                    handle.loop(WINDOW, listener);   // up to WINDOW packets, or until EOF
+                    if (!window.isEmpty()) {
+                        total[0] += window.size();
+                        // Persist this window's DPI events, then detect its assets.
+                        persistDpiEvents(window, pcapSessionId);
+                        try {
+                            detectAndSaveAssets(window);
+                        } catch (Exception e) {
+                            logger.warn("Asset detection failed for a window of {}: {}", filePath, e.getMessage());
+                        }
+                        if (progress != null) {
+                            try { progress.onProgress(pcapSessionId, total[0], false); } catch (Exception ignore) { }
+                        }
+                    }
+                    if (readInWindow[0] < WINDOW) break;   // short read => end of file
+                }
             } catch (PcapNativeException | NotOpenException e) {
-                logger.error("Error during PCAP parsing: {}", e.getMessage());
-                e.printStackTrace();
+                logger.error("Error during PCAP parsing: {}", e.getMessage(), e);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 logger.warn("PCAP loop interrupted: {}", e.getMessage());
             } catch (Exception e) {
-                logger.error("Unexpected error during PCAP parsing: {}", e.getMessage());
-                e.printStackTrace();
+                logger.error("Unexpected error during PCAP parsing: {}", e.getMessage(), e);
+            } finally {
+                try { handle.close(); } catch (Exception ignore) { /* closing best-effort */ }
             }
         } catch (Exception e) {
-            logger.error("Error during file validation: {}", e.getMessage());
-            e.printStackTrace();
+            logger.error("Error during file validation: {}", e.getMessage(), e);
         }
-        
-        // If no supported packets were parsed, return empty - never fabricate
-        // simulated packets, which would mislead the analyst into treating fake
-        // traffic as their real capture.
-        if (packets.isEmpty()) {
+
+        if (total[0] == 0) {
             logger.info("No supported packets parsed from file {} (unsupported link type, empty, or fully filtered capture).", filePath);
         }
-        logger.info("Parsed {} packets from file {}", packets.size(), filePath);
+        logger.info("Parsed {} packets ({} kept for preview) from file {}", total[0], sample.size(), filePath);
 
-        // Persist DPI events from this upload in one batch so the Network
-        // Topology / DPI views can query real, ordered history. Safe to call
-        // even when nothing was dissected - the helper short-circuits on empty.
-        persistDpiEvents(packets, pcapSessionId);
+        // All windows are persisted - now evaluate anomaly rules once over the
+        // whole session (instead of per window, which starved the DB pool).
+        runRuleEngineForSession(pcapSessionId);
+
         this.lastPcapSessionId = pcapSessionId;
-
-        return packets;
+        if (progress != null) {
+            try { progress.onProgress(pcapSessionId, total[0], true); } catch (Exception ignore) { }
+        }
+        return new PcapAnalysisResult(sample, total[0], new ArrayList<>(protocols), pcapSessionId);
     }
 
     /**
@@ -292,26 +391,53 @@ public class PcapAnalysisService {
             return;
         }
         try {
-            dpiEventRepository.saveAll(events);
+            // Save in sub-batches instead of one giant saveAll so Hibernate never
+            // builds a single insert batch of hundreds of thousands of rows (which
+            // spikes heap and WAL). This runs once per window during streaming.
+            final int SAVE_BATCH = 2_000;
+            for (int i = 0; i < events.size(); i += SAVE_BATCH) {
+                dpiEventRepository.saveAll(events.subList(i, Math.min(i + SAVE_BATCH, events.size())));
+            }
             logger.info("Persisted {} DPI events for pcap session {}", events.size(), pcapSessionId);
         } catch (Exception ex) {
             logger.warn("Failed to persist DPI events for session {}: {}", pcapSessionId, ex.getMessage());
-            return; // don't run rule engine on an un-persisted batch
         }
+        // NOTE: the anomaly rule engine is intentionally NOT fired here. With
+        // windowed ingestion this helper runs once per window, and the engine's
+        // "baseline over the whole table" query is far too heavy to repeat ~N
+        // times per upload (it starved the connection pool and silently dropped
+        // later windows). It is now run exactly once, over the whole session,
+        // from runRuleEngineForSession(..) after all windows are persisted.
+    }
 
-        // Fire the rule engine *after* the batch is safely in the DB so the
-        // engine's "baseline excluding this session" query can subtract the
-        // new session cleanly. The engine is best-effort - any failure is
-        // logged but never propagated to the pcap upload caller.
-        if (dpiAnomalyRuleEngine != null) {
-            try {
-                int emitted = dpiAnomalyRuleEngine.evaluateAndPersist(events, pcapSessionId);
-                if (emitted > 0) {
-                    logger.info("DPI rule engine emitted {} anomaly(ies) for pcap session {}", emitted, pcapSessionId);
-                }
-            } catch (Exception ex) {
-                logger.warn("DPI rule engine failed for session {}: {}", pcapSessionId, ex.getMessage());
+    /**
+     * Run the DPI anomaly rule engine ONCE for a completed upload, over every
+     * event persisted under {@code pcapSessionId}. Called after all windows are
+     * saved so the engine sees the full session in a single pass (matching the
+     * old single-shot semantics) without re-scanning per window. Best-effort:
+     * any failure is logged, never propagated to the upload caller.
+     */
+    private void runRuleEngineForSession(String pcapSessionId) {
+        if (dpiAnomalyRuleEngine == null || dpiEventRepository == null) return;
+        try {
+            List<DpiEvent> sessionEvents = dpiEventRepository.findByPcapSessionId(pcapSessionId);
+            if (sessionEvents.isEmpty()) return;
+            // Guard: an unusually large bulk import would pull millions of rows
+            // into memory just for rule evaluation. DPI/topology data is already
+            // fully persisted; skip only the anomaly pass in that extreme case.
+            final int RULE_ENGINE_MAX = 300_000;
+            if (sessionEvents.size() > RULE_ENGINE_MAX) {
+                logger.warn("Skipping DPI rule engine for session {} - {} events exceed the {}-event in-memory "
+                    + "limit; split the capture to run anomaly rules on it.",
+                    pcapSessionId, sessionEvents.size(), RULE_ENGINE_MAX);
+                return;
             }
+            int emitted = dpiAnomalyRuleEngine.evaluateAndPersist(sessionEvents, pcapSessionId);
+            if (emitted > 0) {
+                logger.info("DPI rule engine emitted {} anomaly(ies) for pcap session {}", emitted, pcapSessionId);
+            }
+        } catch (Exception ex) {
+            logger.warn("DPI rule engine failed for session {}: {}", pcapSessionId, ex.getMessage());
         }
     }
 
@@ -1068,8 +1194,16 @@ public class PcapAnalysisService {
                         if (dstPort == 102) dstModel = s7Model;
                     }
                 }
-                // IEC 60870-5-104 on port 2404
+                // IEC 60870-5-104 on port 2404 - full DPI dissection
+                // (APCI I/S/U frame, ASDU type id, cause of transmission,
+                // common address, IOA, commands vs monitoring)
                 else if ((srcPort == 2404 || dstPort == 2404) && tcpPacket.getPayload() != null) {
+                    byte[] raw = tcpPacket.getPayload().getRawData();
+                    String summary = IEC104Dissector.dissect(raw, srcPort, dstPort, packetInfo);
+                    if (summary != null) {
+                        packetInfo.setProtocol("IEC104");
+                        packetInfo.setPayloadInfo(summary);
+                    }
                     String iecModel = "IEC 60870-5-104 device"; // match PROTOCOL_MODEL_MAP casing
                     if (srcPort == 2404) {
                         srcModel = iecModel;

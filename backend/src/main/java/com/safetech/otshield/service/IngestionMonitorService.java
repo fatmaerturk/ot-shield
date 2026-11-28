@@ -7,6 +7,8 @@ import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.stream.Collectors;
 
@@ -29,23 +31,29 @@ public class IngestionMonitorService {
     /** A sensor is "online" if it uploaded within this window. */
     private static final long ONLINE_WINDOW_MS = 180_000L; // 3 min
 
-    /** One recorded upload. */
+    /** One recorded upload, with what the pipeline found in it. */
     public record IngestEvent(long ts, String sensorId, String host, String iface,
                               String remoteIp, String filename, long bytes,
-                              int packets, boolean parsed) {}
+                              int packets, boolean parsed, int newAssets, int newAnomalies,
+                              List<String> protocols) {}
 
     // Newest first (addFirst); bounded by MAX_EVENTS.
     private final Deque<IngestEvent> events = new ConcurrentLinkedDeque<>();
 
     private static String nz(String s) { return (s == null || s.isBlank()) ? "" : s.trim(); }
 
-    /** Record one upload. Called from the pcap upload path after analysis. */
+    /** Record one upload plus the pipeline findings. Called from the pcap upload path. */
     public void track(String sensorId, String host, String iface, String remoteIp,
-                      String filename, long bytes, int packets, boolean parsed) {
+                      String filename, long bytes, int packets, boolean parsed,
+                      int newAssets, int newAnomalies, List<String> protocols) {
         String sid = nz(sensorId);
         if (sid.isEmpty()) sid = "manual-upload";
+        List<String> protos = (protocols == null) ? List.of()
+                : protocols.stream().filter(p -> p != null && !p.isBlank())
+                        .map(String::trim).distinct().collect(Collectors.toList());
         events.addFirst(new IngestEvent(System.currentTimeMillis(), sid, nz(host), nz(iface),
-                nz(remoteIp), nz(filename), Math.max(0, bytes), Math.max(0, packets), parsed));
+                nz(remoteIp), nz(filename), Math.max(0, bytes), Math.max(0, packets), parsed,
+                Math.max(0, newAssets), Math.max(0, newAnomalies), protos));
         while (events.size() > MAX_EVENTS) events.pollLast();
     }
 
@@ -71,6 +79,9 @@ public class IngestionMonitorService {
         long aggPacketsPerMin = 0;
         long aggBytes = 0;
         long aggPackets = 0;
+        long aggAssets = 0;
+        long aggAnomalies = 0;
+        Set<String> allProtocols = new TreeSet<>();
         int online = 0;
 
         for (Map.Entry<String, List<IngestEvent>> en : bySensor.entrySet()) {
@@ -80,15 +91,23 @@ public class IngestionMonitorService {
             if (isOnline) online++;
 
             long packetsLastMin = 0, packets5m = 0, bytes = 0, packets = 0;
+            long sAssets = 0, sAnomalies = 0;
+            Set<String> sProtocols = new TreeSet<>();
             for (IngestEvent e : evs) {
                 bytes += e.bytes();
                 packets += e.packets();
+                sAssets += e.newAssets();
+                sAnomalies += e.newAnomalies();
+                if (e.protocols() != null) sProtocols.addAll(e.protocols());
                 if (now - e.ts() <= 60_000L) packetsLastMin += e.packets();
                 if (now - e.ts() <= 300_000L) packets5m += e.packets();
             }
             aggPacketsPerMin += packetsLastMin;
             aggBytes += bytes;
             aggPackets += packets;
+            aggAssets += sAssets;
+            aggAnomalies += sAnomalies;
+            allProtocols.addAll(sProtocols);
 
             Map<String, Object> s = new LinkedHashMap<>();
             s.put("sensorId", en.getKey());
@@ -105,6 +124,9 @@ public class IngestionMonitorService {
             s.put("lastFilename", last.filename());
             s.put("lastPackets", last.packets());
             s.put("lastParsed", last.parsed());
+            s.put("newAssets", sAssets);
+            s.put("newAnomalies", sAnomalies);
+            s.put("protocols", new ArrayList<>(sProtocols));
             sensors.add(s);
         }
         // Online sensors first, then most-recently-seen.
@@ -121,6 +143,9 @@ public class IngestionMonitorService {
         out.put("packetsPerMin", aggPacketsPerMin);
         out.put("windowPackets", aggPackets);
         out.put("windowBytes", aggBytes);
+        out.put("windowAssets", aggAssets);
+        out.put("windowAnomalies", aggAnomalies);
+        out.put("protocols", new ArrayList<>(allProtocols));
         out.put("windowEvents", events.size());
         out.put("retainedMax", MAX_EVENTS);
         return out;
@@ -137,6 +162,9 @@ public class IngestionMonitorService {
         m.put("bytes", e.bytes());
         m.put("packets", e.packets());
         m.put("parsed", e.parsed());
+        m.put("newAssets", e.newAssets());
+        m.put("newAnomalies", e.newAnomalies());
+        m.put("protocols", e.protocols());
         return m;
     }
 }
